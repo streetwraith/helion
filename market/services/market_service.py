@@ -10,6 +10,10 @@ import time
 from email.utils import parsedate_to_datetime
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
+import environ
+
+env = environ.Env()
+
 def trade_item_add(type_id):
     sde_type_id = SdeTypeId.objects.get(type_id=type_id)
     trade_item = TradeItem(type_id=type_id)
@@ -102,7 +106,7 @@ def fetch_market_orders_page(region_id, page):
     return data, response
 
 def fetch_market_orders_parallel(region_id):
-    threads = 25
+    threads = env.int('MARKET_FETCH_THREADS', default=10)
     wait_after_expiration_seconds = 5
 
     result, response = fetch_market_orders_page(region_id, 1)
