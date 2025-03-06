@@ -44,6 +44,7 @@ def characters(request, *args, **kwargs):
                 logger.debug("Token %s not found.", token_pk)
             return redirect('characters')
 
+    context = {}
     tokens = (
         Token.objects.filter(user__pk=request.user.pk).require_valid()
     )
@@ -55,8 +56,6 @@ def characters(request, *args, **kwargs):
                 continue
             token_output.append(t)
             _characters.add(t.character_name)
-        context = {
-            'tokens': token_output,
-        }
-    
+        context['tokens'] = token_output
+
     return render(request, "characters.html", context=context)
