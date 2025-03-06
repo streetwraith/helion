@@ -1,0 +1,76 @@
+{% load static %}
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{% block title %}Helion{% endblock %}</title>
+    <link rel="stylesheet" href="{% static 'css/helion.css' %}">
+    {% block css %}
+    {% endblock %}
+    {% block js %}
+    {% endblock %}
+</head>
+<body>
+    <header>
+        <div id="user-panel">
+            {% if user.is_authenticated %}
+                <form method="post" action="{% url 'logout' %}">
+                    {% csrf_token %}
+                    <button type="submit">logout</button>
+                    <input type="hidden" name="next" value="{{ next }}">
+                </form>
+                <span>{{ user.username }}</span> // 
+                {% if request.session.esi_token %}
+                    <span><a href="{% url 'characters' %}">{{ request.session.esi_token.character_name }}</a></span>
+                    <img src="https://images.evetech.net/characters/{{ request.session.esi_token.character_id }}/portrait?size=32" />
+                {% else %}
+                    <a href="{% url 'characters' %}">select character</a>
+                {% endif %}
+            {% else %}
+                please login
+            {% endif %}
+        </div>
+        <nav>
+            <ul>
+                <li>market: 
+                    <ul>
+                        <li><a href="{% url 'market_index' %}">stats</a></li>
+                        <li><a href="{% url 'market_transactions' %}">transactions</a></li>
+                        <li><a href="{% url 'market_hauling_index' %}">hauling</a></li>
+                        <li><a href="{% url 'lp_index' %}">loyalty points</a></li>
+                        <li>station trading: 
+                            <ul class="hub-links">
+                                {% for trade_hub in trade_hubs %}
+                                <li><a href="{% url 'market_trade_hub' region_id=trade_hub.region_id %}">{{ trade_hub.name }}</a></li>
+                                {% endfor %}
+                            </ul>
+                        </li>
+                    </ul>
+                </li>
+                <li>sde: 
+                    <ul>
+                        <li><a href="{% url 'sde_index' %}">index</a></li>
+                    </ul>
+                </li>
+            </ul>
+            {% block nav %}
+            {% endblock %}
+        </nav>
+        {% block header %}
+        {% endblock %}
+    </header>
+
+    <main>
+        {% block content %}
+        {% endblock %}
+    </main>
+
+    <footer>
+        <p>helion app</p>
+        {% block footer %}
+        {% endblock %}
+    </footer>
+</body>
+</html>

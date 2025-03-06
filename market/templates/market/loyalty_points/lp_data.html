@@ -1,0 +1,82 @@
+{% extends "market_base.html" %}
+
+{% load static %}
+{% load custom_filters %}
+
+{% block title %}Helion | market | loyalty points{% endblock %}
+
+{% block content %}
+<h1>Loyalty Points</h1>
+
+{% include 'market/loyalty_points/_fragment_lp_form.html' %}
+
+<br>
+
+<table style="width: auto;" data-to-region-id="{{region}}">
+    <thead>
+        <tr>
+            <th>item</th>
+            <th>q</th>
+            <th>ak</th>
+            <th>isk</th>
+            <th>lp</th>
+            <th>items</th>
+            <th>price</th>
+            <th>location</th>
+            <th>profit</th>
+            <th>isk/lp</th>
+            <th>history</th>
+            <th>api h</th>
+        </tr>
+    </thead>
+    <tbody>
+        {% for deal in deals %}
+        <tr data-type-id="{{deal.type_id}}">
+            <td class="item-name">{% include 'market/_fragment_item_name.html' with item_name=deal.name type_id=deal.type_id show_add_del=False %}</td>
+            <td>{{ deal.quantity }}</td>
+            <td>{{ deal.ak_cost }}</td>
+            <td>{{ deal.isk_cost|isk_value }}</td>
+            <td>{{ deal.lp_cost|isk_value }}</td>
+            <td>
+                <table style="width: 100%;">
+                    {% for required_item in deal.required_items %}
+                        <tr data-type-id="{{required_item.type_id}}">
+                            <td class="item-name">{% include 'market/_fragment_item_name.html' with item_name=required_item.name type_id=required_item.type_id show_add_del=False %}</td>
+                            <td>{{ required_item.quantity }}</td>
+                            <td>{{ required_item.price|isk_value }}</td>
+                            <td>
+                                {% if required_item.location is not None %}
+                                    {% for trade_hub in trade_hubs %}
+                                        {% if required_item.location == trade_hub.station_id %}{{ trade_hub.name }}{% endif %}
+                                    {% endfor %}
+                                {% endif %}
+                            </td>
+                        </tr>
+                    {% endfor %}
+                </table>
+            </td>
+            <td>{{ deal.price|isk_value }}</td>
+            <td>{{ deal.location }}
+                {% if deal.location is not None %}
+                    {% for trade_hub in trade_hubs %}
+                        {% if deal.location == trade_hub.station_id %} ({{ trade_hub.name }}){% endif %}
+                    {% endfor %}
+                {% endif %}
+            </td>
+            <td>{{ deal.profit|isk_value }}</td>
+            <td>{{ deal.profit_per_lp|isk_value }}</td>
+            <td class="type-{{ deal.type_id }} history-container">
+                {% if deal.history_averages %}
+                {% include 'market/hauling/_fragment_hauling_sts_history.html' with data=deal.history_averages %}
+                {% endif %}
+            </td>
+            <td>
+                <div class="loading-spinner" style="display:none"><div class="css-spinner"></div></div>
+                <a data-type-id="{{ deal.type_id }}" class="update-history" href="#">update</a>
+            </td>
+        </tr>
+        {% endfor %}
+    </tbody>
+</table>
+
+{% endblock %}

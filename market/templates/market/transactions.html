@@ -1,0 +1,87 @@
+{% extends "market_base.html" %}
+
+{% load static mathfilters custom_filters %}
+
+{% block title %}Helion | market | station trading{% endblock %}
+
+{% block content %}
+<h1>Market transactions</h1>
+
+<form action="{% url 'market_transactions' %}" method="GET">
+  <input type="hidden" name="page" value="1">
+  <label for="is_buy">Type</label>
+  <select id="is_buy" name="is_buy">
+    <option value="">Any</option>
+    <option value="True" {% if filters|get_by_key:'is_buy' == True %}selected{% endif %}>Buy orders</option>
+    <option value="False" {% if filters|get_by_key:'is_buy' == False %}selected{% endif %}>Sell orders</option>
+  </select>
+  <label for="location_id">Location</label>
+  <select id="location_id" name="location_id">
+    <option value="">Any</option>
+    {% for trade_hub in trade_hubs %}
+    <option value="{{ trade_hub.station_id }}" {% if filters|get_by_key:'location_id' == trade_hub.station_id %}selected{% endif %}>{{ trade_hub.name }}</option>
+    {% endfor %}
+  </select>
+  <button type="submit">filter</button>
+</form>
+
+<br>
+
+{% include '_fragment_pagination.html' with page_obj=page_obj filters=filters %}
+
+<table>
+    <thead>
+        <tr>
+            <th>date</th>
+            <th>item</th>
+            <th>price</th>
+            <th>quantity</th>
+            <th>price ea</th>
+            <th>location</th>
+            <th>hv</th>
+            <th>havgp</th>
+            <th>hlastp</th>
+        </tr>
+    </thead>
+    <tbody>
+        {% for transaction in page_obj %}
+        {% with location_id_filter="station_id:"|stradd:transaction.location_id %}
+        {% with item=items|get_by_key:transaction.type_id trade_hub=trade_hubs|get_object_by_attr:location_id_filter %}
+        <tr data-type-id="{{ transaction.type_id }}">
+            <td>{{ transaction.date|date:"d/m/Y H:i:s" }}</td>
+            <td class="item-name">
+              {% if item %}
+                {% include 'market/_fragment_item_name.html' with item_name=item.name type_id=transaction.type_id show_add_del=True %}
+              {% else %}
+                {% include 'market/_fragment_item_name.html' with item_name=None type_id=transaction.type_id show_add_del=True %}
+              {% endif %}
+            </td>
+            <td class="{% if transaction.is_buy %}red{% else %}green{% endif %}">{{ transaction.unit_price|mul:transaction.quantity|isk_value }}</td>
+            <td class="{% if transaction.is_buy %}red{% else %}green{% endif %}">{{ transaction.quantity }}</td>
+            <td class="{% if transaction.is_buy %}red{% else %}green{% endif %}">{{ transaction.unit_price|isk_value }}</td>
+            {% if trade_hub %}
+            <td>{{ trade_hub.name }}</td>
+            {% else %}
+            <td class="unknown">{{ transaction.location_id }}</td>
+            {% endif %}
+            {% with item_history_buy=history_buy|get_by_key:transaction.type_id item_history_sell=history_sell|get_by_key:transaction.type_id %}
+            {% if transaction.is_buy %}
+            <td>{{ item_history_sell|get_by_key:'volume' }}</td>
+            <td>{{ item_history_sell|get_by_key:'avg_price'|isk_value }}</td>
+            <td>{{ item_history_sell|get_by_key:'last_price'|isk_value }}</td>
+            {% else %}
+            <td>{{ item_history_buy|get_by_key:'volume' }}</td>
+            <td>{{ item_history_buy|get_by_key:'avg_price'|isk_value }}</td>
+            <td>{{ item_history_buy|get_by_key:'last_price'|isk_value }}</td>
+            {% endif %}
+            {% endwith %}
+        </tr>
+        {% endwith %}
+        {% endwith %}
+        {% endfor %}
+    </tbody>
+</table>
+
+{% include '_fragment_pagination.html' with page_obj=page_obj filters=filters %}
+
+{% endblock %}

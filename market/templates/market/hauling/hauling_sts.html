@@ -1,0 +1,57 @@
+{% extends "market_base.html" %}
+
+{% load static %}
+{% load custom_filters %}
+
+{% block title %}Helion | market | hauling{% endblock %}
+
+{% block content %}
+<h1>Hauling</h1>
+
+{% include 'market/hauling/_fragment_hauling_form.html' %}
+<br>
+<table style="width: auto;" data-to-region-id="{{to_region}}" class="market">
+    <thead>
+        <tr>
+            <th>item</th>
+            <th class="jita">price jita</th>
+            <th>price from</th>
+            <th>% jita</th>
+            <th>price to</th>
+            <th>% jita</th>
+            <th>vol to</th>
+            <th>unit volume</th>
+            <th>profit</th>
+            <th>profit %</th>
+            <th>history</th>
+            <th>api h</th>
+        </tr>
+    </thead>
+    <tbody>
+        {% for deal in deals %}
+        <tr data-type-id="{{deal.type_id}}">
+            <td class="item-name">{% include 'market/_fragment_item_name.html' with item_name=deal.type_id_name type_id=deal.type_id show_add_del=False %}</td>
+            <td class="jita">{{ deal.price_jita|isk_value }}</td>
+            <td>{{ deal.price_from|isk_value }}</td>
+            <td>{{ deal.from_relative_to_jita|floatformat:0 }}</td>
+            <td>{{ deal.price_to|isk_value }}</td>
+            <td>{{ deal.to_relative_to_jita|floatformat:0 }}</td>
+            <td>{{ deal.total_vol_to }}</td>
+            <td>{{ deal.type_id_vol }}</td>
+            <td>{{ deal.profit|isk_value }}</td>
+            <td>{{ deal.profit_percent|floatformat:0 }}</td>
+            <td class="type-{{ deal.type_id }} history-container">
+                {% if deal.history_averages %}
+                {% include 'market/hauling/_fragment_hauling_sts_history.html' with data=deal.history_averages %}
+                {% endif %}
+            </td>
+            <td>
+                <div class="loading-spinner" style="display:none"><div class="css-spinner"></div></div>
+                <a data-type-id="{{ deal.type_id }}" class="update-history" href="#">update</a>
+            </td>
+        </tr>
+        {% endfor %}
+    </tbody>
+</table>
+
+{% endblock %}

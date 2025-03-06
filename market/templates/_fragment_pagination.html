@@ -1,0 +1,23 @@
+{% load custom_filters %}
+
+{% if page_obj.has_other_pages %}
+  <ul class="pagination">
+    {% if page_obj.has_previous %}
+      <li><a href="?page=1{{ filters|dict_to_query }}">&laquo; first</a></li>
+      <li><a href="?page={{ page_obj.previous_page_number }}{{ filters|dict_to_query }}">previous</a></li>
+    {% endif %}
+
+    {% for num in page_obj.paginator.page_range %}
+      {% if page_obj.number == num %}
+        <li class="active"><span>{{ num }}</span></li>
+      {% else %}
+        <li><a href="?page={{ num }}{{ filters|dict_to_query }}">{{ num }}</a></li>
+      {% endif %}
+    {% endfor %}
+
+    {% if page_obj.has_next %}
+      <li><a href="?page={{ page_obj.next_page_number }}{{ filters|dict_to_query }}">next</a></li>
+      <li><a href="?page={{ page_obj.paginator.num_pages }}{{ filters|dict_to_query }}">last &raquo;</a></li>
+    {% endif %}
+  </ul>
+{% endif %}

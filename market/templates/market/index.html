@@ -1,0 +1,107 @@
+{% extends "market_base.html" %}
+
+{% load static custom_filters %}
+
+{% block title %}Helion | market | station trading{% endblock %}
+
+{% block content %}
+<h1>Market data</h1>
+
+<table>
+    <thead>
+        <tr>
+            <th></th>
+            <th>0-7</th>
+            <th>7-14</th>
+            <th>14-21</th>
+            <th>21-28</th>
+            <th>0-28</th>
+        </tr>
+    </thead>
+    <tbody>
+        <tr>
+            <th>buy</th>
+            <td>{{ wallet_statistics|wallet_stats:'buy,0,7'|isk_value }}</td>
+            <td>{{ wallet_statistics|wallet_stats:'buy,7,14'|isk_value }}</td>
+            <td>{{ wallet_statistics|wallet_stats:'buy,14,21'|isk_value }}</td>
+            <td>{{ wallet_statistics|wallet_stats:'buy,21,28'|isk_value }}</td>
+            <td>{{ wallet_statistics|wallet_stats:'buy,0,28'|isk_value }}</td>
+        </tr>
+        <tr>
+            <th>sell</th>
+            <td>{{ wallet_statistics|wallet_stats:'sell,0,7'|isk_value }}</td>
+            <td>{{ wallet_statistics|wallet_stats:'sell,7,14'|isk_value }}</td>
+            <td>{{ wallet_statistics|wallet_stats:'sell,14,21'|isk_value }}</td>
+            <td>{{ wallet_statistics|wallet_stats:'sell,21,28'|isk_value }}</td>
+            <td>{{ wallet_statistics|wallet_stats:'sell,0,28'|isk_value }}</td>
+        </tr>
+        <tr>
+            <th>taxes</th>
+            <td>{{ wallet_statistics|wallet_stats:'transaction_tax,0,7'|isk_value }}</td>
+            <td>{{ wallet_statistics|wallet_stats:'transaction_tax,7,14'|isk_value }}</td>
+            <td>{{ wallet_statistics|wallet_stats:'transaction_tax,14,21'|isk_value }}</td>
+            <td>{{ wallet_statistics|wallet_stats:'transaction_tax,21,28'|isk_value }}</td>
+            <td>{{ wallet_statistics|wallet_stats:'transaction_tax,0,28'|isk_value }}</td>
+        </tr>
+        <tr>
+            <th>fees</th>
+            <td>{{ wallet_statistics|wallet_stats:'brokers_fee,0,7'|isk_value }}</td>
+            <td>{{ wallet_statistics|wallet_stats:'brokers_fee,7,14'|isk_value }}</td>
+            <td>{{ wallet_statistics|wallet_stats:'brokers_fee,14,21'|isk_value }}</td>
+            <td>{{ wallet_statistics|wallet_stats:'brokers_fee,21,28'|isk_value }}</td>
+            <td>{{ wallet_statistics|wallet_stats:'brokers_fee,0,28'|isk_value }}</td>
+        </tr>
+        <tr>
+            <th>profit</th>
+            <td>{{ wallet_statistics|wallet_stats:'profit,0,7'|isk_value }}</td>
+            <td>{{ wallet_statistics|wallet_stats:'profit,7,14'|isk_value }}</td>
+            <td>{{ wallet_statistics|wallet_stats:'profit,14,21'|isk_value }}</td>
+            <td>{{ wallet_statistics|wallet_stats:'profit,21,28'|isk_value }}</td>
+            <td>{{ wallet_statistics|wallet_stats:'profit,0,28'|isk_value }}</td>
+        </tr>
+        <tr>
+            <th>fees/profit</th>
+            <td>{{ wallet_statistics|wallet_stats:'f/p,0,7'|floatformat:1 }}</td>
+            <td>{{ wallet_statistics|wallet_stats:'f/p,7,14'|floatformat:1 }}</td>
+            <td>{{ wallet_statistics|wallet_stats:'f/p,14,21'|floatformat:1 }}</td>
+            <td>{{ wallet_statistics|wallet_stats:'f/p,21,28'|floatformat:1 }}</td>
+            <td>{{ wallet_statistics|wallet_stats:'f/p,0,28'|floatformat:1 }}</td>
+        </tr>
+    </tbody>
+</table>
+<br>
+<table>
+    <thead>
+        <tr>
+            <th>region id</th>
+            <th>region name</th>
+            <th>trade hub</th>
+            <th>orders</th>
+            <th>last updated</th>
+            <th></th>
+        </tr>
+    </thead>
+    <tbody>
+        {% for market_region in market_regions %}
+        <tr>
+            <td>{{ market_region.region_id }}</td>
+            <td>{{ market_region.region_name }}</td>
+            <td>{{ market_region.trade_hub.name }}</td>
+            <td>{{ market_region.orders }}</td>
+            <td>{{ market_region.updated_at|date:"d/m/Y H:i" }}</td>
+            <td>
+                <form action="{% url 'market_region_orders_refresh' region_id=market_region.region_id %}" method="post">
+                    {% csrf_token %}
+                    <input type="hidden" name="region_id" value="{{ market_region.region_id }}" />
+                    <button type="submit">refresh orders</button>
+                </form>
+            </td>
+        </tr>
+        {% endfor %}
+    </tbody>
+</table>
+
+<br/>
+<a href="{% url 'refresh_all_data' %}">refresh all data</a>
+
+{% endblock %}

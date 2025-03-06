@@ -1,0 +1,22 @@
+<form action="{% url 'lp_index' %}" method="POST">
+    {% csrf_token %}
+    <label for="trade_type">Type</label>
+    <select id="trade_type" name="trade_type">
+        <option value="buy" {% if trade_type == 'buy' %}selected{% endif %}>Buy orders</option>
+        <option value="sell" {% if trade_type == 'sell' %}selected{% endif %}>Sell orders</option>
+    </select>
+    <label for="corporation">Corporation</label>
+    <select id="corporation" name="corporation">
+        <option value=""></option>
+        {% for corp in corporations %}
+        <option value="{{ corp.corporation_id }}" {% if corporation == corp.corporation_id %}selected{% endif %}>{{ corp.name }}</option>
+        {% endfor %}
+    </select>
+    <label for="location">Location</label>
+    <select id="location" name="location">
+        {% for trade_hub in trade_hubs %}
+        <option value="{{ trade_hub.station_id }}" {% if location == trade_hub.name %}selected{% endif %}>{{ trade_hub.name }}</option>
+        {% endfor %}
+    </select>
+    <button type="submit">search</button>
+</form>

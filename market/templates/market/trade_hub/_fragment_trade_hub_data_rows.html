@@ -1,0 +1,40 @@
+{% load custom_filters %}
+
+{% for trade_item in item_dict %}
+{% with item_data_hub=item_data|get_by_key:trade_item.type_id|get_by_key:'regions'|get_by_key:trade_hub_region.region_id item_data_jita=item_data|get_by_key:trade_item.type_id|get_by_key:'regions'|get_by_key:trade_hub_jita.region_id %}
+<tr data-type-id="{{trade_item.type_id}}">
+    <td class="item-name">{% include 'market/_fragment_item_name.html' with item_name=trade_item.name type_id=trade_item.type_id show_add_del=True %}</td>
+    <td class="gradient_{{ item_data_hub|get_by_key:'spread_inverse_rounded'|floatformat:0 }}">{{ item_data_hub|get_by_key:'spread'|floatformat:0 }}%</td>
+    <td>{{ item_data_hub|get_by_key:'liquidity'|floatformat:0 }}%</td>
+    <td>{{ item_data_hub|get_by_key:'my_profit'|isk_value }}</td>
+    {% with my_sell_vol=item_data_hub|get_by_key:'my_sell_volume' in_assets=item_data|get_by_key:trade_item.type_id|get_by_key:'in_assets' %}
+    <td class="{% if my_sell_vol < 1 and in_assets > 0 %}warning{% endif %}">{{ in_assets }}</td>
+    <td class="{% if my_sell_vol < 1 and in_assets > 0 %}warning{% endif %}">{{ my_sell_vol }}</td>
+    {% endwith %}
+    <td class="{% if item_data_hub|get_by_key:'my_sell_price' > item_data_hub|get_by_key:'station_lowest_sell_order'|get_by_key:'price' %}red{% endif %}">{{ item_data_hub|get_by_key:'my_sell_price'|isk_value }}</td>
+    <td>{{ item_data_hub|get_by_key:'my_sell_price_last_update' }}</td>
+    <td>{{ item_data_hub|get_by_key:'station_lowest_sell_order'|get_by_key:'price'|isk_value }}</td>
+    <td class="jita">{{ item_data_jita|get_by_key:'station_lowest_sell_order'|get_by_key:'price'|isk_value }}</td>
+    <td>{{ item_data|get_by_key:trade_item.type_id|get_by_key:'global_lowest_sell_order'|get_by_key:'price'|isk_value}}</td>
+    <td>{{ item_data|get_by_key:trade_item.type_id|get_by_key:'global_lowest_sell_order'|get_by_key:'hub'}}</td>
+    {% with sell_history=item_data_hub|get_by_key:'my_sell_history' %}
+    <td>{{ sell_history|get_by_key:'volume' }}</td>
+    <td>{{ sell_history|get_by_key:'avg_price'|isk_value }}</td>
+    <td>{{ sell_history|get_by_key:'last_price'|isk_value }}</td>
+    {% endwith %}
+    <td>{{ item_data_hub|get_by_key:'my_buy_volume' }}</td>
+    <td class="{% if item_data_hub|get_by_key:'my_buy_price' < item_data_hub|get_by_key:'station_highest_buy_order'|get_by_key:'price' %}red{% endif %}">{{ item_data_hub|get_by_key:'my_buy_price'|isk_value }}</td>
+    <td>{{ item_data_hub|get_by_key:'my_buy_price_last_update' }}</td>
+    <td class="{% if item_data_hub|get_by_key:'my_buy_vs_best_sell' > 95 %}warning{% endif %}">{{ item_data_hub|get_by_key:'my_buy_vs_best_sell'|floatformat:0 }}%</td>
+    <td>{{ item_data_hub|get_by_key:'station_highest_buy_order'|get_by_key:'price'|isk_value }}</td>
+    <td class="jita">{{ item_data_jita|get_by_key:'station_highest_buy_order'|get_by_key:'price'|isk_value }}</td>
+    <td>{{ item_data|get_by_key:trade_item.type_id|get_by_key:'global_highest_buy_order'|get_by_key:'price'|isk_value}}</td>
+    <td>{{ item_data|get_by_key:trade_item.type_id|get_by_key:'global_highest_buy_order'|get_by_key:'hub'}}</td>
+    {% with buy_history=item_data_hub|get_by_key:'my_buy_history' %}
+    <td>{{ buy_history|get_by_key:'volume' }}</td>
+    <td>{{ buy_history|get_by_key:'avg_price'|isk_value }}</td>
+    <td>{{ buy_history|get_by_key:'last_price'|isk_value }}</td>
+    {% endwith %}
+</tr>
+{% endwith %}
+{% endfor %}

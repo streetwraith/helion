@@ -1,0 +1,160 @@
+{% extends "market_base.html" %}
+
+{% load static custom_filters %}
+
+{% block title %}Helion | market | station trading | {{ trade_hub_region.name }}{% endblock %}
+
+{% block content %}
+<h1>Station trading: {{ trade_hub_region.name }}</h1>
+<table class="market">
+    <thead>
+        <tr>
+            <th colspan="5"></th>
+            <th colspan="10">sell</th>
+            <th colspan="11">buy</th>
+        </tr>
+        <tr>
+            <th>item</th>
+            <th>spr</th>
+            <th>liq</th>
+            <th>profit</th>
+            <th>stock</th>
+            <th>v</th>
+            <th>p</th>
+            <th>u</th>
+            <th>station</th>
+            <th class="jita">jita</th>
+            <th colspan="2">best</th>
+            <th>hv</th>
+            <th>havgp</th>
+            <th>hlastp</th>
+            <th>v</th>
+            <th>p</th>
+            <th>u</th>
+            <th>vs bs</th>
+            <th>station</th>
+            <th class="jita">jita</th>
+            <th colspan="2">best</th>
+            <th>hv</th>
+            <th>havgp</th>
+            <th>hlastp</th>
+        </tr>
+    </thead>
+    <tbody>
+        {% include 'market/trade_hub/_fragment_trade_hub_data_rows.html' with item_dict=item_dict item_data=item_data %}
+    </tbody>
+    <tfoot>
+        <tr>
+            <th>item</th>
+            <th>spr</th>
+            <th>liq</th>
+            <th>profit</th>
+            <th>stock</th>
+            <th>v</th>
+            <th>p</th>
+            <th>u</th>
+            <th>station</th>
+            <th>jita</th>
+            <th colspan="2">best</th>
+            <th>hv</th>
+            <th>havgp</th>
+            <th>hlastp</th>
+            <th>v</th>
+            <th>p</th>
+            <th>u</th>
+            <th>vs bb</th>
+            <th>station</th>
+            <th>jita</th>
+            <th colspan="2">best</th>
+            <th>hv</th>
+            <th>havgp</th>
+            <th>hlastp</th>
+        </tr>
+        <tr>
+            <th colspan="5"></th>
+            <th colspan="10">sell</th>
+            <th colspan="11">buy</th>
+        </tr>
+    </tfoot>
+</table>
+
+<br>
+
+<table class="market">
+    <thead>
+        <tr>
+            <th colspan="5"></th>
+            <th colspan="10">sell</th>
+            <th colspan="11">buy</th>
+        </tr>
+        <tr>
+            <th>item</th>
+            <th>spr</th>
+            <th>liq</th>
+            <th>profit</th>
+            <th>stock</th>
+            <th>v</th>
+            <th>p</th>
+            <th>u</th>
+            <th>station</th>
+            <th>jita</th>
+            <th colspan="2">best</th>
+            <th>hv</th>
+            <th>havgp</th>
+            <th>hlastp</th>
+            <th>v</th>
+            <th>p</th>
+            <th>u</th>
+            <th>vs bb</th>
+            <th>station</th>
+            <th>jita</th>
+            <th colspan="2">best</th>
+            <th>hv</th>
+            <th>havgp</th>
+            <th>hlastp</th>
+        </tr>
+    </thead>
+    <tbody>
+        {% include 'market/trade_hub/_fragment_trade_hub_data_rows.html' with item_dict=item_dict_extra item_data=item_data %}
+    </tbody>
+    <tfoot>
+        <tr>
+            <th>item</th>
+            <th>spr</th>
+            <th>liq</th>
+            <th>profit</th>
+            <th>stock</th>
+            <th>v</th>
+            <th>p</th>
+            <th>u</th>
+            <th>station</th>
+            <th>jita</th>
+            <th colspan="2">best</th>
+            <th>hv</th>
+            <th>havgp</th>
+            <th>hlastp</th>
+            <th>v</th>
+            <th>p</th>
+            <th>u</th>
+            <th>vs bb</th>
+            <th>station</th>
+            <th>jita</th>
+            <th colspan="2">best</th>
+            <th>hv</th>
+            <th>havgp</th>
+            <th>hlastp</th>
+        </tr>
+        <tr>
+            <th colspan="5"></th>
+            <th colspan="10">sell</th>
+            <th colspan="11">buy</th>
+        </tr>
+    </tfoot>
+</table>
+
+
+ISK in escrow: {{ isk_in_escrow|isk_value }}<br />
+ISK in sell orders: {{ isk_in_sell_orders|isk_value }}
+
+{% endblock %}
+

@@ -1,0 +1,13 @@
+{% extends "market_base.html" %}
+
+{% load static %}
+{% load custom_filters %}
+
+{% block title %}Helion | market | loyalty points{% endblock %}
+
+{% block content %}
+<h1>Loyalty Points</h1>
+
+{% include 'market/loyalty_points/_fragment_lp_form.html' %}
+
+{% endblock %}

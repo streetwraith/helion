@@ -1,0 +1,27 @@
+<form action="{% url 'market_hauling_index' %}" method="POST">
+    {% csrf_token %}
+    <label for="trade_type">Type</label>
+    <select id="trade_type" name="trade_type">
+        <option value="stb" {% if trade_type == 'stb' %}selected{% endif %}>Sell to Buy</option>
+        <option value="sts" {% if trade_type == 'sts' %}selected{% endif %}>Sell to Sell</option>
+    </select>
+    <label for="from_location">From</label>
+    <select id="from_location" name="from_location">
+        <option value=""></option>
+        {% for trade_hub in trade_hubs %}
+        <option value="{{ trade_hub.name }}" {% if from_location == trade_hub.name %}selected{% endif %}>{{ trade_hub.name }}</option>
+        {% endfor %}
+    </select>
+    <label for="to_location">To</label>
+    <select id="to_location" name="to_location">
+        <option value=""></option>
+        {% for trade_hub in trade_hubs %}
+        <option value="{{ trade_hub.name }}" {% if to_location == trade_hub.name %}selected{% endif %}>{{ trade_hub.name }}</option>
+        {% endfor %}
+    </select>
+    <label for="max_vol">Max volume</label>
+    <input type="number" id="max_vol" name="max_vol" value="{{ max_vol }}">
+    <label for="max_price">Max price:</label>
+    <input type="number" id="max_price" name="max_price" value="{{ max_price }}">
+    <button type="submit">search</button>
+</form>

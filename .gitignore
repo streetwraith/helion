@@ -1,0 +1,12 @@
+.env
+.vscode/
+__pycache__/
+.cache
+*.py[cod]
+*$py.class
+cache/
+db.sqlite3
+.DS_Store
+Thumbs.db
+sde/sde/
+.gitconfig

@@ -1,0 +1,45 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div>
+selected token: {{ request.session.esi_token }}
+</div>
+
+characters:
+{% for token in tokens|dictsort:"character_name" %}
+<div class="character">
+    <form method="post">
+        {% csrf_token %}
+        <div class="{% if token.pk == request.session.esi_token %}selected{% endif %}">
+            <div>{{ token.character_name }}</div>
+            <div>
+                <input type="image" formmethod="post" src="https://images.evetech.net/characters/{{ token.character_id }}/portrait?size=64">
+            </div>
+            <div>
+                <input type="hidden" name="_token" value="{{ token.pk }}">
+                <button type="submit" title="select" formmethod="post">
+                    select
+                </button>
+            </div>
+        </div>
+    </form>
+</div>
+{% endfor %}
+<form method="post">
+    {% csrf_token %}
+    <div>
+        <div>add character</div>
+        <div>
+            <input type="image" formmethod="post" src="https://images.evetech.net/characters/1/portrait?size=64">
+        </div>
+        <div>
+            <input type="hidden" name="_add" value="True">
+            <a href="#" type="submit">
+                <button type="submit" title="add character" formmethod="post">
+                    new
+                </button>
+            </a>
+        </div>
+    </div>
+</form>
+{% endblock %}
