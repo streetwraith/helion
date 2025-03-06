@@ -1,3 +1,3 @@
 #!/bin/sh
 set -e
-gunicorn helion.wsgi --log-file -
+gunicorn helion.wsgi --timeout 300 --log-file -
