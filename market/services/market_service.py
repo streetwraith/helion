@@ -1,7 +1,7 @@
 from helion.providers import esi
 from esi.models import Token
 import os
-from market.models import MarketOrder, MarketTransaction, MarketRegionStatus, TradeItem, TradeHub, MarketStructure, MarketHistory, WalletJournal
+from market.models import MarketOrder, MarketTransaction, MarketRegionStatus, TradeItem, TradeHub, MarketHistory, WalletJournal
 from sde.models import SdeTypeId, SolarSystem
 
 from datetime import date, datetime, timedelta, timezone
@@ -30,11 +30,13 @@ def update_market_transactions(character_id):
     api_market_transactions = esi.client.Wallet.get_characters_character_id_wallet_transactions(character_id=character_id, token = Token.get_token(character_id, 'esi-wallet.read_character_wallet.v1').valid_access_token()).results()
     market_transactions = []
     for index, value in enumerate(api_market_transactions):
-        market_transactions.append(MarketTransaction(**value))
+        market_transaction = MarketTransaction(**value)
+        market_transaction.character_id = character_id
+        market_transactions.append(market_transaction)
     MarketTransaction.objects.bulk_create(market_transactions, 
         update_conflicts=True, 
         unique_fields=['transaction_id'], 
-        update_fields=['client_id', 'date', 'is_buy', 'is_personal', 'journal_ref_id', 'location_id', 'quantity', 'type_id', 'unit_price'])
+        update_fields=['client_id', 'character_id', 'date', 'is_buy', 'is_personal', 'journal_ref_id', 'location_id', 'quantity', 'type_id', 'unit_price'])
 
 def get_wallet_journal(character_id):
     journal_entries = []
@@ -42,6 +44,7 @@ def get_wallet_journal(character_id):
 
     for index, value in enumerate(journal_data):
         journal_entry = WalletJournal()
+        journal_entry.character_id = character_id
         journal_entry.journal_id = value['id']
         journal_entry.amount = value['amount']
         journal_entry.balance = value['balance']

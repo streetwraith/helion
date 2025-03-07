@@ -14,13 +14,13 @@ class Migration(migrations.Migration):
             name='MarketHistory',
             fields=[
                 ('id', models.BigAutoField(auto_created=True, primary_key=True, serialize=False, verbose_name='ID')),
-                ('type_id', models.IntegerField()),
-                ('region_id', models.IntegerField()),
+                ('type_id', models.BigIntegerField()),
+                ('region_id', models.BigIntegerField()),
                 ('average', models.FloatField()),
                 ('date', models.DateField(db_index=True)),
                 ('highest', models.FloatField()),
                 ('lowest', models.FloatField()),
-                ('order_count', models.IntegerField()),
+                ('order_count', models.BigIntegerField()),
                 ('volume', models.IntegerField()),
             ],
             options={

@@ -14,7 +14,7 @@ class Migration(migrations.Migration):
             name='TradeItem',
             fields=[
                 ('id', models.BigAutoField(auto_created=True, primary_key=True, serialize=False, verbose_name='ID')),
-                ('type_id', models.IntegerField()),
+                ('type_id', models.BigIntegerField()),
                 ('name', models.CharField(max_length=512)),
             ],
         ),

@@ -13,6 +13,6 @@ class Migration(migrations.Migration):
         migrations.AlterField(
             model_name='marketgroup',
             name='parent_group_id',
-            field=models.IntegerField(blank=True, db_index=True, default=None, null=True),
+            field=models.BigIntegerField(blank=True, db_index=True, default=None, null=True),
         ),
     ]

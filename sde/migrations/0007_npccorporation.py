@@ -13,8 +13,8 @@ class Migration(migrations.Migration):
         migrations.CreateModel(
             name='NpcCorporation',
             fields=[
-                ('corporation_id', models.IntegerField(primary_key=True, serialize=False)),
-                ('faction_id', models.IntegerField()),
+                ('corporation_id', models.BigIntegerField(primary_key=True, serialize=False)),
+                ('faction_id', models.BigIntegerField()),
                 ('name', models.CharField(db_index=True, max_length=256)),
             ],
         ),

@@ -13,16 +13,16 @@ class Migration(migrations.Migration):
         migrations.AlterField(
             model_name='marketorder',
             name='location_id',
-            field=models.IntegerField(db_index=True),
+            field=models.BigIntegerField(db_index=True),
         ),
         migrations.AlterField(
             model_name='marketorder',
             name='price',
-            field=models.IntegerField(db_index=True),
+            field=models.BigIntegerField(db_index=True),
         ),
         migrations.AlterField(
             model_name='marketorder',
             name='type_id',
-            field=models.IntegerField(db_index=True),
+            field=models.BigIntegerField(db_index=True),
         ),
     ]

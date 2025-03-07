@@ -13,9 +13,9 @@ class Migration(migrations.Migration):
         migrations.CreateModel(
             name='SdeTypeId',
             fields=[
-                ('type_id', models.IntegerField(primary_key=True, serialize=False)),
-                ('group_id', models.IntegerField(db_index=True)),
-                ('market_group_id', models.IntegerField(db_index=True)),
+                ('type_id', models.BigIntegerField(primary_key=True, serialize=False)),
+                ('group_id', models.BigIntegerField(db_index=True)),
+                ('market_group_id', models.BigIntegerField(db_index=True)),
                 ('name', models.CharField(max_length=512)),
             ],
         ),

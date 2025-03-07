@@ -13,12 +13,12 @@ class Migration(migrations.Migration):
         migrations.AlterField(
             model_name='tradeitem',
             name='group_id',
-            field=models.IntegerField(blank=True, db_index=True),
+            field=models.BigIntegerField(blank=True, db_index=True),
         ),
         migrations.AlterField(
             model_name='tradeitem',
             name='market_group_id',
-            field=models.IntegerField(blank=True, db_index=True),
+            field=models.BigIntegerField(blank=True, db_index=True),
         ),
         migrations.AlterField(
             model_name='tradeitem',

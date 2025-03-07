@@ -1,8 +1,6 @@
 from django.contrib import admin
-from .models import AuthData, Character, MarketOrder, MarketTransaction, MarketRegionStatus, TradeItem, TradeHub
+from .models import MarketOrder, MarketTransaction, MarketRegionStatus, TradeItem, TradeHub
 
-admin.site.register(AuthData)
-admin.site.register(Character)
 admin.site.register(MarketOrder)
 admin.site.register(MarketTransaction)
 admin.site.register(MarketRegionStatus)

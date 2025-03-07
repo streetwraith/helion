@@ -14,8 +14,8 @@ class Migration(migrations.Migration):
             name='MarketRegionStatus',
             fields=[
                 ('id', models.BigAutoField(auto_created=True, primary_key=True, serialize=False, verbose_name='ID')),
-                ('region_id', models.IntegerField()),
-                ('orders', models.IntegerField()),
+                ('region_id', models.BigIntegerField()),
+                ('orders', models.BigIntegerField()),
                 ('updated_at', models.DateTimeField(auto_now=True)),
             ],
         ),

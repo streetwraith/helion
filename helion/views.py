@@ -4,7 +4,6 @@ from django.views.decorators.http import require_POST
 from django.contrib.auth import logout
 
 from esi.decorators import token_required
-from helion.models import Character
 from helion.providers import esi
 from esi.models import Token
 import os

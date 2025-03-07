@@ -13,6 +13,6 @@ class Migration(migrations.Migration):
         migrations.AlterField(
             model_name='npccorporation',
             name='faction_id',
-            field=models.IntegerField(blank=True, default=None, null=True),
+            field=models.BigIntegerField(blank=True, default=None, null=True),
         ),
     ]

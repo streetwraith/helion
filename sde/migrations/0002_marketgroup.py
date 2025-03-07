@@ -13,11 +13,11 @@ class Migration(migrations.Migration):
         migrations.CreateModel(
             name='MarketGroup',
             fields=[
-                ('market_group_id', models.IntegerField(primary_key=True, serialize=False)),
+                ('market_group_id', models.BigIntegerField(primary_key=True, serialize=False)),
                 ('has_types', models.BooleanField()),
                 ('name', models.CharField(max_length=512)),
                 ('description', models.CharField(max_length=1024)),
-                ('parent_group_id', models.IntegerField(db_index=True)),
+                ('parent_group_id', models.BigIntegerField(db_index=True)),
             ],
         ),
     ]

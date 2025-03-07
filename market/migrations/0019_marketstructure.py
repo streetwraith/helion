@@ -13,9 +13,9 @@ class Migration(migrations.Migration):
         migrations.CreateModel(
             name='MarketStructure',
             fields=[
-                ('structure_id', models.IntegerField(primary_key=True, serialize=False)),
+                ('structure_id', models.BigIntegerField(primary_key=True, serialize=False)),
                 ('name', models.CharField(blank=True, max_length=512, null=True)),
-                ('system_id', models.IntegerField(db_index=True)),
+                ('system_id', models.BigIntegerField(db_index=True)),
             ],
         ),
     ]

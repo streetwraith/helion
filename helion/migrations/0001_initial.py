@@ -14,7 +14,7 @@ class Migration(migrations.Migration):
         migrations.CreateModel(
             name='Character',
             fields=[
-                ('character_id', models.IntegerField(primary_key=True, serialize=False)),
+                ('character_id', models.BigIntegerField(primary_key=True, serialize=False)),
                 ('character_name', models.CharField(max_length=128)),
             ],
         ),

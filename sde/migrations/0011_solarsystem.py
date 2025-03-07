@@ -13,9 +13,9 @@ class Migration(migrations.Migration):
         migrations.CreateModel(
             name='SolarSystem',
             fields=[
-                ('system_id', models.IntegerField(primary_key=True, serialize=False)),
-                ('constellation_id', models.IntegerField()),
-                ('region_id', models.IntegerField(db_index=True)),
+                ('system_id', models.BigIntegerField(primary_key=True, serialize=False)),
+                ('constellation_id', models.BigIntegerField()),
+                ('region_id', models.BigIntegerField(db_index=True)),
                 ('name', models.CharField(db_index=True, max_length=256)),
                 ('security', models.FloatField()),
                 ('security_class', models.CharField(max_length=3)),

@@ -92,7 +92,7 @@ WSGI_APPLICATION = 'helion.wsgi.application'
 # https://docs.djangoproject.com/en/5.0/ref/settings/#databases
 
 DATABASES = {
-    'default': env.db(default="sqlite:///db.sqlite3")
+    'default': env.db()
 }
 
 SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')
@@ -187,8 +187,24 @@ SESSION_ENGINE = 'django.contrib.sessions.backends.db'
 LOGIN_REDIRECT_URL = '/'
 LOGOUT_REDIRECT_URL = '/'
 
-ESI_SSO_CLIENT_ID = str(os.getenv('ESI_CLIENT_ID'))
-ESI_SSO_CLIENT_SECRET = str(os.getenv('ESI_CLIENT_SECRET'))
-ESI_SSO_CALLBACK_URL = str(os.getenv('ESI_CLIENT_CALLBACK_URL'))
+ESI_SSO_CLIENT_ID = env.str('ESI_CLIENT_ID')
+ESI_SSO_CLIENT_SECRET = env.str('ESI_CLIENT_SECRET')
+ESI_SSO_CALLBACK_URL = env.url('ESI_CLIENT_CALLBACK_URL')
 ESI_INFO_LOGGING_ENABLED = True
 ESI_DEBUG_RESPONSE_CONTENT_LOGGING = True
+
+CELERY_BROKER_URL = env.str('CELERY_BROKER_URL')
+CELERY_BEAT_SCHEDULER = env.str('CELERY_BEAT_SCHEDULER')
+CELERY_RESULT_BACKEND = 'django-db'
+INSTALLED_APPS += ['django_celery_beat']
+INSTALLED_APPS += ['django_celery_results']
+
+CACHES = {
+    'default': {
+        'BACKEND': 'django_redis.cache.RedisCache',
+        'LOCATION': env.str('REDIS_CACHE_URL'),
+        'OPTIONS': {
+            'CLIENT_CLASS': 'django_redis.client.DefaultClient',
+        }
+    }
+}

@@ -13,6 +13,6 @@ class Migration(migrations.Migration):
         migrations.AddField(
             model_name='tradehub',
             name='system_id',
-            field=models.IntegerField(blank=True, default=None, null=True),
+            field=models.BigIntegerField(blank=True, default=None, null=True),
         ),
     ]

@@ -33,26 +33,26 @@ class Migration(migrations.Migration):
         migrations.AlterField(
             model_name='character',
             name='character_id',
-            field=models.IntegerField(primary_key=True, serialize=False),
+            field=models.BigIntegerField(primary_key=True, serialize=False),
         ),
         migrations.AlterField(
             model_name='marketorder',
             name='order_id',
-            field=models.IntegerField(primary_key=True, serialize=False),
+            field=models.BigIntegerField(primary_key=True, serialize=False),
         ),
         migrations.AlterField(
             model_name='marketregionstatus',
             name='region_id',
-            field=models.IntegerField(primary_key=True, serialize=False),
+            field=models.BigIntegerField(primary_key=True, serialize=False),
         ),
         migrations.AlterField(
             model_name='markettransaction',
             name='transaction_id',
-            field=models.IntegerField(primary_key=True, serialize=False),
+            field=models.BigIntegerField(primary_key=True, serialize=False),
         ),
         migrations.AlterField(
             model_name='tradeitem',
             name='type_id',
-            field=models.IntegerField(primary_key=True, serialize=False),
+            field=models.BigIntegerField(primary_key=True, serialize=False),
         ),
     ]
