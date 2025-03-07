@@ -13,6 +13,7 @@ https://docs.djangoproject.com/en/5.0/ref/settings/
 from pathlib import Path
 import environ
 import os
+import re
 
 env = environ.Env(  
     # set casting, default value  
@@ -94,6 +95,9 @@ WSGI_APPLICATION = 'helion.wsgi.application'
 DATABASES = {
     'default': env.db()
 }
+REDIS_URL = env.str('REDIS_URL', 'redis://localhost:6379/0')
+def replace_redis_db(redis_url, db_number):
+    return re.sub(r"/\d+$", f"/{db_number}", redis_url)
 
 SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')
 
@@ -193,7 +197,7 @@ ESI_SSO_CALLBACK_URL = env.url('ESI_CLIENT_CALLBACK_URL')
 ESI_INFO_LOGGING_ENABLED = True
 ESI_DEBUG_RESPONSE_CONTENT_LOGGING = True
 
-CELERY_BROKER_URL = env.str('CELERY_BROKER_URL')
+CELERY_BROKER_URL = replace_redis_db(REDIS_URL, 1)
 CELERY_BEAT_SCHEDULER = env.str('CELERY_BEAT_SCHEDULER')
 CELERY_RESULT_BACKEND = 'django-db'
 INSTALLED_APPS += ['django_celery_beat']
@@ -202,7 +206,7 @@ INSTALLED_APPS += ['django_celery_results']
 CACHES = {
     'default': {
         'BACKEND': 'django_redis.cache.RedisCache',
-        'LOCATION': env.str('REDIS_CACHE_URL'),
+        'LOCATION': replace_redis_db(REDIS_URL, 0),
         'OPTIONS': {
             'CLIENT_CLASS': 'django_redis.client.DefaultClient',
         }
