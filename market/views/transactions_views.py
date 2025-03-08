@@ -2,6 +2,7 @@ from django.shortcuts import render
 from django.core.paginator import Paginator
 from market.models import MarketTransaction, TradeItem, TradeHub
 from market.services import market_service
+from sde.services import sde_service
 
 def market_transactions(request):
     page_number = request.GET.get('page')
@@ -31,6 +32,10 @@ def market_transactions(request):
             history_sell[market_transaction.type_id] = history
         if not market_transaction.is_buy:
             history_buy[market_transaction.type_id] = history
+
+    unique_type_ids = page_obj.object_list.values_list('type_id', flat=True)
+    type_names_dict = sde_service.get_type_names(unique_type_ids)
+    
     trade_items = TradeItem.objects.all()
     context = {
         'page_obj': page_obj,
@@ -38,5 +43,6 @@ def market_transactions(request):
         'history_sell': history_sell,
         'filters': filters,
         'items': {trade_item.type_id: trade_item for trade_item in trade_items},
+        'type_names_dict': type_names_dict,
     }
     return render(request, "market/transactions.html", context)
