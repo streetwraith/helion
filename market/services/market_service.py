@@ -104,6 +104,16 @@ def refresh_trade_hub_orders(region_id):
     region_status.save()
     print(f"region {region_id}, orders updated: {region_status.orders}")
 
+def refresh_trade_hub_orders(trade_hub_name):
+    trade_hub = TradeHub.objects.filter(name=trade_hub_name)
+    region_id, region_orders = fetch_market_orders_parallel(trade_hub.region_id)
+    MarketOrder.objects.filter(region_id=trade_hub.region_id).delete()
+    save_market_orders(region_orders)
+    region_status = MarketRegionStatus.objects.get(region_id=trade_hub.region_id)
+    region_status.orders = len(region_orders)
+    region_status.save()
+    print(f"region {trade_hub.region_id}, orders updated: {region_status.orders}")
+
 def refresh_all_trade_hub_orders():
     market_regions = MarketRegionStatus.objects.all()
     region_futures = {}
