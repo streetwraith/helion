@@ -7,8 +7,12 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>{% block title %}Helion{% endblock %}</title>
     <link rel="stylesheet" href="{% static 'css/helion.css' %}">
+    <link rel="stylesheet" href="{% static 'css/dialog.css' %}">
     {% block css %}
     {% endblock %}
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jquery/3.7.1/jquery.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jquery.tablesorter/2.31.3/js/jquery.tablesorter.min.js"></script>
+    <script src="{% static 'js/dialog.js' %}"></script>
     {% block js %}
     {% endblock %}
 </head>
@@ -72,5 +76,9 @@
         {% block footer %}
         {% endblock %}
     </footer>
+    <div id="dialog" class="dialog-box">
+        <p>This is a floating dialog!</p>
+        <button id="closeDialog">Close</button>
+    </div>
 </body>
 </html>

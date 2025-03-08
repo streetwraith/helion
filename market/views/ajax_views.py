@@ -18,6 +18,16 @@ def market_history(request):
         return JsonResponse({'html': html}, safe=False)
 
 @csrf_exempt
+def transaction_history(request):
+    if request.headers.get('x-requested-with') == 'XMLHttpRequest':
+        type_id = request.GET.get('type_id')
+        location_id = request.GET.get('location_id')
+        # history = market_service.update_market_history(region_id=region_id, type_id=type_id)
+        # result = market_service.calculate_market_history_averages(history=history, region_id=region_id, type_id=type_id)
+        html = render_to_string('market/hauling/_fragment_hauling_sts_history.html', {'data': result})
+        return JsonResponse({'html': html}, safe=False)
+
+@csrf_exempt
 def trade_item_preview(request):
     if request.headers.get('x-requested-with') == 'XMLHttpRequest':
         type_id = request.GET.get('type_id')

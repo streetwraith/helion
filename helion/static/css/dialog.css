@@ -1,0 +1,14 @@
+.dialog-box {
+    position: absolute;
+    display: none;
+    background: white;
+    border: 1px solid #ccc;
+    box-shadow: 2px 2px 10px rgba(0,0,0,0.2);
+    padding: 10px;
+    border-radius: 5px;
+    z-index: 1000;
+}
+.dialog-box button {
+    display: block;
+    margin-top: 10px;
+}
