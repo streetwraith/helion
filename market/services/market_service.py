@@ -77,7 +77,9 @@ def get_wallet_journal(character_id):
 def refresh_trade_hub_orders(region_id):
     region_id, orders = fetch_market_orders_parallel(region_id)
     region_id, orders = process_market_orders(region_id, orders)
+    print(f"region {region_id}, deleting old orders..")
     MarketOrder.objects.filter(region_id=region_id).delete()
+    print(f"region {region_id}, saving new orders..")
     save_market_orders(orders)
     region_status = MarketRegionStatus.objects.get(region_id=region_id)
     region_status.orders = len(orders)

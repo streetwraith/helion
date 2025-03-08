@@ -152,30 +152,55 @@ DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 LOGGING = {
     'version': 1,
     'disable_existing_loggers': False,
+    'formatters': {
+        'verbose': {
+            'format': '{asctime} [{levelname}] {name}: {message}',
+            'style': '{',
+        },
+    },
     'handlers': {
         'console': {
-            'level': 'DEBUG',
+            'level': 'INFO',
             'class': 'logging.StreamHandler',
+            'formatter': 'verbose',
         },
+    },
+    'root': {
+        'handlers': ['console'],
+        'level': 'DEBUG',
     },
     'loggers': {
         'django': {
             'handlers': ['console'],
-            'level': 'INFO',
-            'propagate': False,
+            'level': 'DEBUG' if DEBUG else 'ERROR',
+            'propagate': True,
         },
-        'helion': {
+        'celery': {
             'handlers': ['console'],
-            'level': 'DEBUG',
-            'propagate': False,
+            'level': 'ERROR',
+            'propagate': True,
         },
         'esi': {
             'handlers': ['console'],
-            'level': 'INFO',
-            'propagate': False,
+            'level': 'ERROR',
+            'propagate': True,
         },
     },
 }
+
+if not DEBUG:
+    LOGGING['handlers']['file'] = {
+        'level': 'ERROR',
+        'class': 'logging.handlers.RotatingFileHandler',
+        'filename': os.path.join(env.str('VOLUME_LOGS_ROOT'), 'errors.log'),
+        'maxBytes': 1024*1024,
+        'backupCount': 30,
+        'formatter': 'verbose',
+    }
+    LOGGING['root']['handlers'].append('file')
+    LOGGING['loggers']['django']['handlers'].append('file')
+    LOGGING['loggers']['celery']['handlers'].append('file')
+    LOGGING['loggers']['esi']['handlers'].append('file')
 
 STATIC_URL = '/static/'
 STATICFILES_DIRS = [
