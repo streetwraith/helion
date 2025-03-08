@@ -26,6 +26,24 @@ def trade_item_add(type_id):
 def trade_item_del(type_id):
     return TradeItem.objects.get(type_id=type_id).delete()
 
+def get_market_transactions(character_id, type_id=None, location_id=None, is_buy=None, limit=None):
+    filters = {}
+    if is_buy is not None:
+        filters['is_buy'] = True if is_buy == 'True' else False
+    if location_id:
+        filters['location_id'] = int(location_id)
+    if type_id:
+        filters['type_id'] = int(type_id)
+    if character_id:
+        filters['character_id'] = int(character_id)
+
+    market_transactions = MarketTransaction.objects.filter(**filters).order_by('-date')
+
+    if limit:
+        market_transactions = market_transactions[:int(limit)]
+
+    return market_transactions
+
 def update_market_transactions(character_id):
     api_market_transactions = esi.client.Wallet.get_characters_character_id_wallet_transactions(character_id=character_id, token = Token.get_token(character_id, 'esi-wallet.read_character_wallet.v1').valid_access_token()).results()
     market_transactions = []

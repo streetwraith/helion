@@ -20,7 +20,7 @@
     {% with sell_history=item_data_hub|get_by_key:'my_sell_history' %}
     <td>{{ sell_history|get_by_key:'volume' }}</td>
     <td>{{ sell_history|get_by_key:'avg_price'|isk_value }}</td>
-    <td>{{ sell_history|get_by_key:'last_price'|isk_value }}</td>
+    <td class="history-last-price"><a href="#">{{ sell_history|get_by_key:'last_price'|isk_value }}</a></td>
     {% endwith %}
     <td>{{ item_data_hub|get_by_key:'my_buy_volume' }}</td>
     <td class="{% if item_data_hub|get_by_key:'my_buy_price' < item_data_hub|get_by_key:'station_highest_buy_order'|get_by_key:'price' %}red{% endif %}">{{ item_data_hub|get_by_key:'my_buy_price'|isk_value }}</td>
@@ -33,7 +33,7 @@
     {% with buy_history=item_data_hub|get_by_key:'my_buy_history' %}
     <td>{{ buy_history|get_by_key:'volume' }}</td>
     <td>{{ buy_history|get_by_key:'avg_price'|isk_value }}</td>
-    <td>{{ buy_history|get_by_key:'last_price'|isk_value }}</td>
+    <td class="history-last-price"><a href="#">{{ buy_history|get_by_key:'last_price'|isk_value }}</a></td>
     {% endwith %}
 </tr>
 {% endwith %}

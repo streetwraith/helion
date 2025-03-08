@@ -20,7 +20,7 @@ def market_transactions(request):
     if type_id:
         filters['type_id'] = int(type_id)
 
-    market_transactions = MarketTransaction.objects.filter(**filters).order_by('-date')
+    market_transactions = market_service.get_market_transactions(request.session['esi_token']['character_id'], type_id, location_id, is_buy)
     paginator = Paginator(market_transactions, 100)
     page_obj = paginator.get_page(page_number)
 
@@ -36,13 +36,13 @@ def market_transactions(request):
     unique_type_ids = page_obj.object_list.values_list('type_id', flat=True)
     type_names_dict = sde_service.get_type_names(unique_type_ids)
     
-    trade_items = TradeItem.objects.all()
+    # trade_items = TradeItem.objects.all()
     context = {
         'page_obj': page_obj,
         'history_buy': history_buy,
         'history_sell': history_sell,
         'filters': filters,
-        'items': {trade_item.type_id: trade_item for trade_item in trade_items},
+        # 'items': {trade_item.type_id: trade_item for trade_item in trade_items},
         'type_names_dict': type_names_dict,
     }
     return render(request, "market/transactions.html", context)

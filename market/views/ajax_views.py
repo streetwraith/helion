@@ -3,7 +3,7 @@ from market.services import market_service
 from django.template.loader import render_to_string
 from django.http import JsonResponse
 from sde.models import SdeTypeId
-from market.models import TradeItem
+from market.models import TradeItem, TradeHub
 from helion.providers import esi
 from esi.models import Token
 
@@ -20,11 +20,10 @@ def market_history(request):
 @csrf_exempt
 def transaction_history(request):
     if request.headers.get('x-requested-with') == 'XMLHttpRequest':
+        character_id = request.session['esi_token']['character_id']
         type_id = request.GET.get('type_id')
-        location_id = request.GET.get('location_id')
-        # history = market_service.update_market_history(region_id=region_id, type_id=type_id)
-        # result = market_service.calculate_market_history_averages(history=history, region_id=region_id, type_id=type_id)
-        html = render_to_string('market/hauling/_fragment_hauling_sts_history.html', {'data': result})
+        result = market_service.get_market_transactions(character_id=character_id, type_id=type_id, limit=20)
+        html = render_to_string('market/_fragment_transaction_history.html', {'data': result, 'trade_hubs': list(TradeHub.objects.all())})
         return JsonResponse({'html': html}, safe=False)
 
 @csrf_exempt

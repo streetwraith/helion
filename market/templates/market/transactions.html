@@ -4,6 +4,10 @@
 
 {% block title %}Helion | market | station trading{% endblock %}
 
+{% block js %}
+<script src="{% static 'market/js/history_dialog.js' %}"></script>
+{% endblock %}
+
 {% block content %}
 <h1>Market transactions</h1>
 
@@ -35,7 +39,7 @@
             <th>date</th>
             <th>item</th>
             <th>price</th>
-            <th>quantity</th>
+            <th>qty</th>
             <th>price ea</th>
             <th>location</th>
             <th>hv</th>
@@ -68,11 +72,11 @@
             {% if transaction.is_buy %}
             <td>{{ item_history_sell|get_by_key:'volume' }}</td>
             <td>{{ item_history_sell|get_by_key:'avg_price'|isk_value }}</td>
-            <td>{{ item_history_sell|get_by_key:'last_price'|isk_value }}</td>
+            <td class="history-last-price"><a href="#">{{ item_history_sell|get_by_key:'last_price'|isk_value }}</a></td>
             {% else %}
             <td>{{ item_history_buy|get_by_key:'volume' }}</td>
             <td>{{ item_history_buy|get_by_key:'avg_price'|isk_value }}</td>
-            <td>{{ item_history_buy|get_by_key:'last_price'|isk_value }}</td>
+            <td class="history-last-price"><a href="#">{{ item_history_buy|get_by_key:'last_price'|isk_value }}</a></td>
             {% endif %}
             {% endwith %}
         </tr>

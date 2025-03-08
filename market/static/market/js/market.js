@@ -29,7 +29,7 @@ $(document).ready(function(){
         var link = $(this);
         var spinner = $(this).parent().find('.loading-spinner');
         $.ajax({
-            url: '/market/ajax/history',
+            url: '/market/ajax/market_history',
             type: 'POST',
             data: {
                 'type_id': type_id,

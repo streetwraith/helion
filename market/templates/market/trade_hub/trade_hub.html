@@ -4,6 +4,10 @@
 
 {% block title %}Helion | market | station trading | {{ trade_hub_region.name }}{% endblock %}
 
+{% block js %}
+<script src="{% static 'market/js/history_dialog.js' %}"></script>
+{% endblock %}
+
 {% block content %}
 <h1>Station trading: {{ trade_hub_region.name }}</h1>
 <table class="market">
