@@ -7,6 +7,7 @@ from market.models import MarketOrder, TradeItem, TradeHub, MarketRegionStatus
 from sde.models import SdeTypeId
 import time
 from market.services import market_service
+from sde.services import sde_service
 from datetime import datetime, timezone
 from market.constants import REGION_ID_FORGE
 import math
@@ -70,14 +71,8 @@ def market_trade_hub_mistakes(request, region_id):
                 f"Min Increase: {min_increase}"
             )
 
-    matching_type_ids = [item['type_id'] for item in matching_results]
-    # Batch fetch names for matching type_ids
-    type_names = SdeTypeId.objects.filter(
-        type_id__in=matching_type_ids
-    ).values('type_id', 'name')
-
     # Map type_id to name
-    type_names_dict = {item['type_id']: item['name'] for item in type_names}
+    type_names_dict = sde_service.get_type_names([item['type_id'] for item in matching_results])
     for item in matching_results:
         item['name'] = type_names_dict.get(item['type_id'], 'None')
 
@@ -118,9 +113,13 @@ def market_trade_hub(request, region_id):
     type_ids_in_trade_items = set(trade_items.values_list('type_id', flat=True))
     type_ids_not_in_trade_items = set([order['type_id'] for order in character_orders])
 
-    for extra_item in list(type_ids_not_in_trade_items - type_ids_in_trade_items):
+    type_ids_without_names = list(type_ids_not_in_trade_items - type_ids_in_trade_items)
+    type_names_dict = sde_service.get_type_names(type_ids_without_names)
+
+    for extra_item in type_ids_without_names:
         print(f'extra item: {extra_item}')
         new_item = TradeItem(type_id=extra_item)
+        new_item.name = type_names_dict.get(extra_item, 'None')
         items_to_process.append(new_item)
         item_dict_extra.append(new_item)
     

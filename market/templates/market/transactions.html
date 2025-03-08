@@ -46,12 +46,12 @@
     <tbody>
         {% for transaction in page_obj %}
         {% with location_id_filter="station_id:"|stradd:transaction.location_id %}
-        {% with item=items|get_by_key:transaction.type_id trade_hub=trade_hubs|get_object_by_attr:location_id_filter %}
+        {% with item_name=type_names_dict|get_by_key:transaction.type_id trade_hub=trade_hubs|get_object_by_attr:location_id_filter %}
         <tr data-type-id="{{ transaction.type_id }}">
             <td>{{ transaction.date|date:"d/m/Y H:i:s" }}</td>
             <td class="item-name">
-              {% if item %}
-                {% include 'market/_fragment_item_name.html' with item_name=item.name type_id=transaction.type_id show_add_del=True %}
+              {% if item_name %}
+                {% include 'market/_fragment_item_name.html' with item_name=item_name type_id=transaction.type_id show_add_del=True %}
               {% else %}
                 {% include 'market/_fragment_item_name.html' with item_name=None type_id=transaction.type_id show_add_del=True %}
               {% endif %}
