@@ -188,7 +188,7 @@ LOGGING = {
     },
 }
 
-if not DEBUG:
+if not DEBUG and "collectstatic" not in os.getenv("DJANGO_COMMAND", ""):
     LOGGING['handlers']['file'] = {
         'level': 'ERROR',
         'class': 'logging.handlers.RotatingFileHandler',
