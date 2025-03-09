@@ -1,5 +1,4 @@
 from django.db import models
-import json
 
 class MarketRegionStatus(models.Model):
     region_id = models.BigIntegerField(primary_key=True)
@@ -26,6 +25,7 @@ class MarketOrder(models.Model):
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
     is_in_trade_hub_range = models.BooleanField(default=True)
+    character_id = models.BigIntegerField(db_index=True, blank=True, null=True)
     def __str__(self):
         return str(self.order_id) + ' ' + str(self.type_id)
     
@@ -95,3 +95,11 @@ class WalletJournal(models.Model):
     context_id_type = models.CharField(max_length=128, blank=True, null=True)
     tax = models.FloatField(blank=True, null=True)
     tax_receiver_id = models.BigIntegerField(blank=True, null=True)
+
+class MarketNotification(models.Model):
+    order_id = models.BigIntegerField(db_index=True)
+    character_id = models.BigIntegerField(db_index=True)
+    event_type = models.CharField(max_length=32)
+    notification_data = models.JSONField()
+    created_at = models.DateTimeField(auto_now_add=True)
+    sent_at = models.DateTimeField(null=True, blank=True, db_index=True)

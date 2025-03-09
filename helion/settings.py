@@ -167,22 +167,22 @@ LOGGING = {
     },
     'root': {
         'handlers': ['console'],
-        'level': 'DEBUG',
+        'level': 'INFO',
     },
     'loggers': {
         'django': {
             'handlers': ['console'],
-            'level': 'DEBUG' if DEBUG else 'ERROR',
+            'level': 'INFO',
             'propagate': True,
         },
         'celery': {
             'handlers': ['console'],
-            'level': 'ERROR',
+            'level': 'INFO',
             'propagate': True,
         },
         'esi': {
             'handlers': ['console'],
-            'level': 'ERROR',
+            'level': 'INFO',
             'propagate': True,
         },
     },

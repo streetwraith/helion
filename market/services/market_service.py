@@ -1,7 +1,7 @@
 from helion.providers import esi
 from esi.models import Token
 import os
-from market.models import MarketOrder, MarketTransaction, MarketRegionStatus, TradeItem, TradeHub, MarketHistory, WalletJournal
+from market.models import MarketOrder, MarketTransaction, MarketRegionStatus, TradeItem, TradeHub, MarketHistory, WalletJournal, MarketNotification
 from sde.models import SdeTypeId, SolarSystem
 
 from datetime import date, datetime, timedelta, timezone
@@ -9,10 +9,100 @@ import statistics
 import time
 from email.utils import parsedate_to_datetime
 from concurrent.futures import ThreadPoolExecutor, as_completed
+from django.db import connection
+from django.utils.timezone import localtime
 
 import environ
 
 env = environ.Env()
+
+def find_undercut_sell_orders(region_id, character_id):
+    query = """
+    WITH closest_sell_orders AS (
+        SELECT competitor.order_id AS competitor_order_id,
+            competitor.type_id AS competitor_type_id,
+            competitor.issued AS competitor_issued,
+            competitor.price AS competitor_price,
+            my_orders.order_id AS my_order_id
+        FROM market_marketorder AS competitor
+        JOIN market_marketorder AS my_orders
+        ON competitor.type_id = my_orders.type_id
+        AND competitor.region_id = my_orders.region_id
+        AND competitor.is_in_trade_hub_range = my_orders.is_in_trade_hub_range
+        AND competitor.is_buy_order = my_orders.is_buy_order
+        AND competitor.price < my_orders.price
+        AND my_orders.character_id = %s
+        AND my_orders.region_id = %s
+        AND my_orders.is_in_trade_hub_range = TRUE
+        AND my_orders.is_buy_order = FALSE
+        WHERE competitor.character_id IS NULL
+        ORDER BY competitor.price DESC  -- Closest (highest lower) price first
+    )
+    SELECT my_orders.order_id,
+        my_orders.type_id,
+        my_orders.issued,
+        cso.competitor_order_id,
+        cso.competitor_issued,
+        cso.competitor_price
+    FROM market_marketorder AS my_orders
+    JOIN closest_sell_orders AS cso
+    ON my_orders.order_id = cso.my_order_id
+    WHERE my_orders.character_id = %s
+    AND my_orders.region_id = %s
+    AND my_orders.is_in_trade_hub_range = TRUE
+    AND my_orders.is_buy_order = FALSE;
+    """
+
+    with connection.cursor() as cursor:
+        cursor.execute(query, [character_id, region_id, character_id, region_id])
+        results = cursor.fetchall()
+        return results
+        # for row in results:
+            # print(f"{row[0]} {row[1]} {row[2]} {row[3]} {row[4]} {row[5]}")
+
+def find_undercut_buy_orders(region_id, character_id):
+    query = """
+    WITH closest_buy_orders AS (
+        SELECT competitor.order_id AS competitor_order_id,
+            competitor.type_id AS competitor_type_id,
+            competitor.issued AS competitor_issued,
+            competitor.price AS competitor_price,
+            my_orders.order_id AS my_order_id
+        FROM market_marketorder AS competitor
+        JOIN market_marketorder AS my_orders
+        ON competitor.type_id = my_orders.type_id
+        AND competitor.region_id = my_orders.region_id
+        AND competitor.is_in_trade_hub_range = my_orders.is_in_trade_hub_range
+        AND competitor.is_buy_order = my_orders.is_buy_order
+        AND competitor.price > my_orders.price
+        AND my_orders.character_id = %s
+        AND my_orders.region_id = %s
+        AND my_orders.is_in_trade_hub_range = TRUE
+        AND my_orders.is_buy_order = TRUE
+        WHERE competitor.character_id IS NULL
+        ORDER BY competitor.price ASC  -- Closest (lowest higher) price first
+    )
+    SELECT my_orders.order_id,
+        my_orders.type_id,
+        my_orders.issued,
+        cbo.competitor_order_id,
+        cbo.competitor_issued,
+        cbo.competitor_price
+    FROM market_marketorder AS my_orders
+    JOIN closest_buy_orders AS cbo
+    ON my_orders.order_id = cbo.my_order_id
+    WHERE my_orders.character_id = %s
+    AND my_orders.region_id = %s
+    AND my_orders.is_in_trade_hub_range = TRUE
+    AND my_orders.is_buy_order = TRUE;
+    """
+
+    with connection.cursor() as cursor:
+        cursor.execute(query, [character_id, region_id, character_id, region_id])
+        results = cursor.fetchall()
+        return results
+        # for row in results:
+            # print(f"{row[0]} {row[1]} {row[2]} {row[3]} {row[4]} {row[5]}")
 
 def trade_item_add(type_id):
     sde_type_id = SdeTypeId.objects.get(type_id=type_id)
@@ -92,9 +182,9 @@ def get_wallet_journal(character_id):
         update_fields=['amount', 'balance', 'date', 'description', 'first_party_id', 'second_party_id', 'reason', 'ref_type', 'context_id', 'context_id_type', 'tax', 'tax_receiver_id']
     )
 
-def refresh_trade_hub_orders(region_id):
+def refresh_trade_hub_orders(region_id, character_id=None):
     region_id, orders = fetch_market_orders_parallel(region_id)
-    region_id, orders = process_market_orders(region_id, orders)
+    region_id, orders = process_market_orders(orders, region_id, character_id)
     print(f"region {region_id}, deleting old orders..")
     MarketOrder.objects.filter(region_id=region_id).delete()
     print(f"region {region_id}, saving new orders..")
@@ -103,16 +193,6 @@ def refresh_trade_hub_orders(region_id):
     region_status.orders = len(orders)
     region_status.save()
     print(f"region {region_id}, orders updated: {region_status.orders}")
-
-def refresh_trade_hub_orders(trade_hub_name):
-    trade_hub = TradeHub.objects.filter(name=trade_hub_name)
-    region_id, region_orders = fetch_market_orders_parallel(trade_hub.region_id)
-    MarketOrder.objects.filter(region_id=trade_hub.region_id).delete()
-    save_market_orders(region_orders)
-    region_status = MarketRegionStatus.objects.get(region_id=trade_hub.region_id)
-    region_status.orders = len(region_orders)
-    region_status.save()
-    print(f"region {trade_hub.region_id}, orders updated: {region_status.orders}")
 
 def refresh_all_trade_hub_orders():
     market_regions = MarketRegionStatus.objects.all()
@@ -123,7 +203,7 @@ def refresh_all_trade_hub_orders():
             region_futures[future] = value.region_id
         for future in as_completed(region_futures):
             region_id, orders = future.result()
-            region_id, orders = process_market_orders(region_id, orders)
+            region_id, orders = process_market_orders(orders, region_id)
             MarketOrder.objects.filter(region_id=region_id).delete()
             save_market_orders(orders)
             region_status = MarketRegionStatus.objects.get(region_id=region_id)
@@ -181,13 +261,24 @@ def fetch_market_orders_parallel(region_id):
 
     return region_id, results
 
-def process_market_orders(region_id, results):
+def process_market_orders(results, region_id, character_id=None):
     region_solar_systems = SolarSystem.objects.filter(region_id=region_id)
     region_trade_hub = TradeHub.objects.get(region_id=region_id)
     market_orders = []
+    character_order_ids = {}
+
+    if character_id:
+        character_orders = esi.client.Market.get_characters_character_id_orders(
+            character_id = character_id, 
+            token = Token.get_token(character_id, 'esi-markets.read_character_orders.v1').valid_access_token()
+        ).results()
+        character_order_ids = { order["order_id"] for order in character_orders }
+
     for index, value in enumerate(results):
         market_order = MarketOrder(**value)
         market_order.region_id = region_id
+        if character_id and market_order.order_id in character_order_ids:
+            market_order.character_id = character_id
         is_order_in_range = True
         if market_order.is_buy_order and market_order.location_id != region_trade_hub.station_id:
             if market_order.range == 'region':
@@ -210,10 +301,10 @@ def process_market_orders(region_id, results):
     return region_id, market_orders
 
 def save_market_orders(market_orders):
-    MarketOrder.objects.bulk_create(market_orders, 
+    return MarketOrder.objects.bulk_create(market_orders, 
         update_conflicts=True, 
         unique_fields=['order_id'], 
-        update_fields=['duration', 'is_buy_order', 'issued', 'location_id', 'min_volume', 'price', 'range', 'system_id', 'type_id', 'volume_remain', 'volume_total', 'region_id', 'is_in_trade_hub_range']
+        update_fields=['duration', 'is_buy_order', 'issued', 'location_id', 'min_volume', 'price', 'range', 'system_id', 'type_id', 'volume_remain', 'volume_total', 'region_id', 'is_in_trade_hub_range', 'character_id']
     )
 
 def update_market_orders(region_id):
@@ -249,7 +340,7 @@ def update_market_orders(region_id):
     MarketOrder.objects.bulk_create(market_orders, 
         update_conflicts=True, 
         unique_fields=['order_id'], 
-        update_fields=['duration', 'is_buy_order', 'issued', 'location_id', 'min_volume', 'price', 'range', 'system_id', 'type_id', 'volume_remain', 'volume_total', 'region_id', 'is_in_trade_hub_range']
+        update_fields=['duration', 'is_buy_order', 'issued', 'location_id', 'min_volume', 'price', 'range', 'system_id', 'type_id', 'volume_remain', 'volume_total', 'region_id', 'is_in_trade_hub_range', 'character_id']
     )
 
     region_status = MarketRegionStatus.objects.get(region_id=region_id)
@@ -361,3 +452,37 @@ def calculate_market_history_averages(history, region_id, type_id):
         'median_distance': median_distance
     }
     return data
+
+def create_order_undercut_notifications(undercut_data, character_id):
+    # Extract order_ids and their competitor_issued timestamps
+    order_ids = [order[0] for order in undercut_data]
+    order_issued_map = {order[0]: order[4] for order in undercut_data}
+
+    # Fetch notifications for given orders
+    existing_notifications = MarketNotification.objects.filter(
+        order_id__in=order_ids, 
+        character_id=character_id,
+        event_type="market_order_undercut"
+    ).values("order_id", "created_at")
+
+    # Filter notifications that were created after the competitor was issued
+    filtered_notifications = [
+        notification for notification in existing_notifications
+        if notification["created_at"] > order_issued_map[notification["order_id"]]
+    ]
+
+    existing_orders_notified = {n["order_id"] for n in filtered_notifications}
+
+    # Find orders that haven't been notified yet
+    new_notifications = [
+        MarketNotification(
+            order_id=order[0],
+            character_id=character_id,
+            event_type="market_order_undercut",
+            notification_data={"competitor_price": order[5], "competitor_order_id": order[3], "competitor_issued": localtime(order[4]).isoformat()}
+        )
+        for order in undercut_data if order[0] not in existing_orders_notified
+    ]
+
+    # Bulk insert new notifications
+    MarketNotification.objects.bulk_create(new_notifications)

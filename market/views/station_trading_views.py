@@ -89,10 +89,8 @@ def market_trade_hub(request, region_id):
     trade_hub_region = trade_hubs.get(region_id=region_id)
     trade_hub_jita = trade_hubs.get(name='Jita')
 
-    # trade_hub_station_ids = list(trade_hubs.values_list('station_id', flat=True))
     trade_hub_region_ids = list(trade_hubs.values_list('region_id', flat=True))
-    character_orders = market_service.filter_order_list(
-        esi.client.Market.get_characters_character_id_orders(character_id=request.session['esi_token']['character_id'], token = Token.get_token(request.session['esi_token']['character_id'], 'esi-markets.read_character_orders.v1').valid_access_token()).results(), region_id=region_id, location_id=trade_hub_region.station_id)
+
     context = {
         "trade_hub_region": trade_hub_region,
         "trade_hub_jita": trade_hub_jita,
@@ -102,7 +100,7 @@ def market_trade_hub(request, region_id):
     }
     market_orders_in_trade_hubs_range = MarketOrder.objects.filter(region_id__in=trade_hub_region_ids, is_in_trade_hub_range=True)
     print((f"1: {int(time.time() * 1000) - start}ms"))
-
+    character_orders = market_orders_in_trade_hubs_range.filter(character_id=request.session['esi_token']['character_id'], region_id=region_id)
     character_assets = market_service.get_character_assets(character_id=request.session['esi_token']['character_id'], trade_items=list(trade_items.values_list('type_id', flat=True)), location_id=trade_hub_region.station_id)
 
     isk_in_sell_orders = 0
