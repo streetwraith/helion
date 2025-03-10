@@ -184,19 +184,19 @@ LOGGING = {
     },
 }
 
-if not DEBUG:
-    LOGGING['handlers']['file'] = {
-        'level': 'ERROR',
-        'class': 'logging.handlers.RotatingFileHandler',
-        'filename': os.path.join(env.str('VOLUME_LOGS_ROOT'), 'errors.log'),
-        'maxBytes': 1024*1024,
-        'backupCount': 30,
-        'formatter': 'verbose',
-    }
-    LOGGING['root']['handlers'].append('file')
-    LOGGING['loggers']['django']['handlers'].append('file')
-    LOGGING['loggers']['celery']['handlers'].append('file')
-    LOGGING['loggers']['esi']['handlers'].append('file')
+# if not DEBUG:
+#     LOGGING['handlers']['file'] = {
+#         'level': 'ERROR',
+#         'class': 'logging.handlers.RotatingFileHandler',
+#         'filename': os.path.join('/', 'errors.log'),
+#         'maxBytes': 1024*1024,
+#         'backupCount': 30,
+#         'formatter': 'verbose',
+#     }
+#     LOGGING['root']['handlers'].append('file')
+#     LOGGING['loggers']['django']['handlers'].append('file')
+#     LOGGING['loggers']['celery']['handlers'].append('file')
+#     LOGGING['loggers']['esi']['handlers'].append('file')
 
 STATIC_URL = '/static/'
 STATICFILES_DIRS = [
