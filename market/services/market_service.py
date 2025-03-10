@@ -241,7 +241,6 @@ def fetch_market_orders_parallel(region_id):
     wait_seconds = 0
     if time_since_last_modified > max_allowed_age:
         wait_seconds = (expires_time - now).total_seconds() + wait_after_expiration_seconds
-        wait_seconds = 0
         print(f"region {region_id}, waiting {wait_seconds:.2f} seconds for data refresh..")
         time.sleep(wait_seconds)
         result, response = fetch_market_orders_page(region_id, 1)
