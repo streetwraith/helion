@@ -241,6 +241,7 @@ def fetch_market_orders_parallel(region_id):
     wait_seconds = 0
     if time_since_last_modified > max_allowed_age:
         wait_seconds = (expires_time - now).total_seconds() + wait_after_expiration_seconds
+        wait_seconds = 0
         print(f"region {region_id}, waiting {wait_seconds:.2f} seconds for data refresh..")
         time.sleep(wait_seconds)
         result, response = fetch_market_orders_page(region_id, 1)
@@ -254,7 +255,7 @@ def fetch_market_orders_parallel(region_id):
     with ThreadPoolExecutor(max_workers=threads) as executor:
         futures = [
             executor.submit(fetch_market_orders_page, region_id, page)
-            for page in range(2, 10 + 1)
+            for page in range(2, total_pages + 1)
         ]
         for future in as_completed(futures):
             data, response = future.result()
