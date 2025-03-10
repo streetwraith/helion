@@ -165,10 +165,6 @@ LOGGING = {
             'formatter': 'verbose',
         },
     },
-    'root': {
-        'handlers': ['console'],
-        'level': 'INFO',
-    },
     'loggers': {
         'django': {
             'handlers': ['console'],

@@ -28,7 +28,7 @@ def refresh_all_data(request):
 @require_POST
 def market_region_orders_refresh(request, region_id):
     print((f"refreshing region orders: {region_id}"))
-    market_service.refresh_trade_hub_orders(region_id=region_id)
+    market_service.refresh_trade_hub_orders(region_id=region_id, character_id=request.session['esi_token']['character_id'])
     return redirect('market_index')
 
 class WalletStatistics():

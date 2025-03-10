@@ -11,6 +11,7 @@ from email.utils import parsedate_to_datetime
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from django.db import connection
 from django.utils.timezone import localtime
+from psycopg2.extras import execute_values
 
 import environ
 
@@ -253,7 +254,7 @@ def fetch_market_orders_parallel(region_id):
     with ThreadPoolExecutor(max_workers=threads) as executor:
         futures = [
             executor.submit(fetch_market_orders_page, region_id, page)
-            for page in range(2, total_pages + 1)
+            for page in range(2, 10 + 1)
         ]
         for future in as_completed(futures):
             data, response = future.result()
@@ -264,7 +265,6 @@ def fetch_market_orders_parallel(region_id):
 def process_market_orders(results, region_id, character_id=None):
     region_solar_systems = SolarSystem.objects.filter(region_id=region_id)
     region_trade_hub = TradeHub.objects.get(region_id=region_id)
-    market_orders = []
     character_order_ids = {}
 
     if character_id:
@@ -275,37 +275,53 @@ def process_market_orders(results, region_id, character_id=None):
         character_order_ids = { order["order_id"] for order in character_orders }
 
     for index, value in enumerate(results):
-        market_order = MarketOrder(**value)
-        market_order.region_id = region_id
-        if character_id and market_order.order_id in character_order_ids:
-            market_order.character_id = character_id
+        value['created_at'] = datetime.now(timezone.utc)
+        value['updated_at'] = datetime.now(timezone.utc)
+        value['region_id'] = region_id
+        if character_id and value['order_id'] in character_order_ids:
+            value['character_id'] = character_id
+        else:
+            value['character_id'] = None
         is_order_in_range = True
-        if market_order.is_buy_order and market_order.location_id != region_trade_hub.station_id:
-            if market_order.range == 'region':
+        if value['is_buy_order'] and value['location_id'] != region_trade_hub.station_id:
+            if value['range'] == 'region':
                 is_order_in_range = True
-            elif market_order.range == 'station':
+            elif value['range'] == 'station':
                 is_order_in_range = False
-            elif market_order.range == 'solarsystem':
-                if market_order.system_id != region_trade_hub.system_id:
+            elif value['range'] == 'solarsystem':
+                if value['system_id'] != region_trade_hub.system_id:
                     is_order_in_range = False
             else:
-                order_system = region_solar_systems.get(system_id=market_order.system_id)
-                if int(market_order.range) < order_system.jumps_to_trade_hub:
+                order_system = region_solar_systems.get(system_id=value['system_id'])
+                if int(value['range']) < order_system.jumps_to_trade_hub:
                     is_order_in_range = False
-        elif not market_order.is_buy_order and market_order.location_id != region_trade_hub.station_id:
+        elif not value['is_buy_order'] and value['location_id'] != region_trade_hub.station_id:
             is_order_in_range = False
 
-        market_order.is_in_trade_hub_range = is_order_in_range
-        market_orders.append(market_order)
+        value['is_in_trade_hub_range'] = is_order_in_range
     
-    return region_id, market_orders
+    return region_id, results
 
 def save_market_orders(market_orders):
-    return MarketOrder.objects.bulk_create(market_orders, 
-        update_conflicts=True, 
-        unique_fields=['order_id'], 
-        update_fields=['duration', 'is_buy_order', 'issued', 'location_id', 'min_volume', 'price', 'range', 'system_id', 'type_id', 'volume_remain', 'volume_total', 'region_id', 'is_in_trade_hub_range', 'character_id']
-    )
+    # Define column order explicitly
+    columns = [
+        "duration", "is_buy_order", "issued", "location_id", "min_volume", 
+        "order_id", "price", "range", "system_id", "type_id",
+        "volume_remain", "volume_total", "region_id", "is_in_trade_hub_range", "character_id",
+        "created_at", "updated_at"
+    ]
+    # Convert dict list to list of tuples in correct column order
+    values = [
+        tuple(data[col] for col in columns) for data in market_orders
+    ]
+    # SQL query using column names
+    sql = f"""
+    INSERT INTO market_marketorder ({", ".join(columns)}) 
+    VALUES %s
+    """
+    
+    with connection.cursor() as cursor:
+        execute_values(cursor, sql, values)  # Efficient bulk insert
 
 def update_market_orders(region_id):
     region_solar_systems = SolarSystem.objects.filter(region_id=region_id)
