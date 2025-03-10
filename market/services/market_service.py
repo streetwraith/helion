@@ -19,91 +19,73 @@ env = environ.Env()
 
 def find_undercut_sell_orders(region_id, character_id):
     query = """
-    WITH closest_sell_orders AS (
+    SELECT my_orders.order_id,
+       my_orders.type_id,
+       my_orders.issued,
+       cso.competitor_order_id,
+       cso.competitor_issued,
+       cso.competitor_price
+    FROM market_marketorder AS my_orders
+    JOIN LATERAL (
         SELECT competitor.order_id AS competitor_order_id,
-            competitor.type_id AS competitor_type_id,
             competitor.issued AS competitor_issued,
-            competitor.price AS competitor_price,
-            my_orders.order_id AS my_order_id
+            competitor.price AS competitor_price
         FROM market_marketorder AS competitor
-        JOIN market_marketorder AS my_orders
-        ON competitor.type_id = my_orders.type_id
+        WHERE competitor.type_id = my_orders.type_id
         AND competitor.region_id = my_orders.region_id
         AND competitor.is_in_trade_hub_range = my_orders.is_in_trade_hub_range
         AND competitor.is_buy_order = my_orders.is_buy_order
-        AND competitor.price < my_orders.price
-        AND my_orders.character_id = %s
-        AND my_orders.region_id = %s
-        AND my_orders.is_in_trade_hub_range = TRUE
-        AND my_orders.is_buy_order = FALSE
-        WHERE competitor.character_id IS NULL
-        ORDER BY competitor.price DESC  -- Closest (highest lower) price first
-    )
-    SELECT my_orders.order_id,
-        my_orders.type_id,
-        my_orders.issued,
-        cso.competitor_order_id,
-        cso.competitor_issued,
-        cso.competitor_price
-    FROM market_marketorder AS my_orders
-    JOIN closest_sell_orders AS cso
-    ON my_orders.order_id = cso.my_order_id
+        AND competitor.price < my_orders.price  -- Ensure it's a lower price
+        AND competitor.character_id IS NULL
+        ORDER BY competitor.price DESC  -- Pick closest (highest lower) price
+        LIMIT 1  -- Ensure only one competitor is selected per order
+    ) AS cso ON TRUE
     WHERE my_orders.character_id = %s
     AND my_orders.region_id = %s
     AND my_orders.is_in_trade_hub_range = TRUE
-    AND my_orders.is_buy_order = FALSE;
+    AND my_orders.is_buy_order = FALSE
     """
 
     with connection.cursor() as cursor:
-        cursor.execute(query, [character_id, region_id, character_id, region_id])
+        cursor.execute(query, [character_id, region_id])
         results = cursor.fetchall()
+        connection.close()
         return results
-        # for row in results:
-            # print(f"{row[0]} {row[1]} {row[2]} {row[3]} {row[4]} {row[5]}")
 
 def find_undercut_buy_orders(region_id, character_id):
     query = """
-    WITH closest_buy_orders AS (
+    SELECT my_orders.order_id,
+       my_orders.type_id,
+       my_orders.issued,
+       cbo.competitor_order_id,
+       cbo.competitor_issued,
+       cbo.competitor_price
+    FROM market_marketorder AS my_orders
+    JOIN LATERAL (
         SELECT competitor.order_id AS competitor_order_id,
-            competitor.type_id AS competitor_type_id,
             competitor.issued AS competitor_issued,
-            competitor.price AS competitor_price,
-            my_orders.order_id AS my_order_id
+            competitor.price AS competitor_price
         FROM market_marketorder AS competitor
-        JOIN market_marketorder AS my_orders
-        ON competitor.type_id = my_orders.type_id
+        WHERE competitor.type_id = my_orders.type_id
         AND competitor.region_id = my_orders.region_id
         AND competitor.is_in_trade_hub_range = my_orders.is_in_trade_hub_range
         AND competitor.is_buy_order = my_orders.is_buy_order
-        AND competitor.price > my_orders.price
-        AND my_orders.character_id = %s
-        AND my_orders.region_id = %s
-        AND my_orders.is_in_trade_hub_range = TRUE
-        AND my_orders.is_buy_order = TRUE
-        WHERE competitor.character_id IS NULL
-        ORDER BY competitor.price ASC  -- Closest (lowest higher) price first
-    )
-    SELECT my_orders.order_id,
-        my_orders.type_id,
-        my_orders.issued,
-        cbo.competitor_order_id,
-        cbo.competitor_issued,
-        cbo.competitor_price
-    FROM market_marketorder AS my_orders
-    JOIN closest_buy_orders AS cbo
-    ON my_orders.order_id = cbo.my_order_id
+        AND competitor.price > my_orders.price  -- Ensure it's a higher price
+        AND competitor.character_id IS NULL
+        ORDER BY competitor.price ASC  -- Pick closest (lowest higher) price
+        LIMIT 1  -- Ensure only one competitor is selected per order
+    ) AS cbo ON TRUE
     WHERE my_orders.character_id = %s
     AND my_orders.region_id = %s
     AND my_orders.is_in_trade_hub_range = TRUE
-    AND my_orders.is_buy_order = TRUE;
+    AND my_orders.is_buy_order = TRUE
     """
 
     with connection.cursor() as cursor:
-        cursor.execute(query, [character_id, region_id, character_id, region_id])
+        cursor.execute(query, [character_id, region_id])
         results = cursor.fetchall()
+        connection.close()
         return results
-        # for row in results:
-            # print(f"{row[0]} {row[1]} {row[2]} {row[3]} {row[4]} {row[5]}")
 
 def trade_item_add(type_id):
     sde_type_id = SdeTypeId.objects.get(type_id=type_id)
@@ -322,6 +304,8 @@ def save_market_orders(market_orders):
     
     with connection.cursor() as cursor:
         execute_values(cursor, sql, values)  # Efficient bulk insert
+
+    connection.close()
 
 def update_market_orders(region_id):
     region_solar_systems = SolarSystem.objects.filter(region_id=region_id)
