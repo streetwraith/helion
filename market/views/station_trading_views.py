@@ -109,7 +109,7 @@ def market_trade_hub(request, region_id):
     items_to_process = list(trade_items)
 
     type_ids_in_trade_items = set(trade_items.values_list('type_id', flat=True))
-    type_ids_not_in_trade_items = set([order['type_id'] for order in character_orders])
+    type_ids_not_in_trade_items = set([order.type_id for order in character_orders])
 
     type_ids_without_names = list(type_ids_not_in_trade_items - type_ids_in_trade_items)
     type_names_dict = sde_service.get_type_names(type_ids_without_names)
@@ -156,14 +156,14 @@ def market_trade_hub(request, region_id):
                 'hub': best_buy_price_location
             }
 
-        my_sell_orders = market_service.filter_order_list(character_orders, type_id=type_id, is_buy_order=False)
-        my_buy_orders = market_service.filter_order_list(character_orders, type_id=type_id, is_buy_order=True)
+        my_sell_orders = character_orders.filter(type_id=type_id, is_buy_order=False)#market_service.filter_order_list(character_orders, type_id=type_id, is_buy_order=False)
+        my_buy_orders = character_orders.filter(type_id=type_id, is_buy_order=True)#market_service.filter_order_list(character_orders, type_id=type_id, is_buy_order=True)
 
         for my_sell_order in my_sell_orders:
-            isk_in_sell_orders += my_sell_order['volume_remain'] * my_sell_order['price']
+            isk_in_sell_orders += my_sell_order.volume_remain * my_sell_order.price
 
         for my_buy_order in my_buy_orders:
-            isk_in_escrow += my_buy_order['escrow']
+            isk_in_escrow += (my_buy_order.price * my_buy_order.volume_remain)
 
         my_sell_history = market_service.get_trade_history(type_id=trade_item.type_id, location_id=trade_hub_region.station_id, is_buy=False)
         my_buy_history = market_service.get_trade_history(type_id=trade_item.type_id, is_buy=True)
@@ -186,28 +186,28 @@ def market_trade_hub(request, region_id):
             station_highest_buy_price = station_highest_buy_order.price
         spread = (station_lowest_sell_price - station_highest_buy_price)/station_lowest_sell_price*100
         spread_inverse_rounded = (100 - round(spread / 5) * 5)
-        my_sell_order = min(my_sell_orders, key=lambda order: order['price'], default={'price': None})
-        my_buy_order = max(my_buy_orders, key=lambda order: order['price'], default={'price': None})
+        my_sell_order = my_sell_orders.order_by('price').first()
+        my_buy_order = my_buy_orders.order_by('-price').first()
 
         my_sell_price_last_update = ''
-        if 'issued' in my_sell_order:
-            my_sell_price_last_update = (datetime.now(timezone.utc) - my_sell_order['issued']).days
+        if my_sell_order:
+            my_sell_price_last_update = (datetime.now(timezone.utc) - my_sell_order.issued).days
 
         my_buy_price_last_update = ''
-        if 'issued' in my_buy_order:
-            my_buy_price_last_update = (datetime.now(timezone.utc) - my_buy_order['issued']).days
+        if my_buy_order:
+            my_buy_price_last_update = (datetime.now(timezone.utc) - my_buy_order.issued).days
 
         context['item_data'][type_id]['regions'][region_id] = {
             'my_profit': my_profit,
-            'my_sell_price': my_sell_order['price'],
+            'my_sell_price': my_sell_order.price if my_sell_order else None,
             'my_sell_price_last_update': my_sell_price_last_update,
-            'my_sell_volume': sum(order['volume_remain'] for order in my_sell_orders),
+            'my_sell_volume': sum(order.volume_remain for order in my_sell_orders),
             'my_sell_history': my_sell_history,
             'my_buy_history': my_buy_history,
-            'my_buy_price': my_buy_order['price'],
+            'my_buy_price': my_buy_order.price if my_buy_order else None,
             'my_buy_price_last_update': my_buy_price_last_update,
-            'my_buy_volume': sum(order['volume_remain'] for order in my_buy_orders),
-            'my_buy_vs_best_sell': my_buy_order['price']/best_sell_price*100 if best_sell_price and my_buy_order['price'] else None,
+            'my_buy_volume': sum(order.volume_remain for order in my_buy_orders),
+            'my_buy_vs_best_sell': my_buy_order.price/best_sell_price*100 if best_sell_price and my_buy_order else None,
             'station_lowest_sell_order': station_lowest_sell_order,
             'station_highest_buy_order': station_highest_buy_order,
             'spread': spread,
