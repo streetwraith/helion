@@ -26,7 +26,7 @@ def market_trade_hub_mistakes(request, region_id):
             output_field=FloatField()
         )
     ).filter(
-        region_id=10000043,
+        region_id=region_id,
         is_in_trade_hub_range=True,
         duration__lte=90,
     )
