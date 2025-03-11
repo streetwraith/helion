@@ -15,12 +15,6 @@ def index(request):
     context = {}
     return render(request, "index.html", context)
 
-@token_required(scopes="esi-wallet.read_character_wallet.v1")
-def test(request):
-    context = {}
-
-    return render(request, "index.html", context)
-
 def characters(request, *args, **kwargs):
     if request.method == 'POST':
         if request.POST.get("_add", False):

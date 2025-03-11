@@ -27,7 +27,6 @@ urlpatterns = [
 
     path('', views.index, name='helion.index'),
     path('characters/', views.characters, name='characters'),
-    path('test/', views.test, name='test'),
 
     # url(r'^sso/', include('esi.urls', namespace='esi')),
     re_path(r'^sso/', include(('esi.urls', 'esi'), namespace='esi')),
