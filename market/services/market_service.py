@@ -9,7 +9,7 @@ import statistics
 import time
 from email.utils import parsedate_to_datetime
 from concurrent.futures import ThreadPoolExecutor, as_completed
-from django.db import connection
+from django.db import connection, transaction
 from django.utils.timezone import localtime
 from psycopg2.extras import execute_values
 
@@ -168,13 +168,14 @@ def get_wallet_journal(character_id):
 def refresh_trade_hub_orders(region_id, character_id=None):
     region_id, orders = fetch_market_orders_parallel(region_id)
     region_id, orders = process_market_orders(orders, region_id, character_id)
-    print(f"region {region_id}, deleting old orders..")
-    MarketOrder.objects.filter(region_id=region_id).delete()
-    print(f"region {region_id}, saving new orders..")
-    save_market_orders(orders)
-    region_status = MarketRegionStatus.objects.get(region_id=region_id)
-    region_status.orders = len(orders)
-    region_status.save()
+    with transaction.atomic():
+        print(f"region {region_id}, deleting old orders..")
+        MarketOrder.objects.filter(region_id=region_id).delete()
+        print(f"region {region_id}, saving new orders..")
+        save_market_orders(orders)
+        region_status = MarketRegionStatus.objects.get(region_id=region_id)
+        region_status.orders = len(orders)
+        region_status.save()
     print(f"region {region_id}, orders updated: {region_status.orders}")
 
 def refresh_all_trade_hub_orders():
