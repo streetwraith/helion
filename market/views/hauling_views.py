@@ -365,6 +365,8 @@ def market_hauling_sell_to_sell(request, from_location, to_location):
     return render(request, "market/hauling/hauling_sts.html", {
         'deals': deals,
         'trade_type': 'sts',
+        'to_region': to_loc.region_id, 
+        'from_region': from_loc.region_id,
         'max_vol': max_vol,
         'max_price': max_price,
         'from_location': from_location,
