@@ -486,3 +486,31 @@ def create_order_undercut_notifications(undercut_data, character_id):
 
     # Bulk insert new notifications
     MarketNotification.objects.bulk_create(new_notifications)
+
+def get_shopping_list_prices(item_names):
+    region_ids = list(TradeHub.objects.values_list('region_id', flat=True))
+
+    # Generate placeholders for SQL parameter substitution
+    item_placeholders = ', '.join(['%s'] * len(item_names))
+    region_placeholders = ', '.join(['%s'] * len(region_ids))
+
+    query = f"""
+    SELECT
+        s.name,
+        mo.region_id,
+        MIN(mo.price) AS lowest_sell_price
+    FROM market_marketorder mo
+    JOIN sde_sdetypeid s ON mo.type_id = s.type_id
+    WHERE mo.is_buy_order = FALSE
+    AND mo.is_in_trade_hub_range = TRUE
+    AND mo.region_id IN ({region_placeholders})
+    AND lower(s.name) in ({item_placeholders})
+    GROUP BY s.name, mo.region_id
+    ORDER BY s.name, mo.region_id;
+    """
+    params = region_ids + item_names
+    with connection.cursor() as cursor:
+        cursor.execute(query, params)
+        results = cursor.fetchall()
+        connection.close()
+        return results

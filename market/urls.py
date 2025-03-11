@@ -8,6 +8,7 @@ from .views import (
     trade_item_preview,
     index,
     refresh_all_data,
+    shopping_list,
     market_region_orders_refresh,
     market_hauling_index,
     market_hauling_sell_to_buy,
@@ -24,6 +25,7 @@ urlpatterns = [
     path("", index, name="market_index"),
     path("refresh_all_data", refresh_all_data, name="refresh_all_data"),
     path("region_orders/<int:region_id>", market_region_orders_refresh, name="market_region_orders_refresh"),
+    path("shopping_list", shopping_list, name="shopping_list"),
 
     # station trading
     path("trade_hub/<int:region_id>", market_trade_hub, name="market_trade_hub"),

@@ -1,0 +1,58 @@
+{% extends "market_base.html" %}
+
+{% load static mathfilters custom_filters %}
+
+{% block title %}Helion | market | station trading{% endblock %}
+
+{% block js %}
+{% endblock %}
+
+{% block content %}
+<h1>Shopping list</h1>
+
+<form action="{% url 'shopping_list' %}" method="POST">
+  {% csrf_token %}
+  <textarea name="items" rows="10" cols="50">{{ items }}</textarea>
+  <br>
+  <button type="submit">submit</button>
+</form>
+
+<br>
+    {% if table_data %}
+        <table>
+            <thead>
+                <tr>
+                    <th>Item Name</th>
+                    {% for name in regions.values %}
+                        <th>{{ name }}</th>
+                    {% endfor %}
+                </tr>
+            </thead>
+            <tbody>
+                {% for name, prices in table_data.items %}
+                  <tr>
+                      <td>{{ name }}</td>
+                      {% with lowest=min_prices|get_by_key:name %}
+                      {% for region_id in regions %}
+                          {% with price=prices|get_by_key:region_id %}
+                          <td {% if price and lowest and price == lowest %} class="green" {% endif %}>{{ price|isk_value }}</td>
+                          {% endwith %}
+                      {% endfor %}
+                      {% endwith %}
+                  </tr>                    
+                {% endfor %}
+            </tbody>
+            <tfoot>
+              <tr>
+                  <td><strong>Total</strong></td>
+                  {% for region_id in regions %}
+                    {% with total=region_totals|get_by_key:region_id %}
+                    <td {% if total is not None and total == min_region_total %} class="green" {% endif %}><strong>{{ total|isk_value }}</strong></td>
+                    {% endwith %}
+                  {% endfor %}
+              </tr>
+          </tfoot>
+        </table>
+    {% endif %}
+
+{% endblock %}

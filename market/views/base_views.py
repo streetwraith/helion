@@ -6,6 +6,7 @@ from django.utils import timezone
 from datetime import timedelta
 from django.db.models import Sum, F
 from concurrent.futures import ThreadPoolExecutor, as_completed
+import re
 
 def index(request):
     market_regions = MarketRegionStatus.objects.all()
@@ -24,6 +25,56 @@ def refresh_all_data(request):
     print(f'updating wallet journal..')
     market_service.get_wallet_journal(request.session['esi_token']['character_id'])
     return redirect('market_index')
+
+def shopping_list(request):
+    if request.method == 'POST':
+        query = request.POST.get('items')
+        item_names = []
+        pattern = re.compile(r"^(.*?)\s*x?(\d+)?\s*$", re.IGNORECASE)  
+        # Captures: item name (.*?) and optional "x<number>"
+
+        for line in query.splitlines():
+            line = line.strip().lower()  # Normalize: strip spaces and lowercase
+            if not line:
+                continue  # Skip empty lines
+
+            match = pattern.match(line)
+            if match:
+                item_name = match.group(1).strip()  # First part = item name
+                quantity = int(match.group(2)) if match.group(2) else 1  # Second part = quantity (default 1)
+
+                item_names.append(item_name)
+        regions = dict(TradeHub.objects.all().values_list('region_id', 'name'))
+        results = market_service.get_shopping_list_prices(item_names)
+
+        table_data = {}
+        region_totals = {region_id: 0 for region_id in regions}  # Initialize totals per region
+        min_prices = {}
+        
+        for name, region_id, price in results:
+            if name not in table_data:
+                table_data[name] = {}
+            table_data[name][region_id] = price  # Store price per region
+            # Accumulate sum for each region
+            if price is not None:
+                region_totals[region_id] += price
+            # Track minimum price per item
+            if name not in min_prices or (price is not None and price < min_prices[name]):
+                min_prices[name] = price
+
+        # Determine the lowest region total price
+        min_region_total = min(region_totals.values()) if region_totals else None
+        
+        return render(request, "market/shopping.html", {
+            'table_data': table_data,
+            'regions': regions,
+            'region_totals': region_totals,
+            'min_prices': min_prices,
+            'min_region_total': min_region_total,
+            'items': query,
+        })
+    else:
+        return render(request, "market/shopping.html")
 
 @require_POST
 def market_region_orders_refresh(request, region_id):
