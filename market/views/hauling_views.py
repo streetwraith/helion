@@ -69,39 +69,138 @@ def market_hauling_sell_to_buy(request, from_location, to_location):
     except ValueError:
         max_price = 10000000000.0
 
+    # Get trade hub locations - fixed query
+    trade_hubs = TradeHub.objects.filter(
+        name__in=[from_location, to_location]
+    ).order_by('name')
+    from_loc = trade_hubs.get(name=from_location)
+    to_loc = trade_hubs.get(name=to_location)
+
+    # Get all valid type_ids and their volumes in one query
+    excluded_groups = [1950, 1083, 1088, 1089, 1090, 1091, 1092]
+    valid_types = {
+        type_id.type_id: type_id.volume 
+        for type_id in SdeTypeId.objects.filter(
+            volume__lte=max_vol
+        ).exclude(
+            group_id__in=excluded_groups
+        ).only('type_id', 'volume')
+    }
+
+    # Get sell orders from source location with initial filtering
+    from_orders = MarketOrder.objects.filter(
+        region_id=from_loc.region_id,
+        is_in_trade_hub_range=True,
+        is_buy_order=False,
+        type_id__in=valid_types.keys()
+    ).values('type_id', 'price', 'volume_remain').order_by('type_id', 'price')
+
+    # Group sell orders by type_id for efficient processing
+    from_orders_by_type = {}
+    for order in from_orders:
+        type_id = order['type_id']
+        if type_id not in from_orders_by_type:
+            from_orders_by_type[type_id] = []
+        from_orders_by_type[type_id].append(order)
+
+    # Get buy orders for matching types from destination
+    to_orders = MarketOrder.objects.filter(
+        region_id=to_loc.region_id,
+        is_in_trade_hub_range=True,
+        is_buy_order=True,
+        type_id__in=from_orders_by_type.keys()
+    ).values('type_id', 'price', 'volume_remain').order_by('type_id', '-price')
+
+    # Group buy orders by type_id
+    to_orders_by_type = {}
+    for order in to_orders:
+        type_id = order['type_id']
+        if type_id not in to_orders_by_type:
+            to_orders_by_type[type_id] = []
+        to_orders_by_type[type_id].append(order)
+
     deals = []
+    # Match orders and calculate profits
+    for type_id, from_type_orders in from_orders_by_type.items():
+        if type_id not in to_orders_by_type:
+            continue
 
-    from_loc = TradeHub.objects.filter(name__iexact=from_location).get()
-    to_loc = TradeHub.objects.filter(name__iexact=to_location).get()
+        volume = valid_types[type_id]
+        for from_order in from_type_orders:
+            from_price = from_order['price']
+            from_volume = from_order['volume_remain']
 
-    from_orders = list(MarketOrder.objects.filter(region_id=from_loc.region_id, is_in_trade_hub_range=True, is_buy_order=False).order_by('type_id', 'price'))
-    for from_order in from_orders:
-        type_id = from_order.type_id
-        to_orders = list(MarketOrder.objects.filter(region_id=to_loc.region_id, is_in_trade_hub_range=True, is_buy_order=True, type_id=type_id, price__gt=from_order.price).order_by('-price'))
-        
-        for to_order in to_orders:
-            while to_order.volume_remain > 0 and from_order.volume_remain > 0:
-                matching_volume = min(to_order.volume_remain, from_order.volume_remain)
-                profit = matching_volume*(to_order.price/100.0*96.4 - from_order.price)
-                deal = MarketDeal(type_id=type_id, price_from=from_order.price, price_to=to_order.price, amount=matching_volume, profit=profit)
+            if from_volume <= 0:
+                continue
+
+            # Check if total price exceeds max_price
+            total_price = from_price * from_volume
+            if total_price > max_price:
+                # Calculate maximum volume we can buy with max_price
+                from_volume = int(max_price / from_price)
+                if from_volume <= 0:
+                    continue
+
+            for to_order in to_orders_by_type[type_id]:
+                if to_order['price'] <= from_price:
+                    continue
+
+                # Calculate maximum possible units based on max_vol
+                max_possible_units = int(max_vol / volume)
+                matching_volume = min(
+                    to_order['volume_remain'],
+                    from_volume,
+                    max_possible_units
+                )
+
+                if matching_volume <= 0:
+                    continue
+
+                profit = matching_volume * (to_order['price']/100.0*96.4 - from_price)
+                
+                # Skip unprofitable deals early
+                if profit < 5000000.0 or (profit/from_price*100) < 5.0:
+                    continue
+
+                deal = MarketDeal(
+                    type_id=type_id,
+                    price_from=from_price,
+                    price_to=to_order['price'],
+                    amount=matching_volume,
+                    profit=profit
+                )
+                deal.type_id_vol = volume
                 deals.append(deal)
-                from_order.volume_remain = from_order.volume_remain - matching_volume
-                to_order.volume_remain = to_order.volume_remain - matching_volume
 
-    for i in reversed(range(len(deals))):
-        deal = deals[i]
-        try:
-            sdeTypeId = SdeTypeId.objects.get(type_id=deal.type_id)
-            deal.type_id_name = sdeTypeId.name
-            deal.type_id_vol = sdeTypeId.volume
-            if deal.total_vol() > max_vol:
-                del [deals[i]]
-        except SdeTypeId.DoesNotExist:
-            print(f'SdeTypeId for {deal.type_id} does not exist')
+                # Update remaining volumes
+                from_volume -= matching_volume
+                to_order['volume_remain'] -= matching_volume
 
-    deals.sort(key=lambda d: d.profit*-1)
-    # deals = deals[:50]
-    return render(request, "market/hauling/hauling_stb.html", {'deals': deals, 'trade_type': 'stb', 'max_vol': max_vol, 'max_price': max_price, 'from_location': from_location, 'to_location': to_location})
+                if from_volume <= 0:
+                    break
+
+    # Sort by profit
+    deals.sort(key=lambda d: d.profit, reverse=True)
+
+    # Add type names in bulk
+    type_names = {
+        t.type_id: t.name 
+        for t in SdeTypeId.objects.filter(
+            type_id__in={deal.type_id for deal in deals}
+        ).only('type_id', 'name')
+    }
+    
+    for deal in deals:
+        deal.type_id_name = type_names.get(deal.type_id)
+
+    return render(request, "market/hauling/hauling_stb.html", {
+        'deals': deals,
+        'trade_type': 'stb',
+        'max_vol': max_vol,
+        'max_price': max_price,
+        'from_location': from_location,
+        'to_location': to_location
+    })
 
 def market_hauling_sell_to_sell(request, from_location, to_location):
     print(f'calculating hauling profit (sell to sell): from {from_location} to {to_location}')
