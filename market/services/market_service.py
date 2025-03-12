@@ -306,8 +306,6 @@ def save_market_orders(market_orders):
     with connection.cursor() as cursor:
         execute_values(cursor, sql, values)  # Efficient bulk insert
 
-    connection.close()
-
 def update_market_orders(region_id):
     region_solar_systems = SolarSystem.objects.filter(region_id=region_id)
     region_trade_hub = TradeHub.objects.get(region_id=region_id)
