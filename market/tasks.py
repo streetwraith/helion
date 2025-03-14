@@ -64,3 +64,21 @@ def refresh_trade_hub_orders(self, trade_hub_name, character_name):
             cache.delete(lock_id)
     else:
         print("Task already running, skipping.")
+
+@shared_task(bind=True)
+def update_market_history(self, trade_hub_name, market_group_id, excluded_meta_ids=[]):
+    if not trade_hub_name or not market_group_id:
+        return
+    region_id = TradeHub.objects.get(name=trade_hub_name).region_id
+
+    lock_id = f"fetch_market_history_lock_{region_id}_{market_group_id}"
+    # Use cache or Redis lock to prevent overlapping
+    if cache.add(lock_id, "locked", timeout=36000):  # Lock for 10 hours
+        try:
+            type_ids = market_service.find_type_ids_by_market_groups(market_group_id=market_group_id, excluded_meta_ids=excluded_meta_ids)
+            for type_id in type_ids:
+                market_service.update_market_history(region_id=region_id, type_id=type_id)
+        finally:
+            cache.delete(lock_id)
+    else:
+        print("Task already running, skipping.")

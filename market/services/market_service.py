@@ -17,6 +17,31 @@ import environ
 
 env = environ.Env()
 
+def find_type_ids_by_market_groups(market_group_id=[], excluded_meta_ids=[]):
+    query = """
+        select types.type_id from
+            sde_sdetypeid types,
+            (WITH RECURSIVE market_group_hierarchy AS (
+                SELECT market_group_id, name, description, parent_group_id
+                FROM sde_marketgroup
+                WHERE parent_group_id = %s
+
+                UNION ALL
+
+                SELECT mg.market_group_id, mg.name, mg.description, mg.parent_group_id
+                FROM sde_marketgroup mg
+                INNER JOIN market_group_hierarchy mgh ON mg.parent_group_id = mgh.market_group_id
+            ) SELECT * FROM market_group_hierarchy) as market_groups
+        where types.market_group_id = market_groups.market_group_id
+        and meta_id != ALL(%s)
+    """
+
+    with connection.cursor() as cursor:
+        cursor.execute(query, [market_group_id, excluded_meta_ids])
+        results = [row[0] for row in cursor.fetchall()]
+        connection.close()
+        return results
+
 def find_undercut_sell_orders(region_id, character_id):
     query = """
     SELECT my_orders.order_id,
