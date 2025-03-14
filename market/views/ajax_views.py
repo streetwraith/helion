@@ -27,27 +27,20 @@ def transaction_history(request):
         return JsonResponse({'html': html}, safe=False)
 
 @csrf_exempt
-def trade_item_preview(request):
-    if request.headers.get('x-requested-with') == 'XMLHttpRequest':
-        type_id = request.GET.get('type_id')
-        sde_type_id = SdeTypeId.objects.get(type_id=type_id)
-        return JsonResponse({'html': sde_type_id.name}, safe=False)
-
-@csrf_exempt
 def trade_item_add_or_del(request):
     if request.headers.get('x-requested-with') == 'XMLHttpRequest':
         operation = request.POST.get('operation')
         type_id = request.POST.get('type_id')
         if operation == 'add':
             trade_item = market_service.trade_item_add(type_id)
-            html = render_to_string('market/_fragment_item_name.html', {'item_name': trade_item.name, 'type_id': trade_item.type_id, 'show_add_del': True})
+            html = render_to_string('market/_fragment_item_name.html', {'item_name': trade_item.name, 'type_id': trade_item.type_id, 'is_trade_item': True, 'show_add_del': True})
             return JsonResponse({'html': html}, safe=False)
         elif operation == 'del':
-            trade_item = market_service.trade_item_del(type_id)
+            trade_item_name = market_service.trade_item_del(type_id)
             trade_item = TradeItem()
             trade_item.type_id = type_id
-            trade_item.name = None
-            html = render_to_string('market/_fragment_item_name.html', {'item_name': trade_item.name, 'type_id': trade_item.type_id, 'show_add_del': True})
+            trade_item.name = trade_item_name
+            html = render_to_string('market/_fragment_item_name.html', {'item_name': trade_item.name, 'type_id': trade_item.type_id, 'is_trade_item': False, 'show_add_del': True})
             return JsonResponse({'html': html}, safe=False)
 
 @csrf_exempt

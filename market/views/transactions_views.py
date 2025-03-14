@@ -36,13 +36,12 @@ def market_transactions(request):
     unique_type_ids = page_obj.object_list.values_list('type_id', flat=True)
     type_names_dict = sde_service.get_type_names(unique_type_ids)
     
-    # trade_items = TradeItem.objects.all()
     context = {
         'page_obj': page_obj,
         'history_buy': history_buy,
         'history_sell': history_sell,
         'filters': filters,
-        # 'items': {trade_item.type_id: trade_item for trade_item in trade_items},
+        'trade_items': {item.type_id: item.name for item in TradeItem.objects.all()},
         'type_names_dict': type_names_dict,
     }
     return render(request, "market/transactions.html", context)

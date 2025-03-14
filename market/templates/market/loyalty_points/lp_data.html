@@ -32,7 +32,7 @@
     <tbody>
         {% for deal in deals %}
         <tr data-type-id="{{deal.type_id}}">
-            <td class="item-name">{% include 'market/_fragment_item_name.html' with item_name=deal.name type_id=deal.type_id show_add_del=False %}</td>
+            <td class="item-name">{% include 'market/_fragment_item_name.html' with item_name=deal.name type_id=deal.type_id is_trade_item=False show_add_del=False %}</td>
             <td>{{ deal.quantity }}</td>
             <td>{{ deal.ak_cost }}</td>
             <td>{{ deal.isk_cost|isk_value }}</td>
@@ -41,7 +41,7 @@
                 <table style="width: 100%;">
                     {% for required_item in deal.required_items %}
                         <tr data-type-id="{{required_item.type_id}}">
-                            <td class="item-name">{% include 'market/_fragment_item_name.html' with item_name=required_item.name type_id=required_item.type_id show_add_del=False %}</td>
+                            <td class="item-name">{% include 'market/_fragment_item_name.html' with item_name=required_item.name type_id=required_item.type_id is_trade_item=False show_add_del=False %}</td>
                             <td>{{ required_item.quantity }}</td>
                             <td>{{ required_item.price|isk_value }}</td>
                             <td>

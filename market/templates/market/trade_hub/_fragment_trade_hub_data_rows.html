@@ -3,7 +3,7 @@
 {% for trade_item in item_dict %}
 {% with item_data_hub=item_data|get_by_key:trade_item.type_id|get_by_key:'regions'|get_by_key:trade_hub_region.region_id item_data_jita=item_data|get_by_key:trade_item.type_id|get_by_key:'regions'|get_by_key:trade_hub_jita.region_id %}
 <tr data-type-id="{{trade_item.type_id}}">
-    <td class="item-name">{% include 'market/_fragment_item_name.html' with item_name=trade_item.name type_id=trade_item.type_id show_add_del=True %}</td>
+    <td class="item-name">{% include 'market/_fragment_item_name.html' with item_name=trade_item.name type_id=trade_item.type_id is_trade_item=is_trade_items show_add_del=True %}</td>
     <td class="gradient_{{ item_data_hub|get_by_key:'spread_inverse_rounded'|floatformat:0 }}">{{ item_data_hub|get_by_key:'spread'|floatformat:0 }}%</td>
     <td>{{ item_data_hub|get_by_key:'liquidity'|floatformat:0 }}%</td>
     <td>{{ item_data_hub|get_by_key:'my_profit'|isk_value }}</td>

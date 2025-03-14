@@ -1,14 +1,10 @@
-{% if item_name is None %}
-<a class="trade-item-name" href="#">{{ item_name }}</a>
-{% else %}
 {{ item_name }}
-{% endif %}
  (<a class="trade-item-id" href="#">{{ type_id }}</a>)
  {% if show_add_del %}
-    {% if item_name is None%}
-    <div class="plus-icon" alt="Add to trade items"></div>
-    {% else %}
+    {% if is_trade_item %}
     <div class="minus-icon" alt="Remove from trade items"></div>
+    {% else %}
+    <div class="plus-icon" alt="Add to trade items"></div>
     {% endif %}
  {% endif %}
  <div class="loading-spinner" style="display:none"><div class="css-spinner"></div></div>

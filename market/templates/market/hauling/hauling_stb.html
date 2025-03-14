@@ -25,7 +25,7 @@
     <tbody>
         {% for deal in deals %}
         <tr data-type-id="{{ deal.type_id }}">
-            <td class="item-name">{% include 'market/_fragment_item_name.html' with item_name=deal.type_id_name type_id=deal.type_id show_add_del=False %}</td>
+            <td class="item-name">{% include 'market/_fragment_item_name.html' with item_name=deal.type_id_name type_id=deal.type_id is_trade_item=False show_add_del=False %}</td>
             <td>{{ deal.price_from|isk_value }}</td>
             <td>{{ deal.price_to|isk_value }}</td>
             <td>{{ deal.amount }}</td>

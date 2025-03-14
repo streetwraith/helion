@@ -5,7 +5,6 @@ from .views import (
     transaction_history,
     market_open_in_game,
     trade_item_add_or_del,
-    trade_item_preview,
     index,
     refresh_all_data,
     shopping_list,
@@ -47,6 +46,5 @@ urlpatterns = [
     path("ajax/market_history", market_history, name="market_history"),
     path("ajax/market_open_in_game", market_open_in_game, name="market_open_in_game"),
     path("ajax/trade_item_add_or_del", trade_item_add_or_del, name="trade_item_add_or_del"),
-    path("ajax/trade_item_preview", trade_item_preview, name="trade_item_preview"),
     path("ajax/transaction_history", transaction_history, name="transaction_history"),
 ]

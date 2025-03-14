@@ -97,7 +97,10 @@ def trade_item_add(type_id):
     return TradeItem.objects.get(type_id=type_id)
 
 def trade_item_del(type_id):
-    return TradeItem.objects.get(type_id=type_id).delete()
+    trade_item = TradeItem.objects.get(type_id=type_id)
+    name = trade_item.name
+    TradeItem.objects.get(type_id=type_id).delete()
+    return name
 
 def get_market_transactions(character_id, type_id=None, location_id=None, is_buy=None, limit=None):
     filters = {}

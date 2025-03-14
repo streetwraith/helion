@@ -94,33 +94,4 @@ $(document).ready(function(){
             }
         });
     });
-    $('.item-name').on('click', 'a.trade-item-name', function(event) {
-        event.preventDefault();
-        var type_id = $(this).closest('tr').data('type-id');
-        var link = $(this);
-        var spinner = $(this).parent().find('.loading-spinner');
-        var plus_or_minus = $(this).parent().find('.plus-icon, .minus-icon');
-        $.ajax({
-            url: '/market/ajax/trade_item_preview',
-            type: 'GET',
-            data: {
-                'type_id': type_id,
-            },
-            dataType: 'json',
-            beforeSend: function() {
-                plus_or_minus.hide();
-                spinner.show();
-            },
-            success: function(data) {
-                link.replaceWith(data.html);
-            },
-            error: function() {
-                console.log('Error loading data!');
-            },
-            complete: function() {
-                spinner.hide();
-                plus_or_minus.show();
-            }
-        });
-    });
 });

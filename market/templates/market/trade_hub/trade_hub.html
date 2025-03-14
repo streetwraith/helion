@@ -45,7 +45,7 @@
         </tr>
     </thead>
     <tbody>
-        {% include 'market/trade_hub/_fragment_trade_hub_data_rows.html' with item_dict=item_dict item_data=item_data %}
+        {% include 'market/trade_hub/_fragment_trade_hub_data_rows.html' with item_dict=item_dict item_data=item_data is_trade_items=True %}
     </tbody>
     <tfoot>
         <tr>
@@ -119,7 +119,7 @@
         </tr>
     </thead>
     <tbody>
-        {% include 'market/trade_hub/_fragment_trade_hub_data_rows.html' with item_dict=item_dict_extra item_data=item_data %}
+        {% include 'market/trade_hub/_fragment_trade_hub_data_rows.html' with item_dict=item_dict_extra item_data=item_data is_trade_items=False %}
     </tbody>
     <tfoot>
         <tr>
