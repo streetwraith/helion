@@ -74,7 +74,7 @@ def update_market_history(self, trade_hub_name, market_group_id, excluded_meta_i
 
     lock_id = f"fetch_market_history_lock_{region_id}_{market_group_id}"
     # Use cache or Redis lock to prevent overlapping
-    if cache.add(lock_id, "locked", timeout=36000):  # Lock for 10 hours
+    if cache.add(lock_id, "locked", timeout=7200):  # Lock for 2 hours
         try:
             type_ids = market_service.find_type_ids_by_market_groups(market_group_id=market_group_id, excluded_meta_ids=excluded_meta_ids)
             for type_id in type_ids:
