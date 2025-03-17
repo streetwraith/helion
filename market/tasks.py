@@ -4,6 +4,7 @@ from django.core.cache import cache
 from market.services import market_service
 from market.models import TradeHub
 from esi.models import Token
+import time
 
 @shared_task(bind=True)
 def update_market_orders(self):
@@ -77,7 +78,11 @@ def update_market_history(self, trade_hub_name, market_group_id, excluded_meta_i
         try:
             type_ids = market_service.find_type_ids_by_market_groups(market_group_id=market_group_id, excluded_meta_ids=excluded_meta_ids)
             for type_id in type_ids:
-                market_service.update_market_history(region_id=region_id, type_id=type_id)
+                try:
+                    market_service.update_market_history(region_id=region_id, type_id=type_id)
+                except Exception as e:
+                    print(f"Error updating market history for type_id {type_id}: {e}")
+                time.sleep(1)
         finally:
             cache.delete(lock_id)
     else:

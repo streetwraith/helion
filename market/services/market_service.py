@@ -422,8 +422,9 @@ def get_character_assets(character_id, location_id, trade_items):
             character_assets[type_id] = value['quantity'] + character_assets[type_id]
     return character_assets
 
-def get_market_history(region_id, type_id):
-    return list(MarketHistory.objects.filter(region_id=region_id, type_id=type_id))
+def get_market_history(region_id, type_id, days_back=90):
+    cutoff_date = date.today() - timedelta(days=days_back)
+    return list(MarketHistory.objects.filter(region_id=region_id, type_id=type_id, date__gte=cutoff_date))
 
 def update_market_history(region_id, type_id):
     resp = esi.client.Market.get_markets_region_id_history(region_id=region_id, type_id=int(type_id)).results()
@@ -457,7 +458,7 @@ def filter_order_list(input_list, region_id=None, location_id=None, type_id=None
     return result
 
 def calculate_market_history_averages(history, region_id, type_id):
-    if history is list and len(history) < 1:
+    if not history or len(history) == 0:
         return None
     
     avg_daily_volume = 0
@@ -472,7 +473,7 @@ def calculate_market_history_averages(history, region_id, type_id):
 
     try:
         avg_daily_volume = statistics.mean([item.volume for item in history])
-        avg_daily_volume = sum(item.volume for item in history)/14
+        # avg_daily_volume = sum(item.volume for item in history)/14
 
         avg_avg = statistics.mean([item.average for item in history])
         avg_highest = statistics.mean([item.highest for item in history])
@@ -500,6 +501,19 @@ def calculate_market_history_averages(history, region_id, type_id):
         'median_distance': median_distance
     }
     return data
+
+def calculate_market_history_average_volume(history):
+    if not history or len(history) == 0:
+        return None
+    
+    avg_daily_volume = 0
+
+    try:
+        avg_daily_volume = statistics.mean([item.volume for item in history])
+    except Exception as e:
+        print(f'statistics error: {e}')
+        
+    return avg_daily_volume
 
 def create_order_undercut_notifications(undercut_data, character_id):
     # Extract order_ids and their competitor_issued timestamps
