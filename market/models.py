@@ -103,3 +103,21 @@ class MarketNotification(models.Model):
     notification_data = models.JSONField()
     created_at = models.DateTimeField(auto_now_add=True)
     sent_at = models.DateTimeField(null=True, blank=True, db_index=True)
+
+class MarketOrderUndercut(models.Model):
+    type_id = models.BigIntegerField(db_index=True)
+    region_id = models.BigIntegerField(db_index=True)
+    character_id = models.BigIntegerField(db_index=True)
+    order_id = models.BigIntegerField()
+    order_price = models.FloatField()
+    order_issued = models.DateTimeField()
+    competitor_order_id = models.BigIntegerField()
+    competitor_price = models.FloatField()
+    competitor_issued = models.DateTimeField()
+    is_buy_order = models.BooleanField(default=False)
+    created_at = models.DateTimeField(auto_now_add=True)
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(fields=['order_id', 'order_issued'], name='uc_order_modification')
+        ]
+        unique_together = ('order_id', 'order_issued')

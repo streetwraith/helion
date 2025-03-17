@@ -57,9 +57,9 @@ def refresh_trade_hub_orders(self, trade_hub_name, character_name):
             character_id = Token.objects.get(character_name=character_name).character_id
             market_service.refresh_trade_hub_orders(region_id=region_id, character_id=character_id)
             undercut_sell_orders = market_service.find_undercut_sell_orders(region_id=region_id, character_id=character_id)
-            market_service.create_order_undercut_notifications(undercut_sell_orders, character_id)
+            market_service.save_market_order_undercuts(region_id=region_id, character_id=character_id, is_buy=False, market_order_undercut_data=undercut_sell_orders)
             undercut_buy_orders = market_service.find_undercut_buy_orders(region_id=region_id, character_id=character_id)
-            market_service.create_order_undercut_notifications(undercut_buy_orders, character_id)
+            market_service.save_market_order_undercuts(region_id=region_id, character_id=character_id, is_buy=True, market_order_undercut_data=undercut_buy_orders)
         finally:
             cache.delete(lock_id)
     else:

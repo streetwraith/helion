@@ -1,7 +1,7 @@
 from helion.providers import esi
 from esi.models import Token
 import os
-from market.models import MarketOrder, MarketTransaction, MarketRegionStatus, TradeItem, TradeHub, MarketHistory, WalletJournal, MarketNotification
+from market.models import MarketOrder, MarketTransaction, MarketRegionStatus, TradeItem, TradeHub, MarketHistory, WalletJournal, MarketNotification, MarketOrderUndercut
 from sde.models import SdeTypeId, SolarSystem
 
 from datetime import date, datetime, timedelta, timezone
@@ -42,10 +42,30 @@ def find_type_ids_by_market_groups(market_group_id=[], excluded_meta_ids=[]):
         connection.close()
         return results
 
+def save_market_order_undercuts(region_id, character_id, is_buy, market_order_undercut_data=[]):
+    new_market_order_undercuts = [
+        MarketOrderUndercut(
+            type_id=market_order_undercut[0],
+            region_id=region_id,
+            character_id=character_id,
+            is_buy_order=is_buy,
+            order_id=market_order_undercut[1],
+            order_price=market_order_undercut[2],
+            order_issued=market_order_undercut[3],
+            competitor_order_id=market_order_undercut[4],
+            competitor_issued=market_order_undercut[5],
+            competitor_price=market_order_undercut[6]
+        )
+        for market_order_undercut in market_order_undercut_data
+    ]
+
+    MarketOrderUndercut.objects.bulk_create(new_market_order_undercuts, ignore_conflicts=True)
+
 def find_undercut_sell_orders(region_id, character_id):
     query = """
-    SELECT my_orders.order_id,
-       my_orders.type_id,
+    SELECT my_orders.type_id,
+       my_orders.order_id,
+       my_orders.price,
        my_orders.issued,
        cso.competitor_order_id,
        cso.competitor_issued,
@@ -79,8 +99,9 @@ def find_undercut_sell_orders(region_id, character_id):
 
 def find_undercut_buy_orders(region_id, character_id):
     query = """
-    SELECT my_orders.order_id,
-       my_orders.type_id,
+    SELECT my_orders.type_id,
+       my_orders.order_id,
+       my_orders.price,
        my_orders.issued,
        cbo.competitor_order_id,
        cbo.competitor_issued,
