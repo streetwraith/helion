@@ -86,6 +86,7 @@ def import_type_materials(request):
                 type_material = TypeMaterials(type_id=type_id, material_type_id=material['materialTypeID'], quantity=material['quantity'])
                 type_materials.append(type_material)
 
+    TypeMaterials.objects.all().delete()
     TypeMaterials.objects.bulk_create(type_materials)
     return redirect('sde_index')
 
