@@ -1,6 +1,6 @@
 from django.shortcuts import render, redirect
 import yaml
-from sde.models import SdeTypeId, MarketGroup, NpcCorporation, SolarSystem
+from sde.models import SdeTypeId, MarketGroup, NpcCorporation, SolarSystem, TypeMaterials
 from market.models import TradeItem, TradeHub
 from market.services import market_service
 import os
@@ -39,7 +39,7 @@ def import_sde_type_ids(request):
         type_ids = []
         for key, value in data.items():
             if 'groupID' in value and 'name' in value:
-                type_id = SdeTypeId(type_id=key, group_id=value['groupID'], name=value['name']['en'])
+                type_id = SdeTypeId(type_id=key, group_id=value['groupID'], name=value['name']['en'], portion_size=value['portionSize'])
                 if 'marketGroupID' in value:
                     type_id.market_group_id = value['marketGroupID']
                 if 'metaGroupID' in value:
@@ -51,7 +51,7 @@ def import_sde_type_ids(request):
     SdeTypeId.objects.bulk_create(type_ids, 
         update_conflicts=True, 
         unique_fields=['type_id'], 
-        update_fields=['group_id', 'market_group_id', 'name', 'meta_id', 'volume'])
+        update_fields=['group_id', 'market_group_id', 'name', 'meta_id', 'volume', 'portion_size'])
 
     return redirect('sde_index')
 
@@ -74,6 +74,19 @@ def import_sde_market_groups(request):
         unique_fields=['market_group_id'], 
         update_fields=['name', 'description', 'has_types', 'parent_group_id'])
 
+    return redirect('sde_index')
+
+def import_type_materials(request):
+    file_path = os.path.join(settings.BASE_DIR, 'sde/sde/fsd/typeMaterials.yaml')
+    with open(file_path, 'r') as file:
+        data = yaml.safe_load(file)
+        type_materials = []
+        for type_id, value in data.items():
+            for material in value['materials']:
+                type_material = TypeMaterials(type_id=type_id, material_type_id=material['materialTypeID'], quantity=material['quantity'])
+                type_materials.append(type_material)
+
+    TypeMaterials.objects.bulk_create(type_materials)
     return redirect('sde_index')
 
 def import_solar_systems(request):

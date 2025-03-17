@@ -7,6 +7,7 @@ class SdeTypeId(models.Model):
     market_group_id = models.BigIntegerField(db_index=True, default=None, blank=True, null=True)
     name = models.CharField(max_length=512)
     volume = models.FloatField(default=None, blank=True, null=True)
+    portion_size = models.IntegerField(default=None, blank=True, null=True)
     def __str__(self):
         return str(self.type_id) + ' ' + self.name
     
@@ -38,3 +39,15 @@ class SolarSystem(models.Model):
         fields = vars(self)
         field_strings = [f"{key}={value!r}" for key, value in fields.items()]
         return f"{', '.join(field_strings)}"
+    
+class TypeMaterials(models.Model):
+    type_id = models.BigIntegerField()
+    material_type_id = models.BigIntegerField()
+    quantity = models.IntegerField()
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(fields=['type_id', 'material_type_id'], name='pk_type_material')
+        ]
+        unique_together = ('type_id', 'material_type_id')
+    def __str__(self):
+        return str(self.type_id) + ' ' + str(self.material_id) + ' ' + str(self.quantity)
