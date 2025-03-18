@@ -10,6 +10,16 @@
 
 {% block content %}
 <h1>Station trading: {{ trade_hub_region.name }}</h1>
+
+<form action="{% url 'market_trade_hub_new' region_id=trade_hub_region.region_id %}" method="POST">
+    {% csrf_token %}
+    <label for="market_group_id">Market Group ID</label>
+    <input type="number" id="market_group_id" name="market_group_id" value="{{ market_group_id }}">
+    <label for="excluded_meta_ids">Excluded Meta IDs</label>
+    <input type="text" id="excluded_meta_ids" name="excluded_meta_ids" value="{{ excluded_meta_ids }}">
+    <button type="submit">search</button>
+</form>
+
 <table class="market">
     <thead>
         <tr>
