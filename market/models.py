@@ -121,3 +121,14 @@ class MarketOrderUndercut(models.Model):
             models.UniqueConstraint(fields=['order_id', 'order_issued'], name='uc_order_modification')
         ]
         unique_together = ('order_id', 'order_issued')
+
+class A4EMarketHistoryVolume(models.Model):
+    region_id = models.BigIntegerField()
+    type_id = models.BigIntegerField()
+    date = models.DateField()
+    order_count = models.IntegerField()
+    volume = models.BigIntegerField()
+
+    class Meta:
+        db_table = 'a4e_market_history_volume'  # Adjust if the actual table name differs
+        managed = False  # Prevents Django from managing the table

@@ -23,7 +23,7 @@ def isk_value(value):
 
 @register.filter(name='isk_value_mil')
 def isk_value_mil(value):
-    if(value == 0 or value == None or isinstance(value, dict)):
+    if(value == 0 or value == None or isinstance(value, dict) or value == ''):
         return 0
     return "{:,.1f}m".format(value/1000000)
 

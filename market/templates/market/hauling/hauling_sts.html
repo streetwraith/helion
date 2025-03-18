@@ -36,6 +36,7 @@
                 </table>
             </th>
             <th>api h</th>
+            <th>a4e</th>
         </tr>
     </thead>
     <tbody>
@@ -60,6 +61,7 @@
                 <div class="loading-spinner" style="display:none"><div class="css-spinner"></div></div>
                 <a data-type-id="{{ deal.type_id }}" class="update-history" href="#">update</a>
             </td>
+            <td>{{ deal.a4e_market_history_volume|floatformat:1 }}</td>
         </tr>
         {% endfor %}
     </tbody>
