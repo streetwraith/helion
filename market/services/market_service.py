@@ -12,6 +12,7 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 from django.db import connection, transaction
 from django.utils.timezone import localtime
 from psycopg2.extras import execute_values
+from django.db.models import Max
 
 import environ
 
@@ -423,8 +424,44 @@ def get_character_assets(character_id, location_id, trade_items):
     return character_assets
 
 def get_market_history(region_id, type_id, days_back=90):
-    cutoff_date = date.today() - timedelta(days=days_back)
-    return list(MarketHistory.objects.filter(region_id=region_id, type_id=type_id, date__gte=cutoff_date))
+    # Get the latest date for this region's market history
+    latest_date = MarketHistory.objects.filter(region_id=region_id).aggregate(Max('date'))['date__max']
+    if not latest_date:
+        return []
+    cutoff_date = latest_date - timedelta(days=days_back)
+    
+
+    # Get all history records for this type in date range
+    history_records = MarketHistory.objects.filter(
+        region_id=region_id,
+        type_id=type_id,
+        date__gte=cutoff_date,
+        date__lte=latest_date
+    ).order_by('date')
+
+    # Create a continuous date range and fill gaps
+    filled_history = []
+    current_date = cutoff_date
+    history_dict = {record.date: record for record in history_records}
+    
+    while current_date <= latest_date:
+        if current_date in history_dict:
+            filled_history.append(history_dict[current_date])
+        else:
+            # Create empty record for missing dates
+            empty_record = MarketHistory(
+                region_id=region_id,
+                type_id=type_id,
+                date=current_date,
+                average=None,
+                highest=None,
+                lowest=None,
+                order_count=0,
+                volume=0
+            )
+            filled_history.append(empty_record)
+        current_date += timedelta(days=1)
+    return filled_history
 
 def update_market_history(region_id, type_id):
     resp = esi.client.Market.get_markets_region_id_history(region_id=region_id, type_id=int(type_id)).results()
@@ -433,8 +470,8 @@ def update_market_history(region_id, type_id):
         history_entry = MarketHistory(**elem)
         history_entry.type_id = type_id
         history_entry.region_id = region_id
-        if history_entry.date < (date.today() - timedelta(days=30)):
-            continue
+        # if history_entry.date < (date.today() - timedelta(days=90)):
+            # continue
         history.append(history_entry)
 
     MarketHistory.objects.filter(region_id=region_id, type_id=type_id).delete()
@@ -475,12 +512,12 @@ def calculate_market_history_averages(history, region_id, type_id):
         avg_daily_volume = statistics.mean([item.volume for item in history])
         # avg_daily_volume = sum(item.volume for item in history)/14
 
-        avg_avg = statistics.mean([item.average for item in history])
-        avg_highest = statistics.mean([item.highest for item in history])
-        avg_lowest = statistics.mean([item.lowest for item in history])
-        median_avg = statistics.median([item.average for item in history])
-        median_highest = statistics.median([item.highest for item in history])
-        median_lowest = statistics.median([item.lowest for item in history])
+        avg_avg = statistics.mean([item.average for item in history if item.average is not None])
+        avg_highest = statistics.mean([item.highest for item in history if item.highest is not None])
+        avg_lowest = statistics.mean([item.lowest for item in history if item.lowest is not None])
+        median_avg = statistics.median([item.average for item in history if item.average is not None])
+        median_highest = statistics.median([item.highest for item in history if item.highest is not None])
+        median_lowest = statistics.median([item.lowest for item in history if item.lowest is not None])
 
         avg_distance = (avg_avg-avg_lowest)/(avg_highest-avg_lowest)*100
         median_distance = (median_avg-median_lowest)/(median_highest-median_lowest)*100
