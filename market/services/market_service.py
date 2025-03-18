@@ -34,11 +34,17 @@ def find_type_ids_by_market_groups(market_group_id=[], excluded_meta_ids=[]):
                 INNER JOIN market_group_hierarchy mgh ON mg.parent_group_id = mgh.market_group_id
             ) SELECT * FROM market_group_hierarchy) as market_groups
         where types.market_group_id = market_groups.market_group_id
-        and meta_id != ALL(%s)
     """
 
+    if excluded_meta_ids:
+        placeholders = ', '.join(['%s'] * len(excluded_meta_ids))
+        query += f" AND meta_id NOT IN ({placeholders})"
+        params = [market_group_id] + list(excluded_meta_ids)
+    else:
+        params = [market_group_id]
+
     with connection.cursor() as cursor:
-        cursor.execute(query, [market_group_id, excluded_meta_ids])
+        cursor.execute(query, params)
         results = [row[0] for row in cursor.fetchall()]
         connection.close()
         return results
