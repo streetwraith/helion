@@ -102,17 +102,20 @@ def market_trade_hub(request, region_id):
         is_in_trade_hub_range=True
     )
     
+    type_ids_in_trade_items = set()
+    type_ids_not_in_trade_items = set()
+
     if market_group_id:
         context['market_group_id'] = request.POST.get('market_group_id')
         context['excluded_meta_ids'] = request.POST.get('excluded_meta_ids', '')
         market_group_item_ids = market_service.find_type_ids_by_market_groups(market_group_id, excluded_meta_ids)
         trade_items = TradeItem.objects.filter(type_id__in=market_group_item_ids)
-        type_ids_not_in_trade_items = set(market_group_item_ids)
+        type_ids_not_in_trade_items = set(market_group_item_ids) - set(trade_items.values_list('type_id', flat=True))
+    else:
+        type_ids_in_trade_items = set(trade_items.values_list('type_id', flat=True))
+        type_ids_not_in_trade_items = set(character_orders.values_list('type_id', flat=True)) - type_ids_in_trade_items
 
-    type_ids_in_trade_items = set(trade_items.values_list('type_id', flat=True))
-    type_ids_not_in_trade_items = set(character_orders.values_list('type_id', flat=True))
-    
-    type_ids_without_names = list(type_ids_not_in_trade_items - type_ids_in_trade_items)
+    type_ids_without_names = list(type_ids_not_in_trade_items)
 
     # Get names for extra items
     type_names_dict = sde_service.get_type_names(type_ids_without_names)
