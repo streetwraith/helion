@@ -88,6 +88,7 @@ def find_undercut_sell_orders(region_id, character_id):
         AND competitor.is_in_trade_hub_range = my_orders.is_in_trade_hub_range
         AND competitor.is_buy_order = my_orders.is_buy_order
         AND competitor.price < my_orders.price  -- Ensure it's a lower price
+        AND competitor.issued > my_orders.issued
         AND competitor.character_id IS NULL
         ORDER BY competitor.price DESC  -- Pick closest (highest lower) price
         LIMIT 1  -- Ensure only one competitor is selected per order
@@ -124,6 +125,7 @@ def find_undercut_buy_orders(region_id, character_id):
         AND competitor.is_in_trade_hub_range = my_orders.is_in_trade_hub_range
         AND competitor.is_buy_order = my_orders.is_buy_order
         AND competitor.price > my_orders.price  -- Ensure it's a higher price
+        AND competitor.issued > my_orders.issued
         AND competitor.character_id IS NULL
         ORDER BY competitor.price ASC  -- Pick closest (lowest higher) price
         LIMIT 1  -- Ensure only one competitor is selected per order
