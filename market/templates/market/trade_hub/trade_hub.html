@@ -10,22 +10,35 @@
 
 {% block content %}
 <h1>Station trading: {{ trade_hub_region.name }}</h1>
+
+<form action="{% url 'market_trade_hub' region_id=trade_hub_region.region_id %}" method="POST">
+    {% csrf_token %}
+    <label for="market_group_id">Market Group ID</label>
+    <input type="number" id="market_group_id" name="market_group_id" value="{{ market_group_id }}">
+    <label for="excluded_meta_ids">Excluded Meta IDs</label>
+    <input type="text" id="excluded_meta_ids" name="excluded_meta_ids" value="{{ excluded_meta_ids }}">
+    <button type="submit">search</button>
+</form>
+
 <table class="market">
     <thead>
         <tr>
-            <th colspan="5"></th>
-            <th colspan="10">sell</th>
-            <th colspan="11">buy</th>
+            <th colspan="4"></th>
+            <th colspan="13">sell</th>
+            <th colspan="13">buy</th>
+            <th colspan="3">hvol</th>
         </tr>
         <tr>
             <th>item</th>
             <th>spr</th>
-            <th>liq</th>
             <th>profit</th>
             <th>stock</th>
             <th>v</th>
             <th>p</th>
             <th>u</th>
+            <th>uc</th>
+            <th>uca</th>
+            <th>o24</th>
             <th>station</th>
             <th class="jita">jita</th>
             <th colspan="2">best</th>
@@ -35,13 +48,18 @@
             <th>v</th>
             <th>p</th>
             <th>u</th>
-            <th>vs bs</th>
+            <th>uc</th>
+            <th>uca</th>
+            <th>o24</th>
             <th>station</th>
             <th class="jita">jita</th>
             <th colspan="2">best</th>
             <th>hv</th>
             <th>havgp</th>
             <th>hlastp</th>
+            <th>curr</th>
+            <th>Jita</th>
+            <th>a4e</th>
         </tr>
     </thead>
     <tbody>
@@ -51,12 +69,14 @@
         <tr>
             <th>item</th>
             <th>spr</th>
-            <th>liq</th>
             <th>profit</th>
             <th>stock</th>
             <th>v</th>
             <th>p</th>
             <th>u</th>
+            <th>uc</th>
+            <th>uca</th>
+            <th>o24</th>
             <th>station</th>
             <th>jita</th>
             <th colspan="2">best</th>
@@ -66,18 +86,24 @@
             <th>v</th>
             <th>p</th>
             <th>u</th>
-            <th>vs bb</th>
+            <th>uc</th>
+            <th>uca</th>
+            <th>o24</th>
             <th>station</th>
             <th>jita</th>
             <th colspan="2">best</th>
             <th>hv</th>
             <th>havgp</th>
             <th>hlastp</th>
+            <th>curr</th>
+            <th>Jita</th>
+            <th>a4e</th>
         </tr>
         <tr>
-            <th colspan="5"></th>
-            <th colspan="10">sell</th>
-            <th colspan="11">buy</th>
+            <th colspan="4"></th>
+            <th colspan="13">sell</th>
+            <th colspan="13">buy</th>
+            <th colspan="3">hvol</th>
         </tr>
     </tfoot>
 </table>
@@ -87,21 +113,24 @@
 <table class="market">
     <thead>
         <tr>
-            <th colspan="5"></th>
-            <th colspan="10">sell</th>
-            <th colspan="11">buy</th>
+            <th colspan="4"></th>
+            <th colspan="13">sell</th>
+            <th colspan="13">buy</th>
+            <th colspan="3">hvol</th>
         </tr>
         <tr>
             <th>item</th>
             <th>spr</th>
-            <th>liq</th>
             <th>profit</th>
             <th>stock</th>
             <th>v</th>
             <th>p</th>
             <th>u</th>
+            <th>uc</th>
+            <th>uca</th>
+            <th>o24</th>
             <th>station</th>
-            <th>jita</th>
+            <th class="jita">jita</th>
             <th colspan="2">best</th>
             <th>hv</th>
             <th>havgp</th>
@@ -109,13 +138,18 @@
             <th>v</th>
             <th>p</th>
             <th>u</th>
-            <th>vs bb</th>
+            <th>uc</th>
+            <th>uca</th>
+            <th>o24</th>
             <th>station</th>
-            <th>jita</th>
+            <th class="jita">jita</th>
             <th colspan="2">best</th>
             <th>hv</th>
             <th>havgp</th>
             <th>hlastp</th>
+            <th>curr</th>
+            <th>Jita</th>
+            <th>a4e</th>
         </tr>
     </thead>
     <tbody>
@@ -125,12 +159,14 @@
         <tr>
             <th>item</th>
             <th>spr</th>
-            <th>liq</th>
             <th>profit</th>
             <th>stock</th>
             <th>v</th>
             <th>p</th>
             <th>u</th>
+            <th>uc</th>
+            <th>uca</th>
+            <th>o24</th>
             <th>station</th>
             <th>jita</th>
             <th colspan="2">best</th>
@@ -140,22 +176,27 @@
             <th>v</th>
             <th>p</th>
             <th>u</th>
-            <th>vs bb</th>
+            <th>uc</th>
+            <th>uca</th>
+            <th>o24</th>
             <th>station</th>
             <th>jita</th>
             <th colspan="2">best</th>
             <th>hv</th>
             <th>havgp</th>
             <th>hlastp</th>
+            <th>curr</th>
+            <th>Jita</th>
+            <th>a4e</th>
         </tr>
         <tr>
-            <th colspan="5"></th>
-            <th colspan="10">sell</th>
-            <th colspan="11">buy</th>
+            <th colspan="4"></th>
+            <th colspan="13">sell</th>
+            <th colspan="13">buy</th>
+            <th colspan="3">hvol</th>
         </tr>
     </tfoot>
 </table>
-
 
 ISK in escrow: {{ isk_in_escrow|isk_value }}<br />
 ISK in sell orders: {{ isk_in_sell_orders|isk_value }}

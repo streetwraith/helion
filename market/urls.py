@@ -15,7 +15,6 @@ from .views import (
     lp_index,
     lp_data,
     market_trade_hub,
-    market_trade_hub_new,
     market_transactions,
     market_trade_hub_mistakes,
 )
@@ -29,7 +28,6 @@ urlpatterns = [
 
     # station trading
     path("trade_hub/<int:region_id>", market_trade_hub, name="market_trade_hub"),
-    path("trade_hub/<int:region_id>/new", market_trade_hub_new, name="market_trade_hub_new"),
     path("trade_hub/<int:region_id>/mistakes", market_trade_hub_mistakes, name="market_trade_hub_mistakes"),
     
     # transactions

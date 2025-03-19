@@ -84,157 +84,6 @@ def market_trade_hub_mistakes(request, region_id):
     })
 
 def market_trade_hub(request, region_id):
-    start = int(time.time() * 1000)
-    trade_items = TradeItem.objects.all()
-    item_dict = list(trade_items.order_by('group_id', 'market_group_id', 'type_id'))
-    item_dict_extra = []
-    trade_hubs = TradeHub.objects.all()
-    trade_hub_region = trade_hubs.get(region_id=region_id)
-    trade_hub_jita = trade_hubs.get(name='Jita')
-
-    trade_hub_region_ids = list(trade_hubs.values_list('region_id', flat=True))
-
-    context = {
-        "trade_hub_region": trade_hub_region,
-        "trade_hub_jita": trade_hub_jita,
-        "item_data": {},
-        "item_dict": item_dict,
-        "item_dict_extra": item_dict_extra
-    }
-    market_orders_in_trade_hubs_range = MarketOrder.objects.filter(region_id__in=trade_hub_region_ids, is_in_trade_hub_range=True)
-    print((f"1: {int(time.time() * 1000) - start}ms"))
-    character_orders = market_orders_in_trade_hubs_range.filter(character_id=request.session['esi_token']['character_id'], region_id=region_id)
-    character_assets = market_service.get_character_assets(character_id=request.session['esi_token']['character_id'], trade_items=list(trade_items.values_list('type_id', flat=True)), location_id=trade_hub_region.station_id)
-
-    isk_in_sell_orders = 0
-    isk_in_escrow = 0
-
-    items_to_process = list(trade_items)
-
-    type_ids_in_trade_items = set(trade_items.values_list('type_id', flat=True))
-    type_ids_not_in_trade_items = set([order.type_id for order in character_orders])
-
-    type_ids_without_names = list(type_ids_not_in_trade_items - type_ids_in_trade_items)
-    type_names_dict = sde_service.get_type_names(type_ids_without_names)
-
-    for extra_item in type_ids_without_names:
-        print(f'extra item: {extra_item}')
-        new_item = TradeItem(type_id=extra_item)
-        new_item.name = type_names_dict.get(extra_item, 'None')
-        items_to_process.append(new_item)
-        item_dict_extra.append(new_item)
-    
-    item_loop_start = int(time.time() * 1000)
-    for trade_item in items_to_process:
-        type_id = trade_item.type_id
-        context['item_data'][type_id] = {}
-        context['item_data'][type_id]['in_assets'] = 0
-        if(type_id in character_assets):
-            context['item_data'][type_id]['in_assets'] = character_assets[type_id]
-        context['item_data'][type_id]['regions'] = {}
-        context['item_data'][type_id]['regions'][region_id] = {}
-
-        market_orders_in_trade_hub_range_type_id = market_orders_in_trade_hubs_range.filter(type_id=type_id)
-
-        # TODO: maybe refactor this to store a price for every trade hub?
-        global_lowest_sell_order = market_orders_in_trade_hub_range_type_id.filter(is_buy_order=False).order_by('price').first()
-        best_sell_price = 0
-        if global_lowest_sell_order:
-            best_sell_price = global_lowest_sell_order.price
-            context['item_data'][type_id]['global_lowest_sell_order'] = { 
-                'price': best_sell_price, 
-                'hub': trade_hubs.get(station_id=global_lowest_sell_order.location_id).name 
-            }
-        global_highest_buy_order = market_orders_in_trade_hub_range_type_id.filter(is_buy_order=True).order_by('price').last()
-        best_buy_price = 0
-        if global_highest_buy_order:
-            best_buy_price = global_highest_buy_order.price
-            best_buy_price_location = 'other'
-            try:
-                best_buy_price_location = trade_hubs.get(station_id=global_highest_buy_order.location_id).name
-            except:
-                best_buy_price_location = MarketRegionStatus.objects.get(region_id=global_highest_buy_order.region_id).region_name
-            context['item_data'][type_id]['global_highest_buy_order'] = { 
-                'price': best_buy_price, 
-                'hub': best_buy_price_location
-            }
-
-        my_sell_orders = character_orders.filter(type_id=type_id, is_buy_order=False)#market_service.filter_order_list(character_orders, type_id=type_id, is_buy_order=False)
-        my_buy_orders = character_orders.filter(type_id=type_id, is_buy_order=True)#market_service.filter_order_list(character_orders, type_id=type_id, is_buy_order=True)
-
-        for my_sell_order in my_sell_orders:
-            isk_in_sell_orders += my_sell_order.volume_remain * my_sell_order.price
-
-        for my_buy_order in my_buy_orders:
-            isk_in_escrow += (my_buy_order.price * my_buy_order.volume_remain)
-
-        my_sell_history = market_service.get_trade_history(type_id=trade_item.type_id, location_id=trade_hub_region.station_id, is_buy=False)
-        my_buy_history = market_service.get_trade_history(type_id=trade_item.type_id, is_buy=True)
-
-        volume_for_profit = min(my_sell_history['volume'], my_buy_history['volume'])
-        liquidity = 0
-        my_profit = 0
-        if volume_for_profit > 0:
-            liquidity = my_sell_history['volume'] / my_buy_history['volume'] * 100
-            my_profit = volume_for_profit * my_sell_history['avg_price'] - volume_for_profit * my_buy_history['avg_price']
-
-        station_lowest_sell_order = market_orders_in_trade_hub_range_type_id.filter(region_id=trade_hub_region.region_id, is_buy_order=False).order_by('price').first()
-        station_highest_buy_order = market_orders_in_trade_hub_range_type_id.filter(region_id=trade_hub_region.region_id, is_buy_order=True).order_by('price').last()
-
-        station_lowest_sell_price = 1000000000
-        if station_lowest_sell_order:
-            station_lowest_sell_price = station_lowest_sell_order.price
-        station_highest_buy_price = 1
-        if station_highest_buy_order:
-            station_highest_buy_price = station_highest_buy_order.price
-        spread = (station_lowest_sell_price - station_highest_buy_price)/station_lowest_sell_price*100
-        spread_inverse_rounded = (100 - round(spread / 5) * 5)
-        my_sell_order = my_sell_orders.order_by('price').first()
-        my_buy_order = my_buy_orders.order_by('-price').first()
-
-        my_sell_price_last_update = ''
-        if my_sell_order:
-            my_sell_price_last_update = (datetime.now(timezone.utc) - my_sell_order.issued).days
-
-        my_buy_price_last_update = ''
-        if my_buy_order:
-            my_buy_price_last_update = (datetime.now(timezone.utc) - my_buy_order.issued).days
-
-        context['item_data'][type_id]['regions'][region_id] = {
-            'my_profit': my_profit,
-            'my_sell_price': my_sell_order.price if my_sell_order else None,
-            'my_sell_price_last_update': my_sell_price_last_update,
-            'my_sell_volume': sum(order.volume_remain for order in my_sell_orders),
-            'my_sell_history': my_sell_history,
-            'my_buy_history': my_buy_history,
-            'my_buy_price': my_buy_order.price if my_buy_order else None,
-            'my_buy_price_last_update': my_buy_price_last_update,
-            'my_buy_volume': sum(order.volume_remain for order in my_buy_orders),
-            'my_buy_vs_best_sell': my_buy_order.price/best_sell_price*100 if best_sell_price and my_buy_order else None,
-            'station_lowest_sell_order': station_lowest_sell_order,
-            'station_highest_buy_order': station_highest_buy_order,
-            'spread': spread,
-            'spread_inverse_rounded': spread_inverse_rounded,
-            'liquidity': liquidity
-        }
-
-        # set extra Jita data for other trade hubs
-        if region_id != REGION_ID_FORGE:
-            context['item_data'][type_id]['regions'][REGION_ID_FORGE] = {
-                'station_lowest_sell_order': market_orders_in_trade_hub_range_type_id.filter(region_id=REGION_ID_FORGE, is_buy_order=False).order_by('price').first(),
-                'station_highest_buy_order': market_orders_in_trade_hub_range_type_id.filter(region_id=REGION_ID_FORGE, is_buy_order=True).order_by('price').last()
-            }
-        # print((f"{type_id} time: {int(time.time() * 1000) - item_start}ms"))
-
-    print((f"{type_id} items loop: {int(time.time() * 1000) - item_loop_start}ms"))
-
-    context['isk_in_escrow'] = isk_in_escrow
-    context['isk_in_sell_orders'] = isk_in_sell_orders
-
-    print((f"total: {int(time.time() * 1000) - start}ms"))
-    return render(request, "market/trade_hub/trade_hub.html", context)
-
-def market_trade_hub_new(request, region_id):
     context = {}
     market_group_id = int(request.POST.get('market_group_id')) if request.POST.get('market_group_id') else None
     excluded_meta_ids = [int(x.strip()) for x in request.POST.get('excluded_meta_ids', '').split(',') if x.strip()]
@@ -504,7 +353,17 @@ def market_trade_hub_new(request, region_id):
 
         context['item_data'][type_id] = item_data
 
+    # Get list of type_ids from deals
+    type_ids = [trade_item.type_id for trade_item in items_to_process]
+
+    # Create lookup dict of minimums
+    volume_lookup = market_service.get_a4e_market_history_volume(type_ids=type_ids)
+
+    # Attach minimums to deals
+    for type_id in context['item_data'].keys():
+        context['item_data'][type_id]['regions'][REGION_ID_FORGE]['a4e_market_history_volume'] = volume_lookup.get(type_id)
+
     context['isk_in_escrow'] = isk_in_escrow
     context['isk_in_sell_orders'] = isk_in_sell_orders
 
-    return render(request, "market/trade_hub/trade_hub_new.html", context)
+    return render(request, "market/trade_hub/trade_hub.html", context)

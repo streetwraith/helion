@@ -1,7 +1,7 @@
 from helion.providers import esi
 from esi.models import Token
 import os
-from market.models import MarketOrder, MarketTransaction, MarketRegionStatus, TradeItem, TradeHub, MarketHistory, WalletJournal, MarketNotification, MarketOrderUndercut
+from market.models import MarketOrder, MarketTransaction, MarketRegionStatus, TradeItem, TradeHub, MarketHistory, WalletJournal, MarketNotification, MarketOrderUndercut, A4EMarketHistoryVolume
 from sde.models import SdeTypeId, SolarSystem
 
 from datetime import date, datetime, timedelta, timezone
@@ -12,7 +12,7 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 from django.db import connection, transaction
 from django.utils.timezone import localtime
 from psycopg2.extras import execute_values
-from django.db.models import Max
+from django.db.models import Max, Min
 
 import environ
 
@@ -625,3 +625,19 @@ def get_shopping_list_prices(item_names):
         results = cursor.fetchall()
         connection.close()
         return results
+    
+def get_a4e_market_history_volume(type_ids):
+    # Get min sell volumes from A4EMarketVolumesStationHistoryHub
+    history_averages = A4EMarketHistoryVolume.objects.filter(
+        type_id__in=type_ids
+    ).values('type_id').annotate(
+        min_sell_volume=Min('volume')  # Using Min as a conservative estimate
+    )
+
+    # Create lookup dict of minimums
+    volume_lookup = {
+        item['type_id']: item['min_sell_volume']
+        for item in history_averages
+    }
+
+    return volume_lookup

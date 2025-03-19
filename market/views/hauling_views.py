@@ -352,18 +352,8 @@ def market_hauling_sell_to_sell(request, from_location, to_location):
     # Get list of type_ids from deals
     type_ids = [deal.type_id for deal in deals]
 
-    # Get min sell volumes from A4EMarketVolumesStationHistoryHub
-    history_averages = A4EMarketHistoryVolume.objects.filter(
-        type_id__in=type_ids
-    ).values('type_id').annotate(
-        min_sell_volume=Min('volume')  # Using Min as a conservative estimate
-    )
-
     # Create lookup dict of minimums
-    volume_lookup = {
-        item['type_id']: item['min_sell_volume']
-        for item in history_averages
-    }
+    volume_lookup = market_service.get_a4e_market_history_volume(type_ids=type_ids)
 
     # Attach minimums to deals
     for deal in deals:
