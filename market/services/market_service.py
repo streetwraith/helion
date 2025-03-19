@@ -20,25 +20,28 @@ env = environ.Env()
 
 def find_type_ids_by_market_groups(market_group_id=[], excluded_meta_ids=[]):
     query = """
-        select types.type_id from
-            sde_sdetypeid types,
-            (WITH RECURSIVE market_group_hierarchy AS (
-                SELECT market_group_id, name, description, parent_group_id
-                FROM sde_marketgroup
-                WHERE parent_group_id = %s
+        WITH RECURSIVE market_group_hierarchy AS (
+            -- Base case: Start with the chosen market_group_id
+            SELECT market_group_id
+            FROM sde_marketgroup
+            WHERE market_group_id = %s  -- Replace with your chosen ID
 
-                UNION ALL
+            UNION ALL
 
-                SELECT mg.market_group_id, mg.name, mg.description, mg.parent_group_id
-                FROM sde_marketgroup mg
-                INNER JOIN market_group_hierarchy mgh ON mg.parent_group_id = mgh.market_group_id
-            ) SELECT * FROM market_group_hierarchy) as market_groups
-        where types.market_group_id = market_groups.market_group_id
+            -- Recursive step: Find all child market groups
+            SELECT mg.market_group_id
+            FROM sde_marketgroup mg
+            INNER JOIN market_group_hierarchy mgh ON mg.parent_group_id = mgh.market_group_id
+        )
+        -- Get all type_ids that belong to any of the market_group_ids found
+        SELECT type_id, meta_id
+        FROM sde_sdetypeid
+        WHERE market_group_id IN (SELECT market_group_id FROM market_group_hierarchy)
     """
 
     if excluded_meta_ids:
         placeholders = ', '.join(['%s'] * len(excluded_meta_ids))
-        query += f" AND meta_id NOT IN ({placeholders})"
+        query += f" AND (meta_id IS NULL OR meta_id NOT IN ({placeholders}))"
         params = [market_group_id] + list(excluded_meta_ids)
     else:
         params = [market_group_id]
@@ -484,6 +487,7 @@ def update_market_history(region_id, type_id):
 
     MarketHistory.objects.filter(region_id=region_id, type_id=type_id).delete()
     ret = MarketHistory.objects.bulk_create(history)
+    print(f"Market history updated for {type_id} in {region_id}: {len(ret)} records")
     return ret
 
 def filter_order_list(input_list, region_id=None, location_id=None, type_id=None, is_buy_order=None, location_id__in=[]):
