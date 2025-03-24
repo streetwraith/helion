@@ -43,7 +43,7 @@ def market_trade_hub_mistakes(request, region_id):
                 'price',
                 filter=Q(
                     is_buy_order=False,
-                    total_value__gte=10_000_000
+                    total_value__gte=1_000_000
                 )
             ),
         )
@@ -61,18 +61,32 @@ def market_trade_hub_mistakes(request, region_id):
         threshold_price = item['highest_buy_price'] + min_increase
 
         if item['lowest_sell_price'] <= threshold_price:
+            # get the second best sell price for reference
+            second_best_sell_price = orders.filter(
+                type_id=item['type_id'],
+                is_buy_order=False,
+            ).order_by('price').exclude(price=item['lowest_sell_price']).first()
+            # get Jita sell and buy prices
+            jita_sell_price = MarketOrder.objects.filter(
+                type_id=item['type_id'],
+                is_buy_order=False,
+                region_id=REGION_ID_FORGE
+            ).order_by('price').first()
+            jita_buy_price = MarketOrder.objects.filter(
+                type_id=item['type_id'],
+                is_buy_order=True,
+                region_id=REGION_ID_FORGE
+            ).order_by('-price').first()
             matching_results.append({
                 'type_id': item['type_id'],
                 'highest_buy_price': item['highest_buy_price'],
                 'lowest_sell_price': item['lowest_sell_price'],
+                'second_best_sell_price': second_best_sell_price.price if second_best_sell_price else None,
+                'percent_diff': (second_best_sell_price.price - item['lowest_sell_price'])/item['lowest_sell_price']*100 if second_best_sell_price else None,    
+                'jita_sell_price': jita_sell_price.price if jita_sell_price else None,
+                'jita_buy_price': jita_buy_price.price if jita_buy_price else None,
                 'min_increase': min_increase,
             })
-            print(
-                f"Type ID: {item['type_id']} | "
-                f"Highest Buy: {item['highest_buy_price']} | "
-                f"Lowest Sell: {item['lowest_sell_price']} | "
-                f"Min Increase: {min_increase}"
-            )
 
     # Map type_id to name
     type_names_dict = sde_service.get_type_names([item['type_id'] for item in matching_results])
