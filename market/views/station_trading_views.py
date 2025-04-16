@@ -179,6 +179,9 @@ def market_trade_hub(request, region_id):
     context["item_dict"] = item_dict
     context["item_dict_extra"] = item_dict_extra
 
+    isk_in_escrow = 0
+    isk_in_sell_orders = 0
+
     # Process each item
     for trade_item in items_to_process:
         type_id = trade_item.type_id
@@ -215,8 +218,8 @@ def market_trade_hub(request, region_id):
         my_buy_orders = character_orders.filter(type_id=type_id, is_buy_order=True)
         
         # Calculate ISK in orders
-        isk_in_sell_orders = sum(order.volume_remain * order.price for order in my_sell_orders)
-        isk_in_escrow = sum(order.volume_remain * order.price for order in my_buy_orders)
+        isk_in_sell_orders = isk_in_sell_orders + sum(order.volume_remain * order.price for order in my_sell_orders)
+        isk_in_escrow = isk_in_escrow + sum(order.volume_remain * order.price for order in my_buy_orders)
 
         # Get trade history
         my_sell_history = market_service.get_trade_history(
