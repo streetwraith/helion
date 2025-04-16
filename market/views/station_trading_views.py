@@ -269,51 +269,51 @@ def market_trade_hub(request, region_id):
         my_buy_price_undercut_time = None
         my_buy_price_undercut_time_avg = None
 
-        if my_sell_order:
-            undercuts = MarketOrderUndercut.objects.filter(
-                order_id=my_sell_order.order_id,
-                is_buy_order=False
-            )
-            if undercuts.exists():
-                current_undercut = undercuts.filter(
-                    order_issued=my_sell_order.issued
-                ).order_by('-created_at').first()
-                if current_undercut:
-                    my_sell_price_undercut_time = (current_undercut.competitor_issued - current_undercut.order_issued).total_seconds() / 3600
-            
-            # Calculate average undercut time for all undercuts in the last 30 days
-            undercuts = undercuts.filter(
-                created_at__gte=now - timedelta(days=30)
-            )
-            if undercuts.exists():
-                time_diffs = [
-                    (undercut.competitor_issued - undercut.order_issued).total_seconds() / 3600
-                    for undercut in undercuts
-                ]
-                my_sell_price_undercut_time_avg = sum(time_diffs) / len(time_diffs)
+        undercuts = MarketOrderUndercut.objects.filter(
+            type_id=type_id,
+            region_id=region_id,
+            is_buy_order=False
+        )
+        if undercuts.exists() and my_sell_order:
+            current_undercut = undercuts.filter(
+                order_issued=my_sell_order.issued
+            ).order_by('-created_at').first()
+            if current_undercut:
+                my_sell_price_undercut_time = (current_undercut.competitor_issued - current_undercut.order_issued).total_seconds() / 3600
+        
+        # Calculate average undercut time for all undercuts in the last 30 days
+        undercuts = undercuts.filter(
+            created_at__gte=now - timedelta(days=30)
+        )
+        if undercuts.exists():
+            time_diffs = [
+                (undercut.competitor_issued - undercut.order_issued).total_seconds() / 3600
+                for undercut in undercuts
+            ]
+            my_sell_price_undercut_time_avg = sum(time_diffs) / len(time_diffs)
 
-        if my_buy_order:
-            undercuts = MarketOrderUndercut.objects.filter(
-                order_id=my_buy_order.order_id,
-                is_buy_order=True,
-            )
-            if undercuts.exists():
-                current_undercut = undercuts.filter(
-                    order_issued=my_buy_order.issued
-                ).order_by('-created_at').first()
-                if current_undercut:
-                    my_buy_price_undercut_time = (current_undercut.competitor_issued - current_undercut.order_issued).total_seconds() / 3600
-            
-            # Calculate average undercut time for all undercuts in the last 30 days
-            undercuts = undercuts.filter(
-                created_at__gte=now - timedelta(days=30)
-            )
-            if undercuts.exists():
-                time_diffs = [
-                    (undercut.competitor_issued - undercut.order_issued).total_seconds() / 3600
-                    for undercut in undercuts
-                ]
-                my_buy_price_undercut_time_avg = sum(time_diffs) / len(time_diffs)
+        undercuts = MarketOrderUndercut.objects.filter(
+            type_id=type_id,
+            region_id=region_id,
+            is_buy_order=True,
+        )
+        if undercuts.exists() and my_buy_order:
+            current_undercut = undercuts.filter(
+                order_issued=my_buy_order.issued
+            ).order_by('-created_at').first()
+            if current_undercut:
+                my_buy_price_undercut_time = (current_undercut.competitor_issued - current_undercut.order_issued).total_seconds() / 3600
+        
+        # Calculate average undercut time for all undercuts in the last 30 days
+        undercuts = undercuts.filter(
+            created_at__gte=now - timedelta(days=30)
+        )
+        if undercuts.exists():
+            time_diffs = [
+                (undercut.competitor_issued - undercut.order_issued).total_seconds() / 3600
+                for undercut in undercuts
+            ]
+            my_buy_price_undercut_time_avg = sum(time_diffs) / len(time_diffs)
 
         # Get market history data
         history_daily_volume_avg = market_service.calculate_market_history_average_volume(
