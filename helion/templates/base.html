@@ -8,6 +8,7 @@
     <title>{% block title %}Helion{% endblock %}</title>
     <link rel="stylesheet" href="{% static 'css/helion.css' %}">
     <link rel="stylesheet" href="{% static 'css/dialog.css' %}">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css">
     {% block css %}
     {% endblock %}
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jquery/3.7.1/jquery.min.js"></script>
@@ -48,7 +49,7 @@
                         <li>station trading: 
                             <ul class="hub-links">
                                 {% for trade_hub in trade_hubs %}
-                                <li><a href="{% url 'market_trade_hub' region_id=trade_hub.region_id %}">{{ trade_hub.name }}</a></li>
+                                <li><a href="{% url 'market_trade_hub' region_id=trade_hub.region_id %}">{{ trade_hub.name }}</a> (<a href="{% url 'market_trade_hub_mistakes' region_id=trade_hub.region_id %}">M</a>)</li>
                                 {% endfor %}
                             </ul>
                         </li>

@@ -11,7 +11,7 @@ from sde.services import sde_service
 from datetime import datetime, timezone
 from market.constants import REGION_ID_FORGE
 import math
-from django.db.models import Avg
+from django.db.models import Avg, Sum
 from django.db.models.functions import Extract
 from datetime import timedelta
 
@@ -77,12 +77,25 @@ def market_trade_hub_mistakes(request, region_id):
                 is_buy_order=True,
                 region_id=REGION_ID_FORGE
             ).order_by('-price').first()
+            lowest_sell_price_volume = (
+                orders
+                .filter(
+                    type_id=item['type_id'],
+                    is_buy_order=False,
+                    price=item['lowest_sell_price'],
+                    total_value__gte=1_000_000
+                )
+                .aggregate(total=Sum('volume_remain'))['total'] or 0
+            )
+
             matching_results.append({
                 'type_id': item['type_id'],
                 'highest_buy_price': item['highest_buy_price'],
                 'lowest_sell_price': item['lowest_sell_price'],
+                'lowest_sell_price_volume': lowest_sell_price_volume,
                 'second_best_sell_price': second_best_sell_price.price if second_best_sell_price else None,
-                'percent_diff': (second_best_sell_price.price - item['lowest_sell_price'])/item['lowest_sell_price']*100 if second_best_sell_price else None,    
+                'percent_diff': (second_best_sell_price.price - item['lowest_sell_price'])/item['lowest_sell_price']*100 if second_best_sell_price else None, 
+                'profit': (second_best_sell_price.price - item['lowest_sell_price'])*lowest_sell_price_volume if second_best_sell_price else 0,
                 'jita_sell_price': jita_sell_price.price if jita_sell_price else None,
                 'jita_buy_price': jita_buy_price.price if jita_buy_price else None,
                 'min_increase': min_increase,
@@ -93,8 +106,11 @@ def market_trade_hub_mistakes(request, region_id):
     for item in matching_results:
         item['name'] = type_names_dict.get(item['type_id'], 'None')
 
+    matching_results = sorted(matching_results, key=lambda x: x['profit'], reverse=True)
+
     return render(request, "market/trade_hub/mistakes.html", {
         'matching_type_ids': matching_results,
+        'trade_hub_region': TradeHub.objects.get(region_id=region_id)
     })
 
 def market_trade_hub(request, region_id):

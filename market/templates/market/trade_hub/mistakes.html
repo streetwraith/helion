@@ -2,18 +2,20 @@
 
 {% load static custom_filters %}
 
-{% block title %}Helion | market | station trading | {{ trade_hub_region.name }} | mistakes{% endblock %}
+{% block title %}mistakes | {{ trade_hub_region.name }}{% endblock %}
 
 {% block content %}
 <h1>Station trading: {{ trade_hub_region.name }} mistakes</h1>
-<table>
+<table class="market" style="width: auto;">
     <thead>
         <tr>
             <th>item</th>
             <th>buy</th>
             <th>sell</th>
+            <th>volume</th>
             <th>next sell</th>
             <th>%</th>
+            <th>profit</th>
             <th>jita sell</th>
             <th>jita buy</th>
         </tr>
@@ -24,10 +26,12 @@
             <td class="item-name">{% include 'market/_fragment_item_name.html' with item_name=result.name type_id=result.type_id is_trade_item=False show_add_del=False %}</td>
             <td>{{ result.highest_buy_price|isk_value }}</td>
             <td>{{ result.lowest_sell_price|isk_value }}</td>
+            <td>{{ result.lowest_sell_price_volume }}</td>
             <td>{{ result.second_best_sell_price|isk_value }}</td>
             <td>{{ result.percent_diff|floatformat:0 }}</td>
+            <td>{{ result.profit|isk_value }}</td>
             <td>{{ result.jita_sell_price|isk_value }}</td>
-            <td>{{ result.jita_buy_price|isk_value }}</td>
+            <td class="{% if result.jita_buy_price <= result.lowest_sell_price %}green{% else %}{% endif %}">{{ result.jita_buy_price|isk_value }}</td>
         </tr>
         {% endfor %}
     </tbody>
