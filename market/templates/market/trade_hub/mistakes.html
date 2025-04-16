@@ -31,7 +31,7 @@
             <td>{{ result.percent_diff|floatformat:0 }}</td>
             <td>{{ result.profit|isk_value }}</td>
             <td>{{ result.jita_sell_price|isk_value }}</td>
-            <td class="{% if result.jita_buy_price <= result.lowest_sell_price %}green{% else %}{% endif %}">{{ result.jita_buy_price|isk_value }}</td>
+            <td class="{% if result.lowest_sell_price <= result.jita_buy_price %}green{% else %}{% endif %}">{{ result.jita_buy_price|isk_value }}</td>
         </tr>
         {% endfor %}
     </tbody>
