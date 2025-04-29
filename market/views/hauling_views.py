@@ -53,7 +53,7 @@ def market_hauling_index(request):
         url = f"hauling_{trade_type}/{from_location}/{to_location}?{query_params.urlencode()}"
         return redirect(url)
     else:
-        return render(request, "market/hauling/hauling_index.html", {'max_price': '10000000000', 'max_vol': '7200'})
+        return render(request, "market/hauling/hauling_index.html", {'max_price': '1000000000', 'max_vol': '7200'})
 
 def market_hauling_sell_to_buy(request, from_location, to_location):
     print(f'calculating hauling profit: from {from_location} to {to_location}')
@@ -64,11 +64,11 @@ def market_hauling_sell_to_buy(request, from_location, to_location):
     except ValueError:
         max_vol = 520000.0
 
-    max_price = request.GET.get('max_price', '10000000000.0')
+    max_price = request.GET.get('max_price', '1_000_000_000.0')
     try:
         max_price = float(max_price)
     except ValueError:
-        max_price = 10000000000.0
+        max_price = 1_000_000_000.0
 
     # Get trade hub locations - fixed query
     trade_hubs = TradeHub.objects.filter(
@@ -334,7 +334,7 @@ def market_hauling_sell_to_sell(request, from_location, to_location):
         if jita_price:
             from_ratio = from_price/jita_price*100
             to_ratio = best_to_order['price']/jita_price*100
-            if from_ratio > 300.0 or to_ratio > 500.0:
+            if from_ratio > 1000.0 or to_ratio > 1000.0:
                 continue
 
         deal = MarketDeal(

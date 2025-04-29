@@ -630,17 +630,38 @@ def get_shopping_list_prices(item_names):
         return results
     
 def get_a4e_market_history_volume(type_ids):
-    # Get min sell volumes from A4EMarketVolumesStationHistoryHub
-    history_averages = A4EMarketHistoryVolume.objects.filter(
-        type_id__in=type_ids
-    ).values('type_id').annotate(
-        min_sell_volume=Min('volume')  # Using Min as a conservative estimate
-    )
+    # Get date range for last 90 days
+    end_date = A4EMarketHistoryVolume.objects.filter(type_id__in=type_ids).aggregate(Max('date'))['date__max']
+    start_date = end_date - timedelta(days=90)
 
-    # Create lookup dict of minimums
-    volume_lookup = {
-        item['type_id']: item['min_sell_volume']
-        for item in history_averages
-    }
+    # Get all volumes from A4EMarketVolumesStationHistoryHub within date range
+    history_volumes = A4EMarketHistoryVolume.objects.filter(
+        type_id__in=type_ids,
+        date__gte=start_date,
+        date__lte=end_date
+    ).values('type_id', 'date', 'volume')
+
+    # Create lookup dict with volumes for all days
+    volume_lookup = {}
+    for type_id in type_ids:
+        # Initialize empty list for all dates
+        volumes = []
+        current_date = start_date
+        
+        # Create dict of actual volumes by date
+        type_volumes = {
+            item['date']: item['volume'] 
+            for item in history_volumes 
+            if item['type_id'] == type_id
+        }
+        
+        # Fill in all dates with actual volume or 0
+        while current_date <= end_date:
+            volumes.append(type_volumes.get(current_date, 0))
+            current_date += timedelta(days=1)
+            
+        # Calculate average daily volume over the period
+        avg_volume = sum(volumes) / len(volumes) if volumes else 0
+        volume_lookup[type_id] = avg_volume
 
     return volume_lookup
