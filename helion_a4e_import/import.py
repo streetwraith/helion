@@ -1,27 +1,20 @@
 import pandas as pd
 import psycopg2
 from psycopg2.extras import execute_values
-from getpass import getpass
 import sys
 
-if len(sys.argv) < 2:
-    print("Usage: python import.py <csv_filename>")
+if len(sys.argv) < 3:
+    print("Usage: python import.py <csv_filename> <db_url>")
     sys.exit(1)
 
 csv_filename = sys.argv[1]
-password = getpass("Enter your db password: ")
+db_url = sys.argv[2]
 
 table = 'a4e_market_history_volume'
 
 df = pd.read_csv(csv_filename, delimiter=';')
 
-conn = psycopg2.connect(
-    dbname='postgres',
-    user='postgres',
-    password=password,
-    host='localhost',
-    port='5432'
-)
+conn = psycopg2.connect(db_url)
 
 columns = list(df.columns)
 values = [tuple(x) for x in df.to_numpy()]
