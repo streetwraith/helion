@@ -10,7 +10,7 @@
     <td class="{% if my_sell_vol < 1 and in_assets > 0 %}warning{% endif %}">{{ in_assets }}</td>
     <td class="{% if my_sell_vol < 1 and in_assets > 0 %}warning{% endif %}">{{ my_sell_vol }}</td>
     {% endwith %}
-    <td class="{% if item_data_hub|get_by_key:'my_sell_price' > item_data_hub|get_by_key:'station_lowest_sell_order'|get_by_key:'price' %}red{% endif %}">{{ item_data_hub|get_by_key:'my_sell_price'|isk_value }}</td>
+    <td class="{% if item_data_hub|get_by_key:'my_sell_price' >= item_data_hub|get_by_key:'station_lowest_sell_order'|get_by_key:'price' %}red{% endif %}">{{ item_data_hub|get_by_key:'my_sell_price'|isk_value }}</td>
     <td>{{ item_data_hub|get_by_key:'my_sell_price_last_update' }}</td>
     <td>{{ item_data_hub|get_by_key:'my_sell_price_undercut_time'|floatformat:0 }}</td>
     <td>{{ item_data_hub|get_by_key:'my_sell_price_undercut_time_avg'|floatformat:0 }}</td>
@@ -25,7 +25,7 @@
     <td class="history-last-price"><a href="#">{{ sell_history|get_by_key:'last_price'|isk_value }}</a></td>
     {% endwith %}
     <td>{{ item_data_hub|get_by_key:'my_buy_volume' }}</td>
-    <td class="{% if item_data_hub|get_by_key:'my_buy_price' < item_data_hub|get_by_key:'station_highest_buy_order'|get_by_key:'price' %}red{% endif %}">{{ item_data_hub|get_by_key:'my_buy_price'|isk_value }}</td>
+    <td class="{% if item_data_hub|get_by_key:'my_buy_price' <= item_data_hub|get_by_key:'station_highest_buy_order'|get_by_key:'price' %}red{% endif %}">{{ item_data_hub|get_by_key:'my_buy_price'|isk_value }}</td>
     <td>{{ item_data_hub|get_by_key:'my_buy_price_last_update' }}</td>
     <td>{{ item_data_hub|get_by_key:'my_buy_price_undercut_time'|floatformat:0 }}</td>
     <td>{{ item_data_hub|get_by_key:'my_buy_price_undercut_time_avg'|floatformat:0 }}</td>

@@ -320,7 +320,7 @@ def market_trade_hub(request, region_id):
 
         # Get market history data
         history_daily_volume_avg = market_service.calculate_market_history_average_volume(
-            market_service.get_market_history(region_id=region_id, type_id=type_id, days_back=30)
+            market_service.get_market_history(region_id=region_id, type_id=type_id, days_back=90)
         )
 
         # Get recent orders count
@@ -378,7 +378,7 @@ def market_trade_hub(request, region_id):
             ).order_by('-price').first()
 
             jita_history_avg_vol = market_service.calculate_market_history_average_volume(
-                market_service.get_market_history(region_id=REGION_ID_FORGE, type_id=type_id, days_back=30)
+                market_service.get_market_history(region_id=REGION_ID_FORGE, type_id=type_id, days_back=90)
             )
 
             item_data['regions'][REGION_ID_FORGE] = {

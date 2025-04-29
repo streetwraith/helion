@@ -12,7 +12,8 @@ def market_history(request):
     if request.headers.get('x-requested-with') == 'XMLHttpRequest':
         type_id = request.POST.get('type_id')
         region_id = request.POST.get('region_id')
-        history = market_service.update_market_history(region_id=region_id, type_id=type_id)
+        market_service.update_market_history(region_id=region_id, type_id=type_id)
+        history = market_service.get_market_history(region_id=region_id, type_id=type_id)
         result = market_service.calculate_market_history_averages(history=history, region_id=region_id, type_id=type_id)
         html = render_to_string('market/hauling/_fragment_hauling_sts_history.html', {'data': result})
         return JsonResponse({'html': html}, safe=False)

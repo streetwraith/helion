@@ -212,11 +212,11 @@ def market_hauling_sell_to_sell(request, from_location, to_location):
     except ValueError:
         max_vol = 520000.0
 
-    max_price = request.GET.get('max_price', '10000000000.0')
+    max_price = request.GET.get('max_price', '1_000_000_000.0')
     try:
         max_price = float(max_price)
     except ValueError:
-        max_price = 10000000000.0
+        max_price = 1_000_000_000.0
 
     # Get trade hub locations - fixed query
     trade_hubs = TradeHub.objects.filter(

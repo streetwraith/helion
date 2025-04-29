@@ -511,6 +511,7 @@ def calculate_market_history_averages(history, region_id, type_id):
         return None
     
     avg_daily_volume = 0
+    volume_total = 0
     avg_avg = None
     avg_highest = None
     avg_lowest = None
@@ -522,6 +523,7 @@ def calculate_market_history_averages(history, region_id, type_id):
 
     try:
         avg_daily_volume = statistics.mean([item.volume for item in history])
+        volume_total = sum(item.volume for item in history)
         # avg_daily_volume = sum(item.volume for item in history)/14
 
         avg_avg = statistics.mean([item.average for item in history if item.average is not None])
@@ -540,6 +542,7 @@ def calculate_market_history_averages(history, region_id, type_id):
         'type_id': type_id,
         'region_id': region_id,
         'avg_daily_volume': avg_daily_volume,
+        'volume_total': volume_total,
         'avg_avg': avg_avg,
         'avg_highest': avg_highest,
         'avg_lowest': avg_lowest,
