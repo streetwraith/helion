@@ -243,12 +243,14 @@ def market_trade_hub(request, region_id):
         # Get station orders
         station_lowest_sell = type_orders.filter(
             region_id=trade_hub_region.region_id,
-            is_buy_order=False
+            is_buy_order=False,
+            character_id=None
         ).order_by('price').first()
         
         station_highest_buy = type_orders.filter(
             region_id=trade_hub_region.region_id,
-            is_buy_order=True
+            is_buy_order=True,
+            character_id=None
         ).order_by('-price').first()
 
         # Calculate spread
