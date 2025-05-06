@@ -1,9 +1,5 @@
-from django.http import HttpResponse
 from django.shortcuts import render, redirect
-from django.views.decorators.http import require_POST
-from django.contrib.auth import logout
-
-from esi.decorators import token_required
+from sde.models import SdeTypeId
 from helion.providers import esi
 from esi.models import Token
 import os
@@ -50,5 +46,13 @@ def characters(request, *args, **kwargs):
             token_output.append(t)
             _characters.add(t.character_name)
         context['tokens'] = token_output
+
+    if request.GET.get('show_skills', False):
+        character_id = request.session['esi_token']['character_id']
+        token = Token.get_token(character_id, 'esi-skills.read_skills.v1')
+        character_skills = esi.client.Skills.get_characters_character_id_skills(character_id=character_id, token = token.valid_access_token()).results()
+        context['character_skills'] = character_skills
+        skills = SdeTypeId.objects.filter(type_id__in=[skill['skill_id'] for skill in character_skills['skills']]).values('type_id', 'name')
+        context['skill_names'] = {skill['type_id']: skill['name'] for skill in skills}
 
     return render(request, "characters.html", context=context)

@@ -1,5 +1,7 @@
 {% extends "base.html" %}
 
+{% load custom_filters %}
+
 {% block content %}
 <div>
 selected token: {{ request.session.esi_token }}
@@ -42,4 +44,21 @@ characters:
         </div>
     </div>
 </form>
+
+{% if request.session.esi_token != None and character_skills == None%}
+<div>
+<a href="{% url 'characters' %}?show_skills=true">show character skills xml</a>
+</div>
+{% endif %}
+
+{% if character_skills %}
+<div>
+<pre>
+{% for skill in character_skills.skills %}{% with skill_names|get_by_key:skill.skill_id as skill_name %}&lt;skill typeID="{{skill.skill_id}}" name="{{skill_name}}" level="{{skill.trained_skill_level}}" activelevel="{{skill.active_skill_level}}" skillpoints="{{skill.skillpoints_in_skill}}" ownsBook="false" isKnown="true" /&gt;{% endwith %}
+{% endfor %}
+</pre>
+</div>
+{% endif %}
+
 {% endblock %}
+
