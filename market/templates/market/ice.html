@@ -101,10 +101,10 @@
             <th><span>full cargo cost</span></th>
             <th><span>total volume</span></th>
             <th><span>7d avg price</span></th>
-            <th><span>7d vol</span></th>
             <th><span>30d avg price</span></th>
-            <th><span>30d vol</span></th>
             <th><span>90d avg price</span></th>
+            <th><span>7d vol</span></th>
+            <th><span>30d vol</span></th>
             <th><span>90d vol</span></th>
         </tr>
         {% for market_hub in market_hubs %}
@@ -117,10 +117,10 @@
             <td>{{ ice|get_by_key:'full_cargo_cost'|isk_value_mil }}</td>
             <td{% if ice|get_by_key:'total_volume' < params.freighter_ice_capacity and ice|get_by_key:'total_volume' > 0 %} class="orange"{% endif %}>{{ ice|get_by_key:'total_volume'|floatformat:"0g" }}</td>
             <td{% if ice|get_by_key:'7d_avg_price' > ice|get_by_key:'best_sell_price' and ice|get_by_key:'best_sell_price' > 0 %} class="green"{% endif %}>{{ ice|get_by_key:'7d_avg_price'|isk_value }}</td>
-            <td>{{ ice|get_by_key:'7d_vol'|floatformat:"0g" }}</td>
             <td{% if ice|get_by_key:'30d_avg_price' > ice|get_by_key:'best_sell_price' and ice|get_by_key:'best_sell_price' > 0 %} class="green"{% endif %}>{{ ice|get_by_key:'30d_avg_price'|isk_value }}</td>
-            <td>{{ ice|get_by_key:'30d_vol'|floatformat:"0g" }}</td>
             <td{% if ice|get_by_key:'90d_avg_price' > ice|get_by_key:'best_sell_price' and ice|get_by_key:'best_sell_price' > 0 %} class="green"{% endif %}>{{ ice|get_by_key:'90d_avg_price'|isk_value }}</td>
+            <td>{{ ice|get_by_key:'7d_vol'|floatformat:"0g" }}</td>
+            <td>{{ ice|get_by_key:'30d_vol'|floatformat:"0g" }}</td>
             <td>{{ ice|get_by_key:'90d_vol'|floatformat:"0g" }}</td>
         </tr>
         {% endwith %}
