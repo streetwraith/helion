@@ -49,6 +49,7 @@ def market_ice_index(request):
         freighter_capacity = freighter_capacity * (0.89 ** 3)
 
     context['params']['freighter_capacity'] = freighter_capacity
+    context['params']['freighter_ice_capacity'] = freighter_capacity/100
 
     market_hubs = {
         'Jita': REGION_ID_FORGE,

@@ -115,7 +115,7 @@
             <td>{{ ice|get_by_key:'best_sell_volume'|floatformat:"0g" }}</td>
             <td{% if ice|get_by_key:'full_cargo_average_price' == ice_data|get_by_key:ice_type|get_by_key:'best_full_cargo_average_price' and ice|get_by_key:'full_cargo_average_price' > 0 %} class="green"{% endif %}>{{ ice|get_by_key:'full_cargo_average_price'|isk_value }}</td>
             <td>{{ ice|get_by_key:'full_cargo_cost'|isk_value }}</td>
-            <td{% if ice|get_by_key:'total_volume' < freighter_capacity and ice|get_by_key:'total_volume' > 0 %} class="orange"{% endif %}>{{ ice|get_by_key:'total_volume'|floatformat:"0g" }}</td>
+            <td{% if ice|get_by_key:'total_volume' < params.freighter_ice_capacity and ice|get_by_key:'total_volume' > 0 %} class="orange"{% endif %}>{{ ice|get_by_key:'total_volume'|floatformat:"0g" }}</td>
             <td{% if ice|get_by_key:'7d_avg_price' > ice|get_by_key:'best_sell_price' and ice|get_by_key:'best_sell_price' > 0 %} class="green"{% endif %}>{{ ice|get_by_key:'7d_avg_price'|isk_value }}</td>
             <td>{{ ice|get_by_key:'7d_vol'|floatformat:"0g" }}</td>
             <td{% if ice|get_by_key:'30d_avg_price' > ice|get_by_key:'best_sell_price' and ice|get_by_key:'best_sell_price' > 0 %} class="green"{% endif %}>{{ ice|get_by_key:'30d_avg_price'|isk_value }}</td>
