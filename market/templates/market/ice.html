@@ -119,9 +119,9 @@
             <td{% if ice|get_by_key:'7d_avg_price' > ice|get_by_key:'best_sell_price' and ice|get_by_key:'best_sell_price' > 0 %} class="green"{% endif %}>{{ ice|get_by_key:'7d_avg_price'|isk_value }}</td>
             <td{% if ice|get_by_key:'30d_avg_price' > ice|get_by_key:'best_sell_price' and ice|get_by_key:'best_sell_price' > 0 %} class="green"{% endif %}>{{ ice|get_by_key:'30d_avg_price'|isk_value }}</td>
             <td{% if ice|get_by_key:'90d_avg_price' > ice|get_by_key:'best_sell_price' and ice|get_by_key:'best_sell_price' > 0 %} class="green"{% endif %}>{{ ice|get_by_key:'90d_avg_price'|isk_value }}</td>
-            <td>{{ ice|get_by_key:'7d_vol'|floatformat:"0g" }}</td>
-            <td>{{ ice|get_by_key:'30d_vol'|floatformat:"0g" }}</td>
-            <td>{{ ice|get_by_key:'90d_vol'|floatformat:"0g" }}</td>
+            <td>{{ ice|get_by_key:'7d_vol'|isk_value_k }}</td>
+            <td>{{ ice|get_by_key:'30d_vol'|isk_value_k }}</td>
+            <td>{{ ice|get_by_key:'90d_vol'|isk_value_k }}</td>
         </tr>
         {% endwith %}
         {% endfor %}
@@ -215,11 +215,11 @@
     {% with ice_product=ice_product_data|get_by_key:ice_product_type|get_by_key:'Amarr' %}
         <td{% if ice_product|get_by_key:'best_sell_price' == ice_product_data|get_by_key:ice_product_type|get_by_key:'best_sell_price_global' and ice_product|get_by_key:'best_sell_price' > 0 %} class="green"{% endif %}>{{ ice_product|get_by_key:'best_sell_price' }}</td>
         <td>{{ ice_product|get_by_key:'7d_avg_price'|isk_value }}</td>
-        <td>{{ ice_product|get_by_key:'7d_vol'|isk_value }}</td>
         <td>{{ ice_product|get_by_key:'30d_avg_price'|isk_value }}</td>
-        <td>{{ ice_product|get_by_key:'30d_vol'|isk_value }}</td>
         <td>{{ ice_product|get_by_key:'90d_avg_price'|isk_value }}</td>
-        <td>{{ ice_product|get_by_key:'90d_vol'|isk_value }}</td>
+        <td>{{ ice_product|get_by_key:'7d_vol'|isk_value_k }}</td>
+        <td>{{ ice_product|get_by_key:'30d_vol'|isk_value_k }}</td>
+        <td>{{ ice_product|get_by_key:'90d_vol'|isk_value_k }}</td>
         <td>{{ ice_product|get_by_key:'best_buy_price' }}</td>
         <td>{{ ice_product|get_by_key:'best_buy_order_volume'|isk_value }}</td>
     </tr>
