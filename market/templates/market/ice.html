@@ -128,10 +128,36 @@
     </tbody>
     <tfoot>
         <tr>
-            <td colspan="12">Sell in Jita: {{ ice_data|get_by_key:ice_type|get_by_key:'Jita'|get_by_key:'reprocess'|get_by_key:'total_sell_price'|isk_value }}</td>
+            <td>Sell in Jita (SO):</td>
+            <td colspan="4">{{ ice_data|get_by_key:ice_type|get_by_key:'Jita'|get_by_key:'reprocess'|get_by_key:'total_sell_price'|isk_value }}</td>
+            <td colspan="7"></td>
         </tr>
         <tr>
-            <td colspan="12">Sell in Amarr: {{ ice_data|get_by_key:ice_type|get_by_key:'Amarr'|get_by_key:'reprocess'|get_by_key:'total_sell_price'|isk_value }}</td>
+            <td>Sell in Jita (BO): </td>
+            <td colspan="4">{{ ice_data|get_by_key:ice_type|get_by_key:'Jita'|get_by_key:'reprocess'|get_by_key:'total_buy_price'|isk_value }}</td>
+            <td>HW: {{ ice_data|get_by_key:ice_type|get_by_key:'Jita'|get_by_key:'reprocess'|get_by_key:'Heavy Water'|get_by_key:'buy_order_percent'|floatformat:"0g" }}%</td>
+            <td>LO: {{ ice_data|get_by_key:ice_type|get_by_key:'Jita'|get_by_key:'reprocess'|get_by_key:'Liquid Ozone'|get_by_key:'buy_order_percent'|floatformat:"0g" }}%</td>
+            <td>SC: {{ ice_data|get_by_key:ice_type|get_by_key:'Jita'|get_by_key:'reprocess'|get_by_key:'Strontium Clathrates'|get_by_key:'buy_order_percent'|floatformat:"0g" }}%</td>
+            <td>He: {{ ice_data|get_by_key:ice_type|get_by_key:'Jita'|get_by_key:'reprocess'|get_by_key:'Helium Isotopes'|get_by_key:'buy_order_percent'|floatformat:"0g" }}%</td>
+            <td>N: {{ ice_data|get_by_key:ice_type|get_by_key:'Jita'|get_by_key:'reprocess'|get_by_key:'Nitrogen Isotopes'|get_by_key:'buy_order_percent'|floatformat:"0g" }}%</td>
+            <td>O: {{ ice_data|get_by_key:ice_type|get_by_key:'Jita'|get_by_key:'reprocess'|get_by_key:'Oxygen Isotopes'|get_by_key:'buy_order_percent'|floatformat:"0g" }}%</td>
+            <td>H: {{ ice_data|get_by_key:ice_type|get_by_key:'Jita'|get_by_key:'reprocess'|get_by_key:'Hydrogen Isotopes'|get_by_key:'buy_order_percent'|floatformat:"0g" }}%</td>
+        </tr>
+        <tr>
+            <td>Sell in Amarr (SO):</td>
+            <td colspan="4">{{ ice_data|get_by_key:ice_type|get_by_key:'Amarr'|get_by_key:'reprocess'|get_by_key:'total_sell_price'|isk_value }}</td>
+            <td colspan="7"></td>
+        </tr>
+        <tr>
+            <td>Sell in Amarr (BO):</td>
+            <td colspan="4">{{ ice_data|get_by_key:ice_type|get_by_key:'Amarr'|get_by_key:'reprocess'|get_by_key:'total_buy_price'|isk_value }}</td>
+            <td>HW: {{ ice_data|get_by_key:ice_type|get_by_key:'Amarr'|get_by_key:'reprocess'|get_by_key:'Heavy Water'|get_by_key:'buy_order_percent'|floatformat:"0g" }}%</td>
+            <td>LO: {{ ice_data|get_by_key:ice_type|get_by_key:'Amarr'|get_by_key:'reprocess'|get_by_key:'Liquid Ozone'|get_by_key:'buy_order_percent'|floatformat:"0g" }}%</td>
+            <td>SC: {{ ice_data|get_by_key:ice_type|get_by_key:'Amarr'|get_by_key:'reprocess'|get_by_key:'Strontium Clathrates'|get_by_key:'buy_order_percent'|floatformat:"0g" }}%</td>
+            <td>He: {{ ice_data|get_by_key:ice_type|get_by_key:'Amarr'|get_by_key:'reprocess'|get_by_key:'Helium Isotopes'|get_by_key:'buy_order_percent'|floatformat:"0g" }}%</td>
+            <td>N: {{ ice_data|get_by_key:ice_type|get_by_key:'Amarr'|get_by_key:'reprocess'|get_by_key:'Nitrogen Isotopes'|get_by_key:'buy_order_percent'|floatformat:"0g" }}%</td>
+            <td>O: {{ ice_data|get_by_key:ice_type|get_by_key:'Amarr'|get_by_key:'reprocess'|get_by_key:'Oxygen Isotopes'|get_by_key:'buy_order_percent'|floatformat:"0g" }}%</td>
+            <td>H: {{ ice_data|get_by_key:ice_type|get_by_key:'Amarr'|get_by_key:'reprocess'|get_by_key:'Hydrogen Isotopes'|get_by_key:'buy_order_percent'|floatformat:"0g" }}%</td>
         </tr>
     </tfoot>
 </table>

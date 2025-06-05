@@ -246,9 +246,9 @@ def market_ice_index(request):
                         accumulated_volume += remaining_volume
                         break  # We've reached the target
 
-                if accumulated_volume == 0:
-                    return 0.0  # avoid division by zero
-                full_cargo_average_price = total_cost / accumulated_volume
+                full_cargo_average_price = 0
+                if accumulated_volume != 0:
+                        full_cargo_average_price = total_cost / accumulated_volume
                 best_sell_order = market_hub_ice_sell_orders.first()
                 best_sell_price = best_sell_order.price
                 if best_sell_price <= best_price_global:
@@ -279,14 +279,36 @@ def market_ice_index(request):
                 for ice_product_type in ice_product_types:
                     ice_product_type_yield = ice_types[ice_type]['base_yield'][ice_product_type] * input_volume * reprocessing_yield/100
                     sell_order_price = ice_product_type_yield * context['ice_product_data'][ice_product_type][market_hub]['best_sell_price']
-                    buy_order_price = ice_product_type_yield * context['ice_product_data'][ice_product_type][market_hub]['best_buy_price']
+                    # buy_order_price = ice_product_type_yield * context['ice_product_data'][ice_product_type][market_hub]['best_buy_price']
+                    market_hub_ice_product_buy_orders = ice_products_orders.filter(region_id=market_hubs[market_hub], type_id=ice_product_types[ice_product_type], is_buy_order=True).order_by('-price')
+
+                    accumulated_buy_volume = 0.0
+                    total_buy_order_cost = 0.0
+                    for order in market_hub_ice_product_buy_orders.iterator():
+                        if accumulated_buy_volume + order.volume_remain <= ice_product_type_yield:
+                            # Take the whole order
+                            total_buy_order_cost += order.price * order.volume_remain
+                            accumulated_buy_volume += order.volume_remain
+                        else:
+                            # Take only the needed part of the order
+                            remaining_volume = ice_product_type_yield - accumulated_buy_volume
+                            total_buy_order_cost += order.price * remaining_volume
+                            accumulated_buy_volume += remaining_volume
+                            break  # We've reached the target
+
+                    # total_buy_order_average_price = 0
+                    # if accumulated_buy_volume != 0:
+                            # total_buy_order_average_price = total_buy_order_cost / accumulated_buy_volume
+
                     context['ice_data'][ice_type][market_hub]['reprocess'][ice_product_type] = {
                         'yield': ice_product_type_yield,
                         'sell_order_price': sell_order_price,
-                        'buy_order_price': buy_order_price,
+                        'buy_order_price': total_buy_order_cost,
+                        'buy_order_volume': accumulated_buy_volume,
+                        'buy_order_percent': accumulated_buy_volume/ice_product_type_yield*100 if ice_product_type_yield != 0 else 0,
                     }
                     total_sell_price += sell_order_price
-                    total_buy_price += buy_order_price
+                    total_buy_price += total_buy_order_cost
                 context['ice_data'][ice_type][market_hub]['reprocess']['total_sell_price'] = total_sell_price
                 context['ice_data'][ice_type][market_hub]['reprocess']['total_buy_price'] = total_buy_price
 
