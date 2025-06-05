@@ -1,7 +1,7 @@
 {% load custom_filters %}
 
 {% for trade_item in item_dict %}
-{% with item_data_hub=item_data|get_by_key:trade_item.type_id|get_by_key:'regions'|get_by_key:trade_hub_region.region_id item_data_jita=item_data|get_by_key:trade_item.type_id|get_by_key:'regions'|get_by_key:trade_hub_jita.region_id %}
+{% with item_data_hub=item_data|get_by_key:trade_item.type_id|get_by_key:'regions'|get_by_key:trade_hub_region.region_id item_data_jita=item_data|get_by_key:trade_item.type_id|get_by_key:'regions'|get_by_key:trade_hub_jita.region_id item_data_other_hub=item_data|get_by_key:trade_item.type_id|get_by_key:'regions'|get_by_key:trade_hub_other.region_id %}
 <tr data-type-id="{{trade_item.type_id}}">
     <td class="item-name">{% include 'market/_fragment_item_name.html' with item_name=trade_item.name type_id=trade_item.type_id is_trade_item=is_trade_items show_add_del=True %}</td>
     <td class="gradient_{{ item_data_hub|get_by_key:'spread_inverse_rounded'|floatformat:0 }}">{{ item_data_hub|get_by_key:'spread'|floatformat:0 }}%</td>
@@ -16,7 +16,7 @@
     <td>{{ item_data_hub|get_by_key:'my_sell_price_undercut_time_avg'|floatformat:0 }}</td>
     <td>{{ item_data_hub|get_by_key:'recent_sell_orders_issued' }}</td>
     <td>{{ item_data_hub|get_by_key:'station_lowest_sell_order'|get_by_key:'price'|isk_value }}</td>
-    <td class="jita">{{ item_data_jita|get_by_key:'station_lowest_sell_order'|get_by_key:'price'|isk_value }}</td>
+    <td class="jita">{{ item_data_other_hub|get_by_key:'station_lowest_sell_order'|get_by_key:'price'|isk_value }}</td>
     <td>{{ item_data|get_by_key:trade_item.type_id|get_by_key:'global_lowest_sell_order'|get_by_key:'price'|isk_value}}</td>
     <td>{{ item_data|get_by_key:trade_item.type_id|get_by_key:'global_lowest_sell_order'|get_by_key:'hub'}}</td>
     {% with sell_history=item_data_hub|get_by_key:'my_sell_history' %}
@@ -31,7 +31,7 @@
     <td>{{ item_data_hub|get_by_key:'my_buy_price_undercut_time_avg'|floatformat:0 }}</td>
     <td>{{ item_data_hub|get_by_key:'recent_buy_orders_issued' }}</td>
     <td>{{ item_data_hub|get_by_key:'station_highest_buy_order'|get_by_key:'price'|isk_value }}</td>
-    <td class="jita">{{ item_data_jita|get_by_key:'station_highest_buy_order'|get_by_key:'price'|isk_value }}</td>
+    <td class="jita">{{ item_data_other_hub|get_by_key:'station_highest_buy_order'|get_by_key:'price'|isk_value }}</td>
     <td>{{ item_data|get_by_key:trade_item.type_id|get_by_key:'global_highest_buy_order'|get_by_key:'price'|isk_value}}</td>
     <td>{{ item_data|get_by_key:trade_item.type_id|get_by_key:'global_highest_buy_order'|get_by_key:'hub'}}</td>
     {% with buy_history=item_data_hub|get_by_key:'my_buy_history' %}
@@ -40,7 +40,7 @@
     <td class="history-last-price"><a href="#">{{ buy_history|get_by_key:'last_price'|isk_value }}</a></td>
     {% endwith %}
     <td>{{ item_data_hub|get_by_key:'history_daily_volume_avg'|floatformat:0 }}</td>
-    <td>{{ item_data_jita|get_by_key:'history_daily_volume_avg'|floatformat:0 }}</td>
+    <td>{{ item_data_other_hub|get_by_key:'history_daily_volume_avg'|floatformat:0 }}</td>
     <td>{{ item_data_jita|get_by_key:'a4e_market_history_volume'|floatformat:0 }}</td>
 </tr>
 {% endwith %}

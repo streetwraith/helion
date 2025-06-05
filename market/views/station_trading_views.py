@@ -9,7 +9,7 @@ import time
 from market.services import market_service
 from sde.services import sde_service
 from datetime import datetime, timezone
-from market.constants import REGION_ID_FORGE
+from market.constants import REGION_ID_FORGE, REGION_ID_DOMAIN
 import math
 from django.db.models import Avg, Sum
 from django.db.models.functions import Extract
@@ -123,6 +123,8 @@ def market_trade_hub(request, region_id):
     trade_hubs = TradeHub.objects.all()
     trade_hub_region = trade_hubs.get(region_id=region_id)
     trade_hub_jita = trade_hubs.get(name='Jita')
+    trade_hub_amarr = trade_hubs.get(name='Amarr')
+    trade_hub_other = trade_hub_jita if region_id != REGION_ID_FORGE else trade_hub_amarr
     character_id = request.session['esi_token']['character_id']
 
     # Get all items to process (trade items + character's active orders)
@@ -175,6 +177,8 @@ def market_trade_hub(request, region_id):
     # Initialize context
     context["trade_hub_region"] = trade_hub_region
     context["trade_hub_jita"] = trade_hub_jita
+    context["trade_hub_amarr"] = trade_hub_amarr
+    context["trade_hub_other"] = trade_hub_other
     context["item_data"] = {}
     context["item_dict"] = item_dict
     context["item_dict_extra"] = item_dict_extra
@@ -388,6 +392,26 @@ def market_trade_hub(request, region_id):
                 'station_highest_buy_order': jita_highest_buy,
                 'history_daily_volume_avg': jita_history_avg_vol
             }
+        else:
+            amarr_lowest_sell = type_orders.filter(
+                region_id=REGION_ID_DOMAIN,
+                is_buy_order=False
+            ).order_by('price').first()
+            
+            amarr_highest_buy = type_orders.filter(
+                region_id=REGION_ID_DOMAIN,
+                is_buy_order=True
+            ).order_by('-price').first()
+
+            amarr_history_avg_vol = market_service.calculate_market_history_average_volume(
+                market_service.get_market_history(region_id=REGION_ID_DOMAIN, type_id=type_id, days_back=90)
+            )
+
+            item_data['regions'][REGION_ID_DOMAIN] = {
+                'station_lowest_sell_order': amarr_lowest_sell,
+                'station_highest_buy_order': amarr_highest_buy,
+                'history_daily_volume_avg': amarr_history_avg_vol
+            }
 
         context['item_data'][type_id] = item_data
 
@@ -397,7 +421,6 @@ def market_trade_hub(request, region_id):
     # Create lookup dict of minimums
     volume_lookup = market_service.get_a4e_market_history_volume(type_ids=type_ids)
 
-    # Attach minimums to deals
     for type_id in context['item_data'].keys():
         context['item_data'][type_id]['regions'][REGION_ID_FORGE]['a4e_market_history_volume'] = volume_lookup.get(type_id)
 
