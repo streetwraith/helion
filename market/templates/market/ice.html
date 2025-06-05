@@ -1,0 +1,204 @@
+{% extends "market_base.html" %}
+
+{% load static %}
+{% load custom_filters %}
+
+{% block title %}ice | Helion{% endblock %}
+
+{% block content %}
+<h1>Ice Reprocessing Calculator</h1>
+
+<form action="{% url 'market_ice_index' %}" method="GET">
+<div id="yield_modifiers">
+    <select name="rig_modifier">
+        <option value="3" {% if params.rig_modifier == 3 %}selected{% endif %}>3 - T2 rig</option>
+        <option value="1" {% if params.rig_modifier == 1 %}selected{% endif %}>1 - T1 rig</option>
+        <option value="0" {% if params.rig_modifier == 0 %}selected{% endif %}>0 - no rig</option>
+    </select>
+    <select name="security_modifier">
+        <option value="0.12" {% if params.security_modifier == 0.12 %}selected{% endif %}>0.12 - null sec</option>
+        <option value="0.06" {% if params.security_modifier == 0.06 %}selected{% endif %}>0.06 - low sec</option>
+        <option value="0.00" {% if params.security_modifier == 0.00 %}selected{% endif %}>0.00 - high sec</option>
+    </select>
+    <select name="structure_modifier">
+        <option value="0.055" {% if params.structure_modifier == 0.055 %}selected{% endif %}>0.055 - Tatara</option>
+        <option value="0.020" {% if params.structure_modifier == 0.020 %}selected{% endif %}>0.020 - Athanor</option>
+        <option value="0.000" {% if params.structure_modifier == 0.000 %}selected{% endif %}>0.000 - other Upwell</option>
+    </select>
+    <select name="reprocessing_skill_modifier">
+        <option value="5" {% if params.reprocessing_skill_modifier == 5 %}selected{% endif %}>Reprocessing V</option>
+        <option value="4" {% if params.reprocessing_skill_modifier == 4 %}selected{% endif %}>Reprocessing IV</option>
+        <option value="3" {% if params.reprocessing_skill_modifier == 3 %}selected{% endif %}>Reprocessing III</option>
+        <option value="2" {% if params.reprocessing_skill_modifier == 2 %}selected{% endif %}>Reprocessing II</option>
+        <option value="1" {% if params.reprocessing_skill_modifier == 1 %}selected{% endif %}>Reprocessing I</option>
+        <option value="0" {% if params.reprocessing_skill_modifier == 0 %}selected{% endif %}>Reprocessing 0</option>
+    </select>
+    <select name="reprocessing_efficiency_skill_modifier">
+        <option value="5" {% if params.reprocessing_efficiency_skill_modifier == 5 %}selected{% endif %}>Reprocessing Efficiency V</option>
+        <option value="4" {% if params.reprocessing_efficiency_skill_modifier == 4 %}selected{% endif %}>Reprocessing Efficiency IV</option>
+        <option value="3" {% if params.reprocessing_efficiency_skill_modifier == 3 %}selected{% endif %}>Reprocessing Efficiency III</option>
+        <option value="2" {% if params.reprocessing_efficiency_skill_modifier == 2 %}selected{% endif %}>Reprocessing Efficiency II</option>
+        <option value="1" {% if params.reprocessing_efficiency_skill_modifier == 1 %}selected{% endif %}>Reprocessing Efficiency I</option>
+        <option value="0" {% if params.reprocessing_efficiency_skill_modifier == 0 %}selected{% endif %}>Reprocessing Efficiency 0</option>
+    </select>
+    <select name="ice_processing_skill_modifier">
+        <option value="5" {% if params.ice_processing_skill_modifier == 5 %}selected{% endif %}>Ice Processing V</option>
+        <option value="4" {% if params.ice_processing_skill_modifier == 4 %}selected{% endif %}>Ice Processing IV</option>
+        <option value="3" {% if params.ice_processing_skill_modifier == 3 %}selected{% endif %}>Ice Processing III</option>
+        <option value="2" {% if params.ice_processing_skill_modifier == 2 %}selected{% endif %}>Ice Processing II</option>
+        <option value="1" {% if params.ice_processing_skill_modifier == 1 %}selected{% endif %}>Ice Processing I</option>
+        <option value="0" {% if params.ice_processing_skill_modifier == 0 %}selected{% endif %}>Ice Processing 0</option>
+    </select>
+    <select name="implant_modifier">
+        <option value="0.04" {% if params.implant_modifier == 0.04 %}selected{% endif %}>0.04 - RX-804</option>
+        <option value="0.02" {% if params.implant_modifier == 0.02 %}selected{% endif %}>0.02 - RX-802</option>
+        <option value="0.01" {% if params.implant_modifier == 0.01 %}selected{% endif %}>0.01 - RX-801</option>
+        <option value="0.00" {% if params.implant_modifier == 0.00 %}selected{% endif %}>0.00 - no implant</option>
+    </select>
+</div>
+
+<div id="freighter_form">
+    <select name="freighter_hull">
+        <option value="fenrir" {% if params.freighter_hull == 'fenrir' %}selected{% endif %}>435,000 - Fenrir</option>
+        <option value="charon" {% if params.freighter_hull == 'charon' %}selected{% endif %}>465,000 - Charon</option>
+        <option value="obelisk" {% if params.freighter_hull == 'obelisk' %}selected{% endif %}>440,000 - Obelisk</option>
+        <option value="providence" {% if params.freighter_hull == 'providence' %}selected{% endif %}>435,000 - Providence</option>
+    </select>
+    <select name="freighter_skill">
+        <option value="5" {% if params.freighter_skill == 5 %}selected{% endif %}>Freighter V</option>
+        <option value="4" {% if params.freighter_skill == 4 %}selected{% endif %}>Freighter IV</option>
+        <option value="3" {% if params.freighter_skill == 3 %}selected{% endif %}>Freighter III</option>
+        <option value="2" {% if params.freighter_skill == 2 %}selected{% endif %}>Freighter II</option>
+        <option value="1" {% if params.freighter_skill == 1 %}selected{% endif %}>Freighter I</option>
+    </select>
+    <select name="freighter_fit">
+        <option value="expanded_cargoholds" {% if params.freighter_fit == 'expanded_cargoholds' %}selected{% endif %}>3x Expanded Cargohold II</option>
+        <option value="reinforced_bulkheads" {% if params.freighter_fit == 'reinforced_bulkheads' %}selected{% endif %}>3x Reinforced Bulkheads II</option>
+    </select>
+</div>
+<input type="submit" value="update" />
+</form>
+
+<div>
+
+<label for="reprocessing_yield">Reprocessing Yield:</label>
+<input name="reprocessing_yield" id="reprocessing_yield" type="text" readonly="readonly" value="{{params.reprocessing_yield}}" />
+
+<label for="freighter_cargo">Freighter Capacity:</label>
+<input type="text" name="freighter_capacity" id="freighter_capacity" value="{{params.freighter_capacity}}" readonly="readonly" />m<sup>3</sup>
+
+</div>
+
+{% for ice_type in ice_types %}
+<table class="ice">
+    <caption>{{ ice_type }}</caption>
+    <tbody>
+        <tr class="headers-rotated">
+            <th></th>
+            <th><span>best sell price</span></th>
+            <th><span>best sell vol</span></th>
+            <th><span>full cargo price</span></th>
+            <th><span>full cargo cost</span></th>
+            <th><span>total volume</span></th>
+            <th><span>7d avg price</span></th>
+            <th><span>7d vol</span></th>
+            <th><span>30d avg price</span></th>
+            <th><span>30d vol</span></th>
+            <th><span>90d avg price</span></th>
+            <th><span>90d vol</span></th>
+        </tr>
+        {% for market_hub in market_hubs %}
+        {% with ice=ice_data|get_by_key:ice_type|get_by_key:market_hub %}
+        <tr>
+            <th>{{ market_hub }}</th>
+            <td{% if ice|get_by_key:'best_sell_price' == ice_data|get_by_key:ice_type|get_by_key:'best_price_global' and ice|get_by_key:'best_sell_price' > 0 %} class="green"{% endif %}>{{ ice|get_by_key:'best_sell_price'|isk_value }}</td>
+            <td>{{ ice|get_by_key:'best_sell_volume'|floatformat:"0g" }}</td>
+            <td{% if ice|get_by_key:'full_cargo_average_price' == ice_data|get_by_key:ice_type|get_by_key:'best_full_cargo_average_price' and ice|get_by_key:'full_cargo_average_price' > 0 %} class="green"{% endif %}>{{ ice|get_by_key:'full_cargo_average_price'|isk_value }}</td>
+            <td>{{ ice|get_by_key:'full_cargo_cost'|isk_value }}</td>
+            <td{% if ice|get_by_key:'total_volume' < freighter_capacity and ice|get_by_key:'total_volume' > 0 %} class="orange"{% endif %}>{{ ice|get_by_key:'total_volume'|floatformat:"0g" }}</td>
+            <td{% if ice|get_by_key:'7d_avg_price' > ice|get_by_key:'best_sell_price' and ice|get_by_key:'best_sell_price' > 0 %} class="green"{% endif %}>{{ ice|get_by_key:'7d_avg_price'|isk_value }}</td>
+            <td>{{ ice|get_by_key:'7d_vol'|floatformat:"0g" }}</td>
+            <td{% if ice|get_by_key:'30d_avg_price' > ice|get_by_key:'best_sell_price' and ice|get_by_key:'best_sell_price' > 0 %} class="green"{% endif %}>{{ ice|get_by_key:'30d_avg_price'|isk_value }}</td>
+            <td>{{ ice|get_by_key:'30d_vol'|floatformat:"0g" }}</td>
+            <td{% if ice|get_by_key:'90d_avg_price' > ice|get_by_key:'best_sell_price' and ice|get_by_key:'best_sell_price' > 0 %} class="green"{% endif %}>{{ ice|get_by_key:'90d_avg_price'|isk_value }}</td>
+            <td>{{ ice|get_by_key:'90d_vol'|floatformat:"0g" }}</td>
+        </tr>
+        {% endwith %}
+        {% endfor %}
+    </tbody>
+    <tfoot>
+        <tr>
+            <td colspan="12">Sell in Jita: {{ ice_data|get_by_key:ice_type|get_by_key:'Jita'|get_by_key:'reprocess'|get_by_key:'total_sell_price'|isk_value }}</td>
+        </tr>
+        <tr>
+            <td colspan="12">Sell in Amarr: {{ ice_data|get_by_key:ice_type|get_by_key:'Amarr'|get_by_key:'reprocess'|get_by_key:'total_sell_price'|isk_value }}</td>
+        </tr>
+    </tfoot>
+</table>
+
+{% endfor %}
+
+
+<table>
+    <tr>
+        <th></th>
+        <th colspan="9">
+            Jita
+        </th>
+        <th colspan="9">
+            Amarr
+        </th>
+    </tr>
+    <tr class="headers-rotated">
+        <th></th>
+
+        <th><span>best sell price</span></th>
+        <th><span>7d avg price</span></th>
+        <th><span>7d vol</span></th>
+        <th><span>30d avg price</span></th>
+        <th><span>30d vol</span></th>
+        <th><span>90d avg price</span></th>
+        <th><span>90d vol</span></th>
+        <th><span>best buy price</span></th>
+        <th><span>best buy vol</span></th>
+
+        <th><span>best sell price</span></th>
+        <th><span>7d avg price</span></th>
+        <th><span>7d vol</span></th>
+        <th><span>30d avg price</span></th>
+        <th><span>30d vol</span></th>
+        <th><span>90d avg price</span></th>
+        <th><span>90d vol</span></th>
+        <th><span>best buy price</span></th>
+        <th><span>best buy vol</span></th>
+    </tr>
+    {% for ice_product_type in ice_product_types %}
+    {% with ice_product=ice_product_data|get_by_key:ice_product_type|get_by_key:'Jita' %}
+    <tr>
+        <th>{{ ice_product_type }}</th>
+        <td{% if ice_product|get_by_key:'best_sell_price' == ice_product_data|get_by_key:ice_product_type|get_by_key:'best_sell_price_global' and ice_product|get_by_key:'best_sell_price' > 0 %} class="green"{% endif %}>{{ ice_product|get_by_key:'best_sell_price' }}</td>
+        <td{% if ice_product|get_by_key:'7d_avg_price' < ice_product_data|get_by_key:ice_product_type|get_by_key:'best_sell_price' and ice_product|get_by_key:'best_sell_price' > 0 %} class="green"{% endif %}>{{ ice_product|get_by_key:'7d_avg_price'|isk_value }}</td>
+        <td>{{ ice_product|get_by_key:'7d_vol'|isk_value }}</td>
+        <td>{{ ice_product|get_by_key:'30d_avg_price'|isk_value }}</td>
+        <td>{{ ice_product|get_by_key:'30d_vol'|isk_value }}</td>
+        <td>{{ ice_product|get_by_key:'90d_avg_price'|isk_value }}</td>
+        <td>{{ ice_product|get_by_key:'90d_vol'|isk_value }}</td>
+        <td>{{ ice_product|get_by_key:'best_buy_price' }}</td>
+        <td>{{ ice_product|get_by_key:'best_buy_order_volume'|isk_value }}</td>
+    {% endwith %}
+    {% with ice_product=ice_product_data|get_by_key:ice_product_type|get_by_key:'Amarr' %}
+        <td{% if ice_product|get_by_key:'best_sell_price' == ice_product_data|get_by_key:ice_product_type|get_by_key:'best_sell_price_global' and ice_product|get_by_key:'best_sell_price' > 0 %} class="green"{% endif %}>{{ ice_product|get_by_key:'best_sell_price' }}</td>
+        <td>{{ ice_product|get_by_key:'7d_avg_price'|isk_value }}</td>
+        <td>{{ ice_product|get_by_key:'7d_vol'|isk_value }}</td>
+        <td>{{ ice_product|get_by_key:'30d_avg_price'|isk_value }}</td>
+        <td>{{ ice_product|get_by_key:'30d_vol'|isk_value }}</td>
+        <td>{{ ice_product|get_by_key:'90d_avg_price'|isk_value }}</td>
+        <td>{{ ice_product|get_by_key:'90d_vol'|isk_value }}</td>
+        <td>{{ ice_product|get_by_key:'best_buy_price' }}</td>
+        <td>{{ ice_product|get_by_key:'best_buy_order_volume'|isk_value }}</td>
+    </tr>
+    {% endwith %}
+    {% endfor %}
+</table>
+
+{% endblock %}

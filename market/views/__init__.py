@@ -4,7 +4,7 @@ from .hauling_views import market_hauling_index, market_hauling_sell_to_buy, mar
 from .loyalty_points_views import lp_index, lp_data
 from .station_trading_views import market_trade_hub ,market_trade_hub_mistakes
 from .transactions_views import market_transactions
-
+from .ice_views import market_ice_index
 __all__ = [
     'market_history',
     'transaction_history',
@@ -22,4 +22,5 @@ __all__ = [
     'market_trade_hub',
     'market_transactions',
     'market_trade_hub_mistakes',
+    'market_ice_index',
 ]

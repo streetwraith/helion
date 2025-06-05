@@ -17,6 +17,7 @@ from .views import (
     market_trade_hub,
     market_transactions,
     market_trade_hub_mistakes,
+    market_ice_index,
 )
 
 urlpatterns = [
@@ -37,6 +38,9 @@ urlpatterns = [
     path("hauling", market_hauling_index, name="market_hauling_index"),
     path("hauling_stb/<str:from_location>/<str:to_location>", market_hauling_sell_to_buy, name="market_hauling_sell_to_buy"),
     path("hauling_sts/<str:from_location>/<str:to_location>", market_hauling_sell_to_sell, name="market_hauling_sell_to_sell"),
+
+    # ice
+    path("ice", market_ice_index, name="market_ice_index"),
 
     # loyalty points
     path("lp", lp_index, name="lp_index"),

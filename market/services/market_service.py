@@ -665,3 +665,27 @@ def get_a4e_market_history_volume(type_ids):
         volume_lookup[type_id] = avg_volume
 
     return volume_lookup
+
+def get_ice_sell_orders(ice_types):
+    sell_orders = MarketOrder.objects.filter(is_buy_order=False, is_in_trade_hub_range=True, type_id__in=ice_types)
+    return sell_orders
+
+def update_ice_market_history(ice_types, region_ids):
+    for region_id in region_ids:
+        for ice_type in ice_types:
+            update_market_history(region_id, ice_type)
+
+def get_ice_history(ice_types, region_ids):
+    return MarketHistory.objects.filter(type_id__in=ice_types, region_id__in=region_ids)
+
+def get_ice_products_orders(ice_product_types):
+    orders = MarketOrder.objects.filter(is_in_trade_hub_range=True, type_id__in=ice_product_types)
+    return orders
+
+def update_ice_products_market_history(ice_product_types, region_ids):
+    for region_id in region_ids:
+        for ice_product_type in ice_product_types:
+            update_market_history(region_id, ice_product_type)
+
+def get_ice_products_history(ice_product_types, region_ids):
+    return MarketHistory.objects.filter(type_id__in=ice_product_types, region_id__in=region_ids)

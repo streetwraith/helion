@@ -126,6 +126,10 @@ tr.selected {
     background-color: lightgreen;
 }
 
+.orange {
+    background-color: orange;
+}
+
 .jita {
     background-color: lightskyblue;
 }
@@ -180,4 +184,26 @@ table.history {
 
 .item-name {
     font-size: 60%;
+}
+
+table.ice {
+    display: inline-block;
+}
+
+table.ice th {
+    text-align: right;
+}
+
+table tr.headers-rotated th {
+    vertical-align: text-bottom;
+    padding: 0.2em 0;
+}
+
+table tr.headers-rotated th span {
+    writing-mode: sideways-lr;
+    white-space: nowrap;
+    
+
+    /* transform: rotate(-90deg); */
+    /* transform-origin: top left; */
 }
