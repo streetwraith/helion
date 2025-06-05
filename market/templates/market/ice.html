@@ -114,7 +114,7 @@
             <td{% if ice|get_by_key:'best_sell_price' == ice_data|get_by_key:ice_type|get_by_key:'best_price_global' and ice|get_by_key:'best_sell_price' > 0 %} class="green"{% endif %}>{{ ice|get_by_key:'best_sell_price'|isk_value }}</td>
             <td>{{ ice|get_by_key:'best_sell_volume'|floatformat:"0g" }}</td>
             <td{% if ice|get_by_key:'full_cargo_average_price' == ice_data|get_by_key:ice_type|get_by_key:'best_full_cargo_average_price' and ice|get_by_key:'full_cargo_average_price' > 0 %} class="green"{% endif %}>{{ ice|get_by_key:'full_cargo_average_price'|isk_value }}</td>
-            <td>{{ ice|get_by_key:'full_cargo_cost'|isk_value }}</td>
+            <td>{{ ice|get_by_key:'full_cargo_cost'|isk_value_mil }}</td>
             <td{% if ice|get_by_key:'total_volume' < params.freighter_ice_capacity and ice|get_by_key:'total_volume' > 0 %} class="orange"{% endif %}>{{ ice|get_by_key:'total_volume'|floatformat:"0g" }}</td>
             <td{% if ice|get_by_key:'7d_avg_price' > ice|get_by_key:'best_sell_price' and ice|get_by_key:'best_sell_price' > 0 %} class="green"{% endif %}>{{ ice|get_by_key:'7d_avg_price'|isk_value }}</td>
             <td>{{ ice|get_by_key:'7d_vol'|floatformat:"0g" }}</td>
@@ -129,12 +129,12 @@
     <tfoot>
         <tr>
             <td>Sell in Jita (SO):</td>
-            <td colspan="4">{{ ice_data|get_by_key:ice_type|get_by_key:'Jita'|get_by_key:'reprocess'|get_by_key:'total_sell_price'|isk_value }}</td>
+            <td colspan="4">{{ ice_data|get_by_key:ice_type|get_by_key:'Jita'|get_by_key:'reprocess'|get_by_key:'total_sell_price'|isk_value_mil }}</td>
             <td colspan="7"></td>
         </tr>
         <tr>
             <td>Sell in Jita (BO): </td>
-            <td colspan="4">{{ ice_data|get_by_key:ice_type|get_by_key:'Jita'|get_by_key:'reprocess'|get_by_key:'total_buy_price'|isk_value }}</td>
+            <td colspan="4">{{ ice_data|get_by_key:ice_type|get_by_key:'Jita'|get_by_key:'reprocess'|get_by_key:'total_buy_price'|isk_value_mil }}</td>
             <td>HW: {{ ice_data|get_by_key:ice_type|get_by_key:'Jita'|get_by_key:'reprocess'|get_by_key:'Heavy Water'|get_by_key:'buy_order_percent'|floatformat:"0g" }}%</td>
             <td>LO: {{ ice_data|get_by_key:ice_type|get_by_key:'Jita'|get_by_key:'reprocess'|get_by_key:'Liquid Ozone'|get_by_key:'buy_order_percent'|floatformat:"0g" }}%</td>
             <td>SC: {{ ice_data|get_by_key:ice_type|get_by_key:'Jita'|get_by_key:'reprocess'|get_by_key:'Strontium Clathrates'|get_by_key:'buy_order_percent'|floatformat:"0g" }}%</td>
@@ -145,12 +145,12 @@
         </tr>
         <tr>
             <td>Sell in Amarr (SO):</td>
-            <td colspan="4">{{ ice_data|get_by_key:ice_type|get_by_key:'Amarr'|get_by_key:'reprocess'|get_by_key:'total_sell_price'|isk_value }}</td>
+            <td colspan="4">{{ ice_data|get_by_key:ice_type|get_by_key:'Amarr'|get_by_key:'reprocess'|get_by_key:'total_sell_price'|isk_value_mil }}</td>
             <td colspan="7"></td>
         </tr>
         <tr>
             <td>Sell in Amarr (BO):</td>
-            <td colspan="4">{{ ice_data|get_by_key:ice_type|get_by_key:'Amarr'|get_by_key:'reprocess'|get_by_key:'total_buy_price'|isk_value }}</td>
+            <td colspan="4">{{ ice_data|get_by_key:ice_type|get_by_key:'Amarr'|get_by_key:'reprocess'|get_by_key:'total_buy_price'|isk_value_mil }}</td>
             <td>HW: {{ ice_data|get_by_key:ice_type|get_by_key:'Amarr'|get_by_key:'reprocess'|get_by_key:'Heavy Water'|get_by_key:'buy_order_percent'|floatformat:"0g" }}%</td>
             <td>LO: {{ ice_data|get_by_key:ice_type|get_by_key:'Amarr'|get_by_key:'reprocess'|get_by_key:'Liquid Ozone'|get_by_key:'buy_order_percent'|floatformat:"0g" }}%</td>
             <td>SC: {{ ice_data|get_by_key:ice_type|get_by_key:'Amarr'|get_by_key:'reprocess'|get_by_key:'Strontium Clathrates'|get_by_key:'buy_order_percent'|floatformat:"0g" }}%</td>
