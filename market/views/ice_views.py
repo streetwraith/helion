@@ -264,9 +264,9 @@ def market_ice_index(request):
                     'total_volume': market_hub_sell_orders_total_volume,
                 }
             if market_hub_ice_history.exists():
-                context['ice_data'][ice_type][market_hub]['7d_avg_price'] = market_hub_ice_history.filter(date__gte=datetime.now() - timedelta(days=8)).aggregate(avg_price=Avg('average'))['avg_price']
-                context['ice_data'][ice_type][market_hub]['30d_avg_price'] = market_hub_ice_history.filter(date__gte=datetime.now() - timedelta(days=31)).aggregate(avg_price=Avg('average'))['avg_price']
-                context['ice_data'][ice_type][market_hub]['90d_avg_price'] = market_hub_ice_history.filter(date__gte=datetime.now() - timedelta(days=91)).aggregate(avg_price=Avg('average'))['avg_price']
+                context['ice_data'][ice_type][market_hub]['7d_avg_price'] = market_hub_ice_history.filter(date__gte=datetime.now() - timedelta(days=8)).aggregate(avg_price=Avg('highest'))['avg_price']
+                context['ice_data'][ice_type][market_hub]['30d_avg_price'] = market_hub_ice_history.filter(date__gte=datetime.now() - timedelta(days=31)).aggregate(avg_price=Avg('highest'))['avg_price']
+                context['ice_data'][ice_type][market_hub]['90d_avg_price'] = market_hub_ice_history.filter(date__gte=datetime.now() - timedelta(days=91)).aggregate(avg_price=Avg('highest'))['avg_price']
                 context['ice_data'][ice_type][market_hub]['7d_vol'] = market_hub_ice_history.filter(date__gte=datetime.now() - timedelta(days=8)).aggregate(total_vol=Sum('volume'))['total_vol']
                 context['ice_data'][ice_type][market_hub]['30d_vol'] = market_hub_ice_history.filter(date__gte=datetime.now() - timedelta(days=31)).aggregate(total_vol=Sum('volume'))['total_vol']
                 context['ice_data'][ice_type][market_hub]['90d_vol'] = market_hub_ice_history.filter(date__gte=datetime.now() - timedelta(days=91)).aggregate(total_vol=Sum('volume'))['total_vol']
