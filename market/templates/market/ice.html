@@ -129,12 +129,16 @@
     <tfoot>
         <tr>
             <td>Sell in Jita (SO):</td>
-            <td colspan="4">{{ ice_data|get_by_key:ice_type|get_by_key:'Jita'|get_by_key:'reprocess'|get_by_key:'total_sell_price'|isk_value_mil }}</td>
+            <td colspan="2">{{ ice_data|get_by_key:ice_type|get_by_key:'Jita'|get_by_key:'reprocess'|get_by_key:'total_sell_price'|isk_value_mil }}</td>
+            <td>profit:</td>
+            <td>{{ ice_data|get_by_key:ice_type|get_by_key:'Jita'|get_by_key:'reprocess'|get_by_key:'sell_price_profit'|isk_value_mil }}</td>
             <td colspan="7"></td>
         </tr>
         <tr>
             <td>Sell in Jita (BO): </td>
-            <td colspan="4">{{ ice_data|get_by_key:ice_type|get_by_key:'Jita'|get_by_key:'reprocess'|get_by_key:'total_buy_price'|isk_value_mil }}</td>
+            <td colspan="2">{{ ice_data|get_by_key:ice_type|get_by_key:'Jita'|get_by_key:'reprocess'|get_by_key:'total_buy_price'|isk_value_mil }}</td>
+            <td>profit:</td>
+            <td>{{ ice_data|get_by_key:ice_type|get_by_key:'Jita'|get_by_key:'reprocess'|get_by_key:'buy_price_profit'|isk_value_mil }}</td>
             <td>HW: {{ ice_data|get_by_key:ice_type|get_by_key:'Jita'|get_by_key:'reprocess'|get_by_key:'Heavy Water'|get_by_key:'buy_order_percent'|floatformat:"0g" }}%</td>
             <td>LO: {{ ice_data|get_by_key:ice_type|get_by_key:'Jita'|get_by_key:'reprocess'|get_by_key:'Liquid Ozone'|get_by_key:'buy_order_percent'|floatformat:"0g" }}%</td>
             <td>SC: {{ ice_data|get_by_key:ice_type|get_by_key:'Jita'|get_by_key:'reprocess'|get_by_key:'Strontium Clathrates'|get_by_key:'buy_order_percent'|floatformat:"0g" }}%</td>
@@ -145,12 +149,16 @@
         </tr>
         <tr>
             <td>Sell in Amarr (SO):</td>
-            <td colspan="4">{{ ice_data|get_by_key:ice_type|get_by_key:'Amarr'|get_by_key:'reprocess'|get_by_key:'total_sell_price'|isk_value_mil }}</td>
+            <td colspan="2">{{ ice_data|get_by_key:ice_type|get_by_key:'Amarr'|get_by_key:'reprocess'|get_by_key:'total_sell_price'|isk_value_mil }}</td>
+            <td>profit:</td>
+            <td>{{ ice_data|get_by_key:ice_type|get_by_key:'Amarr'|get_by_key:'reprocess'|get_by_key:'sell_price_profit'|isk_value_mil }}</td>
             <td colspan="7"></td>
         </tr>
         <tr>
             <td>Sell in Amarr (BO):</td>
-            <td colspan="4">{{ ice_data|get_by_key:ice_type|get_by_key:'Amarr'|get_by_key:'reprocess'|get_by_key:'total_buy_price'|isk_value_mil }}</td>
+            <td colspan="2">{{ ice_data|get_by_key:ice_type|get_by_key:'Amarr'|get_by_key:'reprocess'|get_by_key:'total_buy_price'|isk_value_mil }}</td>
+            <td>profit:</td>
+            <td>{{ ice_data|get_by_key:ice_type|get_by_key:'Amarr'|get_by_key:'reprocess'|get_by_key:'buy_price_profit'|isk_value_mil }}</td>
             <td>HW: {{ ice_data|get_by_key:ice_type|get_by_key:'Amarr'|get_by_key:'reprocess'|get_by_key:'Heavy Water'|get_by_key:'buy_order_percent'|floatformat:"0g" }}%</td>
             <td>LO: {{ ice_data|get_by_key:ice_type|get_by_key:'Amarr'|get_by_key:'reprocess'|get_by_key:'Liquid Ozone'|get_by_key:'buy_order_percent'|floatformat:"0g" }}%</td>
             <td>SC: {{ ice_data|get_by_key:ice_type|get_by_key:'Amarr'|get_by_key:'reprocess'|get_by_key:'Strontium Clathrates'|get_by_key:'buy_order_percent'|floatformat:"0g" }}%</td>

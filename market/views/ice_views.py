@@ -226,6 +226,7 @@ def market_ice_index(request):
         context['ice_data'][ice_type] = {}
         best_price_global = 999999999
         best_full_cargo_average_price = 999999999
+        best_market_hub_full_cargo_price = 999999999999
         for market_hub in market_hubs:
             context['ice_data'][ice_type][market_hub] = {}
             market_hub_ice_sell_orders = ice_sell_orders.filter(region_id=market_hubs[market_hub], type_id=ice_types[ice_type]['type_id']).order_by('price')
@@ -263,6 +264,9 @@ def market_ice_index(request):
                     'full_cargo_cost': full_cargo_average_price * accumulated_volume,
                     'total_volume': market_hub_sell_orders_total_volume,
                 }
+                if full_cargo_average_price * accumulated_volume <= best_market_hub_full_cargo_price and accumulated_volume == context['params']['freighter_capacity']/100:
+                    best_market_hub_full_cargo_price = full_cargo_average_price * accumulated_volume
+                
             if market_hub_ice_history.exists():
                 context['ice_data'][ice_type][market_hub]['7d_avg_price'] = market_hub_ice_history.filter(date__gte=datetime.now() - timedelta(days=8)).aggregate(avg_price=Avg('highest'))['avg_price']
                 context['ice_data'][ice_type][market_hub]['30d_avg_price'] = market_hub_ice_history.filter(date__gte=datetime.now() - timedelta(days=31)).aggregate(avg_price=Avg('highest'))['avg_price']
@@ -314,5 +318,10 @@ def market_ice_index(request):
 
         context['ice_data'][ice_type]['best_price'] = best_price_global
         context['ice_data'][ice_type]['best_full_cargo_average_price'] = best_full_cargo_average_price
+        context['ice_data'][ice_type]['best_market_hub_full_cargo_price'] = best_market_hub_full_cargo_price
+        context['ice_data'][ice_type]['Jita']['reprocess']['sell_price_profit'] = context['ice_data'][ice_type]['Jita']['reprocess']['total_sell_price'] - best_market_hub_full_cargo_price
+        context['ice_data'][ice_type]['Jita']['reprocess']['buy_price_profit'] = context['ice_data'][ice_type]['Jita']['reprocess']['total_buy_price'] - best_market_hub_full_cargo_price
+        context['ice_data'][ice_type]['Amarr']['reprocess']['sell_price_profit'] = context['ice_data'][ice_type]['Amarr']['reprocess']['total_sell_price'] - best_market_hub_full_cargo_price
+        context['ice_data'][ice_type]['Amarr']['reprocess']['buy_price_profit'] = context['ice_data'][ice_type]['Amarr']['reprocess']['total_buy_price'] - best_market_hub_full_cargo_price
 
     return render(request, "market/ice.html", context)
