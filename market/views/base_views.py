@@ -99,6 +99,10 @@ class WalletStatistics():
             ret = self.journal_data.filter(date__gte=start, date__lt=end, ref_type='market_transaction').aggregate(total=Sum('amount'))['total']
             if ret == None:
                 return 0
+        elif ref_type == 'contract_collateral_payout':
+            ret = self.journal_data.filter(date__gte=start, date__lt=end, ref_type='contract_collateral_payout').aggregate(total=Sum('amount'))['total']
+            if ret == None:
+                return 0
         elif ref_type == 'buy':
             ret = self.transaction_data.filter(date__gte=start, date__lt=end, is_buy=True).aggregate(total=Sum(F('quantity') * F('unit_price')))['total']
             if ret == None:
