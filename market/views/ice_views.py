@@ -79,7 +79,7 @@ def market_ice_index(request):
         best_sell_price_global = 0
         best_buy_price_global = 999999999
         for market_hub in ['Jita', 'Amarr']:
-            context['ice_product_data'][ice_product_type][market_hub] = {}
+            context['ice_product_data'][ice_product_type][market_hub] = {'best_sell_price': 0, 'best_buy_price': 999999999,'best_buy_order_volume': 0}
             market_hub_ice_product_sell_orders = ice_products_orders.filter(region_id=market_hubs[market_hub], type_id=ice_product_types[ice_product_type], is_buy_order=False).order_by('price')
             market_hub_ice_product_buy_orders = ice_products_orders.filter(region_id=market_hubs[market_hub], type_id=ice_product_types[ice_product_type], is_buy_order=True).order_by('-price')
             if market_hub_ice_product_sell_orders.exists():
