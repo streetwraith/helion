@@ -11,7 +11,7 @@ import re
 def index(request):
     market_regions = MarketRegionStatus.objects.all()
     trade_hubs = TradeHub.objects.all()
-    wallet_statistics = WalletStatistics(WalletJournal.objects.filter(ref_type__in=['transaction_tax', 'brokers_fee', 'market_transaction']), MarketTransaction.objects.filter())
+    wallet_statistics = WalletStatistics(WalletJournal.objects.filter(ref_type__in=['transaction_tax', 'brokers_fee', 'contract_brokers_fee', 'market_transaction', 'contract_collateral_payout', 'contract_price', 'contract_reward_deposited', 'contract_reward_refund', 'contract_sales_tax']), MarketTransaction.objects.filter())
     context = { "market_regions": list(market_regions), 'wallet_statistics': wallet_statistics }
     for index, value in enumerate(context["market_regions"]):
         context["market_regions"][index].trade_hub = trade_hubs.filter(region_id=value.region_id).get()
@@ -91,22 +91,27 @@ class WalletStatistics():
         start = timezone.now() - timedelta(days=days_from)
         end = timezone.now() - timedelta(days=days_to)
         ret = None
-        if ref_type == 'brokers_fee' or ref_type == 'transaction_tax':
-            ret = self.journal_data.filter(date__gte=start, date__lt=end, ref_type=ref_type).aggregate(total=Sum('amount'))['total']
+        if ref_type == 'brokers_fee':
+            ret = self.journal_data.filter(date__gte=start, date__lt=end, ref_type__in=['brokers_fee','contract_brokers_fee']).aggregate(total=Sum('amount'))['total']
+            if ret == None:
+                return 0
+        elif ref_type == 'transaction_tax':
+            ret = self.journal_data.filter(date__gte=start, date__lt=end, ref_type__in=['contract_sales_tax', 'transaction_tax']).aggregate(total=Sum('amount'))['total']
             if ret == None:
                 return 0
         elif ref_type == 'sell':
-            ret = self.journal_data.filter(date__gte=start, date__lt=end, ref_type='market_transaction').aggregate(total=Sum('amount'))['total']
-            if ret == None:
-                return 0
-        elif ref_type == 'contract_collateral_payout':
-            ret = self.journal_data.filter(date__gte=start, date__lt=end, ref_type='contract_collateral_payout').aggregate(total=Sum('amount'))['total']
+            ret = self.journal_data.filter(date__gte=start, date__lt=end, ref_type__in=['market_transaction', 'contract_collateral_payout', 'contract_reward_refund', 'contract_price']).aggregate(total=Sum('amount'))['total']
             if ret == None:
                 return 0
         elif ref_type == 'buy':
-            ret = self.transaction_data.filter(date__gte=start, date__lt=end, is_buy=True).aggregate(total=Sum(F('quantity') * F('unit_price')))['total']
+            contracts_ret = self.journal_data.filter(date__gte=start, date__lt=end, ref_type=['contract_reward_deposited']).aggregate(total=Sum('amount'))['total']
+            if contracts_ret == None:
+                contracts_ret = 0
+            ret = self.transaction_data.filter(date__gte=start, date__lt=end, is_buy=True).aggregate(total=Sum(F('quantity') * F('unit_price')))['total'] + contracts_ret
             if ret == None:
-                return 0
+                return 0 + contracts_ret
+            else:
+                ret = ret + contracts_ret
         elif ref_type == 'profit':
             ret = self.get_data_for_range('sell', days_to, days_from) - self.get_data_for_range('buy', days_to, days_from) - self.get_data_for_range('brokers_fee', days_to, days_from) - self.get_data_for_range('transaction_tax', days_to, days_from)
             if ret == None:
