@@ -47,7 +47,8 @@ def market_ice_index(request):
         freighter_capacity = freighter_capacity * (1.275 ** 3)
     elif context['params']['freighter_fit'] == 'reinforced_bulkheads':
         freighter_capacity = freighter_capacity * (0.89 ** 3)
-
+    elif context['params']['freighter_fit'] == 'other':
+        freighter_capacity = freighter_capacity
     context['params']['freighter_capacity'] = freighter_capacity
     context['params']['freighter_ice_capacity'] = freighter_capacity/100
 

@@ -74,6 +74,7 @@
     <select name="freighter_fit">
         <option value="expanded_cargoholds" {% if params.freighter_fit == 'expanded_cargoholds' %}selected{% endif %}>3x Expanded Cargohold II</option>
         <option value="reinforced_bulkheads" {% if params.freighter_fit == 'reinforced_bulkheads' %}selected{% endif %}>3x Reinforced Bulkheads II</option>
+        <option value="other" {% if params.freighter_fit == 'other' %}selected{% endif %}>other</option>
     </select>
 </div>
 <input type="submit" value="update" />
