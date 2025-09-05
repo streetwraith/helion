@@ -107,7 +107,7 @@ class WalletStatistics():
             contracts_ret = self.journal_data.filter(date__gte=start, date__lt=end, ref_type=['contract_reward_deposited']).aggregate(total=Sum('amount'))['total']
             if contracts_ret == None:
                 contracts_ret = 0
-            ret = self.transaction_data.filter(date__gte=start, date__lt=end, is_buy=True).aggregate(total=Sum(F('quantity') * F('unit_price')))['total'] + contracts_ret
+            ret = self.transaction_data.filter(date__gte=start, date__lt=end, is_buy=True).aggregate(total=Sum(F('quantity') * F('unit_price')))['total'] or 0 + contracts_ret
             if ret == None:
                 return 0 + contracts_ret
             else:
