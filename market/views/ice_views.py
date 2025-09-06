@@ -265,8 +265,8 @@ def market_ice_index(request):
                     'full_cargo_cost': full_cargo_average_price * accumulated_volume,
                     'total_volume': market_hub_sell_orders_total_volume,
                 }
-                if full_cargo_average_price * accumulated_volume <= best_market_hub_full_cargo_price and accumulated_volume == context['params']['freighter_capacity']/100:
-                    best_market_hub_full_cargo_price = full_cargo_average_price * accumulated_volume
+                if full_cargo_average_price * context['params']['freighter_capacity']/100 <= best_market_hub_full_cargo_price:
+                    best_market_hub_full_cargo_price = full_cargo_average_price * context['params']['freighter_capacity']/100
                 
             if market_hub_ice_history.exists():
                 context['ice_data'][ice_type][market_hub]['7d_avg_price'] = market_hub_ice_history.filter(date__gte=datetime.now() - timedelta(days=8)).aggregate(avg_price=Avg('highest'))['avg_price']
@@ -282,7 +282,7 @@ def market_ice_index(request):
                 total_buy_price = 0
                 context['ice_data'][ice_type][market_hub]['reprocess'] = {}
                 for ice_product_type in ice_product_types:
-                    ice_product_type_yield = ice_types[ice_type]['base_yield'][ice_product_type] * input_volume * reprocessing_yield/100
+                    ice_product_type_yield = ice_types[ice_type]['base_yield'][ice_product_type] * reprocessing_yield/100
                     sell_order_price = ice_product_type_yield * context['ice_product_data'][ice_product_type][market_hub]['best_sell_price']
                     # buy_order_price = ice_product_type_yield * context['ice_product_data'][ice_product_type][market_hub]['best_buy_price']
                     market_hub_ice_product_buy_orders = ice_products_orders.filter(region_id=market_hubs[market_hub], type_id=ice_product_types[ice_product_type], is_buy_order=True).order_by('-price')
@@ -290,13 +290,13 @@ def market_ice_index(request):
                     accumulated_buy_volume = 0.0
                     total_buy_order_cost = 0.0
                     for order in market_hub_ice_product_buy_orders.iterator():
-                        if accumulated_buy_volume + order.volume_remain <= ice_product_type_yield:
+                        if accumulated_buy_volume + order.volume_remain <= ice_product_type_yield*input_volume:
                             # Take the whole order
                             total_buy_order_cost += order.price * order.volume_remain
                             accumulated_buy_volume += order.volume_remain
                         else:
                             # Take only the needed part of the order
-                            remaining_volume = ice_product_type_yield - accumulated_buy_volume
+                            remaining_volume = ice_product_type_yield*input_volume - accumulated_buy_volume
                             total_buy_order_cost += order.price * remaining_volume
                             accumulated_buy_volume += remaining_volume
                             break  # We've reached the target
@@ -310,7 +310,7 @@ def market_ice_index(request):
                         'sell_order_price': sell_order_price,
                         'buy_order_price': total_buy_order_cost,
                         'buy_order_volume': accumulated_buy_volume,
-                        'buy_order_percent': accumulated_buy_volume/ice_product_type_yield*100 if ice_product_type_yield != 0 else 0,
+                        'buy_order_percent': accumulated_buy_volume/ice_product_type_yield/input_volume*100 if ice_product_type_yield != 0 else 0,
                     }
                     total_sell_price += sell_order_price
                     total_buy_price += total_buy_order_cost
@@ -320,9 +320,9 @@ def market_ice_index(request):
         context['ice_data'][ice_type]['best_price'] = best_price_global
         context['ice_data'][ice_type]['best_full_cargo_average_price'] = best_full_cargo_average_price
         context['ice_data'][ice_type]['best_market_hub_full_cargo_price'] = best_market_hub_full_cargo_price
-        context['ice_data'][ice_type]['Jita']['reprocess']['sell_price_profit'] = context['ice_data'][ice_type]['Jita']['reprocess']['total_sell_price'] - best_market_hub_full_cargo_price
+        context['ice_data'][ice_type]['Jita']['reprocess']['sell_price_profit'] = context['ice_data'][ice_type]['Jita']['reprocess']['total_sell_price']*context['params']['freighter_capacity']/100 - best_market_hub_full_cargo_price
         context['ice_data'][ice_type]['Jita']['reprocess']['buy_price_profit'] = context['ice_data'][ice_type]['Jita']['reprocess']['total_buy_price'] - best_market_hub_full_cargo_price
-        context['ice_data'][ice_type]['Amarr']['reprocess']['sell_price_profit'] = context['ice_data'][ice_type]['Amarr']['reprocess']['total_sell_price'] - best_market_hub_full_cargo_price
+        context['ice_data'][ice_type]['Amarr']['reprocess']['sell_price_profit'] = context['ice_data'][ice_type]['Amarr']['reprocess']['total_sell_price']*context['params']['freighter_capacity']/100 - best_market_hub_full_cargo_price
         context['ice_data'][ice_type]['Amarr']['reprocess']['buy_price_profit'] = context['ice_data'][ice_type]['Amarr']['reprocess']['total_buy_price'] - best_market_hub_full_cargo_price
 
     return render(request, "market/ice.html", context)

@@ -130,7 +130,7 @@
     <tfoot>
         <tr>
             <td>Sell in Jita (SO):</td>
-            <td colspan="2">{{ ice_data|get_by_key:ice_type|get_by_key:'Jita'|get_by_key:'reprocess'|get_by_key:'total_sell_price'|isk_value_mil }}</td>
+            <td colspan="2">{{ ice_data|get_by_key:ice_type|get_by_key:'Jita'|get_by_key:'reprocess'|get_by_key:'total_sell_price'|isk_value }}</td>
             <td>profit:</td>
             <td>{{ ice_data|get_by_key:ice_type|get_by_key:'Jita'|get_by_key:'reprocess'|get_by_key:'sell_price_profit'|isk_value_mil }}</td>
             <td colspan="7"></td>
@@ -150,7 +150,7 @@
         </tr>
         <tr>
             <td>Sell in Amarr (SO):</td>
-            <td colspan="2">{{ ice_data|get_by_key:ice_type|get_by_key:'Amarr'|get_by_key:'reprocess'|get_by_key:'total_sell_price'|isk_value_mil }}</td>
+            <td colspan="2">{{ ice_data|get_by_key:ice_type|get_by_key:'Amarr'|get_by_key:'reprocess'|get_by_key:'total_sell_price'|isk_value }}</td>
             <td>profit:</td>
             <td>{{ ice_data|get_by_key:ice_type|get_by_key:'Amarr'|get_by_key:'reprocess'|get_by_key:'sell_price_profit'|isk_value_mil }}</td>
             <td colspan="7"></td>
