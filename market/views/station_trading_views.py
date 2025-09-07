@@ -158,7 +158,7 @@ def market_trade_hub(request, region_id):
     
     # Combine all items to process
     items_to_process = list(trade_items) + extra_items
-    item_dict = list(trade_items.order_by('group_id', 'market_group_id', 'type_id'))
+    item_dict = list(trade_items.order_by('group_id', 'name'))
     item_dict_extra = extra_items
 
     # Get character's assets
