@@ -113,7 +113,7 @@ class WalletStatistics():
             else:
                 ret = ret + contracts_ret
         elif ref_type == 'profit':
-            ret = self.get_data_for_range('sell', days_to, days_from) - self.get_data_for_range('buy', days_to, days_from) - self.get_data_for_range('brokers_fee', days_to, days_from) - self.get_data_for_range('transaction_tax', days_to, days_from)
+            ret = self.get_data_for_range('sell', days_to, days_from) - self.get_data_for_range('buy', days_to, days_from) + self.get_data_for_range('brokers_fee', days_to, days_from) + self.get_data_for_range('transaction_tax', days_to, days_from)
             if ret == None:
                 return 0
         elif ref_type == 'f/p':
