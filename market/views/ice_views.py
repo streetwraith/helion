@@ -16,9 +16,9 @@ def market_ice_index(request):
         'reprocessing_efficiency_skill_modifier': int(request.GET.get('reprocessing_efficiency_skill_modifier', 5)),
         'ice_processing_skill_modifier': int(request.GET.get('ice_processing_skill_modifier', 5)),
         'implant_modifier': float(request.GET.get('implant_modifier', 0.04)),
-        'freighter_hull': request.GET.get('freighter_hull', 'fenrir'),
+        'freighter_hull': request.GET.get('freighter_hull', 'providence'),
         'freighter_skill': int(request.GET.get('freighter_skill', 4)),
-        'freighter_fit': request.GET.get('freighter_fit', 'reinforced_bulkheads')
+        'freighter_fit': request.GET.get('freighter_fit', 'other')
     }
 
     required_params = list(context['params'].keys())

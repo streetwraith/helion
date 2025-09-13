@@ -91,8 +91,9 @@
 </div>
 
 {% for ice_type in ice_types %}
+{% with ice_type_id=ice_types|get_by_key:ice_type|get_by_key:'type_id' %}
 <table class="ice">
-    <caption>{{ ice_type }}</caption>
+    <caption>{% include 'market/_fragment_item_name.html' with item_name=ice_type type_id=ice_type_id show_add_del=False %}</caption>
     <tbody>
         <tr class="headers-rotated">
             <th></th>
@@ -136,6 +137,13 @@
             <td colspan="7"></td>
         </tr>
         <tr>
+            <td>Sell in Amarr (SO):</td>
+            <td colspan="2">{{ ice_data|get_by_key:ice_type|get_by_key:'Amarr'|get_by_key:'reprocess'|get_by_key:'total_sell_price'|isk_value }}</td>
+            <td>profit:</td>
+            <td>{{ ice_data|get_by_key:ice_type|get_by_key:'Amarr'|get_by_key:'reprocess'|get_by_key:'sell_price_profit'|isk_value_mil }}</td>
+            <td colspan="7"></td>
+        </tr>
+        <tr>
             <td>Sell in Jita (BO): </td>
             <td colspan="2">{{ ice_data|get_by_key:ice_type|get_by_key:'Jita'|get_by_key:'reprocess'|get_by_key:'total_buy_price'|isk_value_mil }}</td>
             <td>profit:</td>
@@ -147,13 +155,6 @@
             <td>N: {{ ice_data|get_by_key:ice_type|get_by_key:'Jita'|get_by_key:'reprocess'|get_by_key:'Nitrogen Isotopes'|get_by_key:'buy_order_percent'|floatformat:"0g" }}%</td>
             <td>O: {{ ice_data|get_by_key:ice_type|get_by_key:'Jita'|get_by_key:'reprocess'|get_by_key:'Oxygen Isotopes'|get_by_key:'buy_order_percent'|floatformat:"0g" }}%</td>
             <td>H: {{ ice_data|get_by_key:ice_type|get_by_key:'Jita'|get_by_key:'reprocess'|get_by_key:'Hydrogen Isotopes'|get_by_key:'buy_order_percent'|floatformat:"0g" }}%</td>
-        </tr>
-        <tr>
-            <td>Sell in Amarr (SO):</td>
-            <td colspan="2">{{ ice_data|get_by_key:ice_type|get_by_key:'Amarr'|get_by_key:'reprocess'|get_by_key:'total_sell_price'|isk_value }}</td>
-            <td>profit:</td>
-            <td>{{ ice_data|get_by_key:ice_type|get_by_key:'Amarr'|get_by_key:'reprocess'|get_by_key:'sell_price_profit'|isk_value_mil }}</td>
-            <td colspan="7"></td>
         </tr>
         <tr>
             <td>Sell in Amarr (BO):</td>
@@ -170,17 +171,17 @@
         </tr>
     </tfoot>
 </table>
-
+{% endwith %}
 {% endfor %}
 
 
 <table>
     <tr>
         <th></th>
-        <th colspan="9">
+        <th colspan="6">
             Jita
         </th>
-        <th colspan="9">
+        <th colspan="6">
             Amarr
         </th>
     </tr>
@@ -189,35 +190,36 @@
 
         <th><span>best sell price</span></th>
         <th><span>7d avg price</span></th>
-        <th><span>7d vol</span></th>
         <th><span>30d avg price</span></th>
-        <th><span>30d vol</span></th>
         <th><span>90d avg price</span></th>
-        <th><span>90d vol</span></th>
+        <!-- <th><span>7d vol</span></th>
+        <th><span>30d vol</span></th>
+        <th><span>90d vol</span></th> -->
         <th><span>best buy price</span></th>
         <th><span>best buy vol</span></th>
 
         <th><span>best sell price</span></th>
         <th><span>7d avg price</span></th>
-        <th><span>7d vol</span></th>
         <th><span>30d avg price</span></th>
-        <th><span>30d vol</span></th>
         <th><span>90d avg price</span></th>
-        <th><span>90d vol</span></th>
+        <!-- <th><span>7d vol</span></th>
+        <th><span>30d vol</span></th>
+        <th><span>90d vol</span></th> -->
         <th><span>best buy price</span></th>
         <th><span>best buy vol</span></th>
     </tr>
     {% for ice_product_type in ice_product_types %}
+    {% with ice_product_type_id=ice_product_types|get_by_key:ice_product_type %}
     {% with ice_product=ice_product_data|get_by_key:ice_product_type|get_by_key:'Jita' %}
     <tr>
-        <th>{{ ice_product_type }}</th>
+        <th>{% include 'market/_fragment_item_name.html' with item_name=ice_product_type type_id=ice_product_type_id show_add_del=False %}</th>
         <td{% if ice_product|get_by_key:'best_sell_price' == ice_product_data|get_by_key:ice_product_type|get_by_key:'best_sell_price_global' and ice_product|get_by_key:'best_sell_price' > 0 %} class="green"{% endif %}>{{ ice_product|get_by_key:'best_sell_price' }}</td>
         <td{% if ice_product|get_by_key:'7d_avg_price' < ice_product_data|get_by_key:ice_product_type|get_by_key:'best_sell_price' and ice_product|get_by_key:'best_sell_price' > 0 %} class="green"{% endif %}>{{ ice_product|get_by_key:'7d_avg_price'|isk_value }}</td>
         <td>{{ ice_product|get_by_key:'30d_avg_price'|isk_value }}</td>
         <td>{{ ice_product|get_by_key:'90d_avg_price'|isk_value }}</td>
-        <td>{{ ice_product|get_by_key:'7d_vol'|isk_value_k }}</td>
+        <!-- <td>{{ ice_product|get_by_key:'7d_vol'|isk_value_k }}</td>
         <td>{{ ice_product|get_by_key:'30d_vol'|isk_value_k }}</td>
-        <td>{{ ice_product|get_by_key:'90d_vol'|isk_value_k }}</td>
+        <td>{{ ice_product|get_by_key:'90d_vol'|isk_value_k }}</td> -->
         <td>{{ ice_product|get_by_key:'best_buy_price' }}</td>
         <td>{{ ice_product|get_by_key:'best_buy_order_volume'|isk_value }}</td>
     {% endwith %}
@@ -226,12 +228,13 @@
         <td>{{ ice_product|get_by_key:'7d_avg_price'|isk_value }}</td>
         <td>{{ ice_product|get_by_key:'30d_avg_price'|isk_value }}</td>
         <td>{{ ice_product|get_by_key:'90d_avg_price'|isk_value }}</td>
-        <td>{{ ice_product|get_by_key:'7d_vol'|isk_value_k }}</td>
+        <!-- <td>{{ ice_product|get_by_key:'7d_vol'|isk_value_k }}</td>
         <td>{{ ice_product|get_by_key:'30d_vol'|isk_value_k }}</td>
-        <td>{{ ice_product|get_by_key:'90d_vol'|isk_value_k }}</td>
+        <td>{{ ice_product|get_by_key:'90d_vol'|isk_value_k }}</td> -->
         <td>{{ ice_product|get_by_key:'best_buy_price' }}</td>
         <td>{{ ice_product|get_by_key:'best_buy_order_volume'|isk_value }}</td>
     </tr>
+    {% endwith %}
     {% endwith %}
     {% endfor %}
 </table>
