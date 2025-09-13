@@ -23,7 +23,7 @@ def transaction_history(request):
     if request.headers.get('x-requested-with') == 'XMLHttpRequest':
         character_id = request.session['esi_token']['character_id']
         type_id = request.GET.get('type_id')
-        result = market_service.get_market_transactions(character_id=character_id, type_id=type_id, limit=20)
+        result = market_service.get_market_transactions(character_id, type_id=type_id, limit=20)
         html = render_to_string('market/_fragment_transaction_history.html', {'data': result, 'trade_hubs': list(TradeHub.objects.all())})
         return JsonResponse({'html': html}, safe=False)
 

@@ -11,7 +11,7 @@ import re
 def index(request):
     market_regions = MarketRegionStatus.objects.all()
     trade_hubs = TradeHub.objects.all()
-    wallet_statistics = WalletStatistics(WalletJournal.objects.filter(ref_type__in=['transaction_tax', 'brokers_fee', 'contract_brokers_fee', 'market_transaction', 'contract_collateral_payout', 'contract_price', 'contract_reward_deposited', 'contract_reward_refund', 'contract_sales_tax']), MarketTransaction.objects.filter())
+    wallet_statistics = WalletStatistics(WalletJournal.objects.filter(ref_type__in=['transaction_tax', 'brokers_fee', 'contract_brokers_fee', 'market_transaction', 'contract_collateral_payout', 'contract_price', 'contract_reward_deposited', 'contract_reward_refund', 'contract_sales_tax']), market_service.get_market_transactions())
     context = { "market_regions": list(market_regions), 'wallet_statistics': wallet_statistics }
     for index, value in enumerate(context["market_regions"]):
         context["market_regions"][index].trade_hub = trade_hubs.filter(region_id=value.region_id).get()

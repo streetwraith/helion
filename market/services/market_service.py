@@ -160,16 +160,19 @@ def trade_item_del(type_id):
     TradeItem.objects.get(type_id=type_id).delete()
     return name
 
-def get_market_transactions(character_id, type_id=None, location_id=None, is_buy=None, limit=None):
+def get_market_transactions(*character_ids, type_id=None, location_id=None, is_buy=None, limit=None):
     filters = {}
-    if is_buy is not None:
+    if is_buy is not None and is_buy != '':
         filters['is_buy'] = True if is_buy == 'True' else False
     if location_id:
         filters['location_id'] = int(location_id)
     if type_id:
         filters['type_id'] = int(type_id)
-    if character_id:
-        filters['character_id'] = int(character_id)
+    if character_ids:
+        other_chars = Token.objects.exclude(character_id__in=[int(x) for x in character_ids]).values_list("character_id", flat=True)
+        filters['character_id__in'] = [int(x) for x in character_ids] + list(other_chars)
+
+    filters['is_personal'] = True
 
     market_transactions = MarketTransaction.objects.filter(**filters).order_by('-date')
 
@@ -188,7 +191,7 @@ def update_market_transactions(character_id):
     MarketTransaction.objects.bulk_create(market_transactions, 
         update_conflicts=True, 
         unique_fields=['transaction_id'], 
-        update_fields=['client_id', 'character_id', 'date', 'is_buy', 'is_personal', 'journal_ref_id', 'location_id', 'quantity', 'type_id', 'unit_price'])
+        update_fields=['client_id', 'character_id', 'date', 'is_buy', 'journal_ref_id', 'location_id', 'quantity', 'type_id', 'unit_price'])
 
 def get_wallet_journal(character_id):
     journal_entries = []

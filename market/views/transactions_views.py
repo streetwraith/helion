@@ -9,18 +9,21 @@ def market_transactions(request):
     is_buy = request.GET.get('is_buy')
     location_id = request.GET.get('location_id')
     type_id = None
-    if not page_number: # TODO: refactor this to do periodic updates maybe?
-        market_service.update_market_transactions(request.session['esi_token']['character_id'])
+    # if not page_number: # TODO: refactor this to do periodic updates maybe?
+    #     market_service.update_market_transactions(request.session['esi_token']['character_id'])
 
     filters = {}
-    if is_buy is not None:
-        filters['is_buy'] = True if is_buy == 'True' else False
+    if is_buy is not None and is_buy != '':
+        if is_buy == 'True':
+            filters['is_buy'] = True   
+        elif is_buy == 'False':
+            filters['is_buy'] = False
     if location_id:
         filters['location_id'] = int(location_id)
     if type_id:
         filters['type_id'] = int(type_id)
 
-    market_transactions = market_service.get_market_transactions(request.session['esi_token']['character_id'], type_id, location_id, is_buy)
+    market_transactions = market_service.get_market_transactions(request.session['esi_token']['character_id'], type_id=type_id, location_id=location_id, is_buy=is_buy)
     paginator = Paginator(market_transactions, 100)
     page_obj = paginator.get_page(page_number)
 
