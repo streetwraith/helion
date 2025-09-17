@@ -6,12 +6,21 @@ $(document).ready(function(){
         event.preventDefault();
         $(this).closest('table').find('tr').removeClass('selected');
         var parent_tr = $(this).closest('tr');
-        parent_tr.addClass('selected');
+        var type_id = '';
+        if(parent_tr.length > 0) {
+            parent_tr.addClass('selected');
+            type_id = parent_tr.data('type-id');
+        } else {
+            type_id = $(this).text().trim();
+        }
+
+        console.log(type_id);
+
         $.ajax({
             url: '/market/ajax/market_open_in_game',
             type: 'POST',
             data: {
-                'type_id': parent_tr.data('type-id')
+                'type_id': type_id
             },
             dataType: 'json',
             success: function(data) {

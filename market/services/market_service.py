@@ -12,7 +12,7 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 from django.db import connection, transaction
 from django.utils.timezone import localtime
 from psycopg2.extras import execute_values
-from django.db.models import Max, Min
+from django.db.models import Max, Min, Sum, F
 
 import environ
 
@@ -692,3 +692,24 @@ def update_ice_products_market_history(ice_product_types, region_ids):
 
 def get_ice_products_history(ice_product_types, region_ids):
     return MarketHistory.objects.filter(type_id__in=ice_product_types, region_id__in=region_ids)
+
+def get_average_transaction_price(type_id, region_id=None, days_back=90, is_buy=False):
+    filters = {
+        'type_id': type_id,
+        'is_buy': is_buy,
+        'is_personal': True,
+        'date__gte': datetime.now() - timedelta(days=days_back)
+    }
+    if region_id is not None:
+        filters['region_id'] = region_id
+    transactions = MarketTransaction.objects.filter(**filters)
+    result = transactions.aggregate(
+        avg_price=Sum(F('unit_price') * F('quantity')) / Sum('quantity')
+    )['avg_price']
+    return result if result is not None else 0
+
+def get_brokers_fee(faction_standing=9.75, corporation_standing=10.0, broker_relations_level=5):
+    return 0.03 - (0.003 * broker_relations_level) - (0.0003 * faction_standing) - (0.0002 * corporation_standing)
+
+def get_sales_tax():
+    return 0.0337

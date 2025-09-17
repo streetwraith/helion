@@ -6,6 +6,142 @@ from market.services import market_service
 from market.constants import REGION_ID_HEIMATAR, REGION_ID_DOMAIN, REGION_ID_FORGE, REGION_ID_SINQLAISON, REGION_ID_METROPOLIS
 from django.db.models import Sum, Avg
 
+MARKET_HUBS = {
+    'Jita': REGION_ID_FORGE,
+    'Amarr': REGION_ID_DOMAIN,
+    'Dodixie': REGION_ID_SINQLAISON,
+    'Hek': REGION_ID_METROPOLIS,
+    'Rens': REGION_ID_HEIMATAR
+}
+
+FREIGHTER_HULL_CAPACITY = {
+    'fenrir': 435000,
+    'charon': 465000,
+    'obelisk': 440000,
+    'providence': 435000
+}
+
+ICE_PRODUCT_TYPES = {
+    'Heavy Water': 16272,
+    'Liquid Ozone': 16273, 
+    'Strontium Clathrates': 16275, 
+    'Helium Isotopes': 16274, 
+    'Nitrogen Isotopes': 17888, 
+    'Oxygen Isotopes': 17887, 
+    'Hydrogen Isotopes': 17889,
+}
+
+ICE_TYPES = {
+    'Compressed Clear Icicle': { 'type_id': 28434, 'base_yield': {
+        'Heavy Water': 69,
+        'Liquid Ozone': 35, 
+        'Strontium Clathrates': 1, 
+        'Helium Isotopes': 414, 
+        'Nitrogen Isotopes': 0, 
+        'Oxygen Isotopes': 0, 
+        'Hydrogen Isotopes': 0,
+    }},
+    'Compressed White Glaze': { 'type_id': 28444, 'base_yield': {
+        'Heavy Water': 69,
+        'Liquid Ozone': 35, 
+        'Strontium Clathrates': 1, 
+        'Helium Isotopes': 0, 
+        'Nitrogen Isotopes': 414, 
+        'Oxygen Isotopes': 0, 
+        'Hydrogen Isotopes': 0,
+    }},
+    'Compressed Blue Ice': { 'type_id': 28433, 'base_yield': {
+        'Heavy Water': 69,
+        'Liquid Ozone': 35, 
+        'Strontium Clathrates': 1, 
+        'Helium Isotopes': 0, 
+        'Nitrogen Isotopes': 0, 
+        'Oxygen Isotopes': 414, 
+        'Hydrogen Isotopes': 0,
+    }},
+    'Compressed Glacial Mass': { 'type_id': 28438, 'base_yield': {
+        'Heavy Water': 69,
+        'Liquid Ozone': 35, 
+        'Strontium Clathrates': 1, 
+        'Helium Isotopes': 0, 
+        'Nitrogen Isotopes': 0, 
+        'Oxygen Isotopes': 0, 
+        'Hydrogen Isotopes': 414,
+    }},
+    'Compressed Enriched Clear Icicle': { 'type_id': 28436, 'base_yield': {
+        'Heavy Water': 104,
+        'Liquid Ozone': 55, 
+        'Strontium Clathrates': 1, 
+        'Helium Isotopes': 483, 
+        'Nitrogen Isotopes': 0, 
+        'Oxygen Isotopes': 0, 
+        'Hydrogen Isotopes': 0,
+    }},
+    'Compressed Pristine White Glaze': { 'type_id': 28441, 'base_yield': {
+        'Heavy Water': 104,
+        'Liquid Ozone': 55, 
+        'Strontium Clathrates': 1, 
+        'Helium Isotopes': 0, 
+        'Nitrogen Isotopes': 483, 
+        'Oxygen Isotopes': 0, 
+        'Hydrogen Isotopes': 0,
+    }},
+    'Compressed Thick Blue Ice': { 'type_id': 28443, 'base_yield': {
+        'Heavy Water': 104,
+        'Liquid Ozone': 55, 
+        'Strontium Clathrates': 1, 
+        'Helium Isotopes': 0, 
+        'Nitrogen Isotopes': 0, 
+        'Oxygen Isotopes': 483, 
+        'Hydrogen Isotopes': 0,
+    }},
+    'Compressed Smooth Glacial Mass': { 'type_id': 28442, 'base_yield': {
+        'Heavy Water': 104,
+        'Liquid Ozone': 55, 
+        'Strontium Clathrates': 1, 
+        'Helium Isotopes': 0, 
+        'Nitrogen Isotopes': 0, 
+        'Oxygen Isotopes': 0, 
+        'Hydrogen Isotopes': 483,
+    }},
+    'Compressed Glare Crust': { 'type_id': 28439, 'base_yield': {
+        'Heavy Water': 1381,
+        'Liquid Ozone': 691, 
+        'Strontium Clathrates': 35, 
+        'Helium Isotopes': 0, 
+        'Nitrogen Isotopes': 0, 
+        'Oxygen Isotopes': 0, 
+        'Hydrogen Isotopes': 0,
+    }},
+    'Compressed Dark Glitter': { 'type_id': 28435, 'base_yield': {
+        'Heavy Water': 691,
+        'Liquid Ozone': 1381, 
+        'Strontium Clathrates': 69, 
+        'Helium Isotopes': 0, 
+        'Nitrogen Isotopes': 0, 
+        'Oxygen Isotopes': 0, 
+        'Hydrogen Isotopes': 0,
+    }},
+    'Compressed Gelidus': { 'type_id': 28437, 'base_yield': {
+        'Heavy Water': 345,
+        'Liquid Ozone': 691, 
+        'Strontium Clathrates': 104, 
+        'Helium Isotopes': 0, 
+        'Nitrogen Isotopes': 0, 
+        'Oxygen Isotopes': 0, 
+        'Hydrogen Isotopes': 0,
+    }},
+    'Compressed Krystallos': { 'type_id': 28440, 'base_yield': {
+        'Heavy Water': 173,
+        'Liquid Ozone': 691, 
+        'Strontium Clathrates': 173, 
+        'Helium Isotopes': 0, 
+        'Nitrogen Isotopes': 0, 
+        'Oxygen Isotopes': 0, 
+        'Hydrogen Isotopes': 0,
+    }},
+}
+
 def market_ice_index(request):
     context = {}
     context['params'] = {
@@ -34,14 +170,7 @@ def market_ice_index(request):
     reprocessing_yield = (50+context['params']['rig_modifier'])*(1+context['params']['security_modifier'])*(1+context['params']['structure_modifier'])*(1+(context['params']['reprocessing_skill_modifier']*0.03))*(1+(context['params']['reprocessing_efficiency_skill_modifier']*0.02))*(1+(context['params']['ice_processing_skill_modifier']*0.02))*(1+context['params']['implant_modifier'])
     context['params']['reprocessing_yield'] = reprocessing_yield
 
-    freighter_hull_capacity = {
-        'fenrir': 435000,
-        'charon': 465000,
-        'obelisk': 440000,
-        'providence': 435000
-    }
-
-    freighter_capacity = freighter_hull_capacity[context['params']['freighter_hull']]
+    freighter_capacity = FREIGHTER_HULL_CAPACITY[context['params']['freighter_hull']]
     freighter_capacity = freighter_capacity * (1+context['params']['freighter_skill']*0.05)
     if context['params']['freighter_fit'] == 'expanded_cargoholds':
         freighter_capacity = freighter_capacity * (1.275 ** 3)
@@ -52,37 +181,29 @@ def market_ice_index(request):
     context['params']['freighter_capacity'] = freighter_capacity
     context['params']['freighter_ice_capacity'] = freighter_capacity/100
 
-    market_hubs = {
-        'Jita': REGION_ID_FORGE,
-        'Amarr': REGION_ID_DOMAIN,
-        'Dodixie': REGION_ID_SINQLAISON,
-        'Hek': REGION_ID_METROPOLIS,
-        'Rens': REGION_ID_HEIMATAR
+
+    context['market_hubs'] = MARKET_HUBS
+
+    context['ice_product_types'] = ICE_PRODUCT_TYPES
+
+    ice_products_orders = market_service.get_ice_products_orders(ICE_PRODUCT_TYPES.values())
+    ice_products_history = market_service.get_ice_products_history(ICE_PRODUCT_TYPES.values(), MARKET_HUBS.values())
+
+    average_transaction_prices = {
+        'buy': {},
+        'sell': {},
+        'gain': {},
+        'gain_percent': {},
     }
-    context['market_hubs'] = market_hubs
 
-    ice_product_types = {
-        'Heavy Water': 16272,
-        'Liquid Ozone': 16273, 
-        'Strontium Clathrates': 16275, 
-        'Helium Isotopes': 16274, 
-        'Nitrogen Isotopes': 17888, 
-        'Oxygen Isotopes': 17887, 
-        'Hydrogen Isotopes': 17889,
-    }
-    context['ice_product_types'] = ice_product_types
-
-    ice_products_orders = market_service.get_ice_products_orders(ice_product_types.values())
-    ice_products_history = market_service.get_ice_products_history(ice_product_types.values(), market_hubs.values())
-
-    for ice_product_type in ice_product_types:
+    for ice_product_type in ICE_PRODUCT_TYPES:
         context['ice_product_data'][ice_product_type] = {}
         best_sell_price_global = 0
         best_buy_price_global = 999999999
         for market_hub in ['Jita', 'Amarr']:
             context['ice_product_data'][ice_product_type][market_hub] = {'best_sell_price': 0, 'best_buy_price': 999999999,'best_buy_order_volume': 0}
-            market_hub_ice_product_sell_orders = ice_products_orders.filter(region_id=market_hubs[market_hub], type_id=ice_product_types[ice_product_type], is_buy_order=False).order_by('price')
-            market_hub_ice_product_buy_orders = ice_products_orders.filter(region_id=market_hubs[market_hub], type_id=ice_product_types[ice_product_type], is_buy_order=True).order_by('-price')
+            market_hub_ice_product_sell_orders = ice_products_orders.filter(region_id=MARKET_HUBS[market_hub], type_id=ICE_PRODUCT_TYPES[ice_product_type], is_buy_order=False).order_by('price')
+            market_hub_ice_product_buy_orders = ice_products_orders.filter(region_id=MARKET_HUBS[market_hub], type_id=ICE_PRODUCT_TYPES[ice_product_type], is_buy_order=True).order_by('-price')
             if market_hub_ice_product_sell_orders.exists():
                 best_sell_order = market_hub_ice_product_sell_orders.first()
                 best_sell_price = best_sell_order.price
@@ -97,141 +218,46 @@ def market_ice_index(request):
                 best_buy_order_volume = best_buy_order.volume_remain
                 context['ice_product_data'][ice_product_type][market_hub]['best_buy_price'] = best_buy_price
                 context['ice_product_data'][ice_product_type][market_hub]['best_buy_order_volume']= best_buy_order_volume
-            market_hub_ice_product_history = ice_products_history.filter(region_id=market_hubs[market_hub], type_id=ice_product_types[ice_product_type]).order_by('-date')
+            market_hub_ice_product_history = ice_products_history.filter(region_id=MARKET_HUBS[market_hub], type_id=ICE_PRODUCT_TYPES[ice_product_type]).order_by('-date')
             if market_hub_ice_product_history.exists():
-                context['ice_product_data'][ice_product_type][market_hub]['7d_avg_price'] = market_hub_ice_product_history.filter(date__gte=datetime.now() - timedelta(days=8)).aggregate(avg_price=Avg('average'))['avg_price']
-                context['ice_product_data'][ice_product_type][market_hub]['30d_avg_price'] = market_hub_ice_product_history.filter(date__gte=datetime.now() - timedelta(days=31)).aggregate(avg_price=Avg('average'))['avg_price']
-                context['ice_product_data'][ice_product_type][market_hub]['90d_avg_price'] = market_hub_ice_product_history.filter(date__gte=datetime.now() - timedelta(days=91)).aggregate(avg_price=Avg('average'))['avg_price']
+                context['ice_product_data'][ice_product_type][market_hub]['7d_avg_price'] = market_hub_ice_product_history.filter(date__gte=datetime.now() - timedelta(days=8)).aggregate(avg_price=Avg('highest'))['avg_price']
+                context['ice_product_data'][ice_product_type][market_hub]['30d_avg_price'] = market_hub_ice_product_history.filter(date__gte=datetime.now() - timedelta(days=31)).aggregate(avg_price=Avg('highest'))['avg_price']
+                context['ice_product_data'][ice_product_type][market_hub]['90d_avg_price'] = market_hub_ice_product_history.filter(date__gte=datetime.now() - timedelta(days=91)).aggregate(avg_price=Avg('highest'))['avg_price']
                 context['ice_product_data'][ice_product_type][market_hub]['7d_vol'] = market_hub_ice_product_history.filter(date__gte=datetime.now() - timedelta(days=8)).aggregate(total_vol=Sum('volume'))['total_vol']
                 context['ice_product_data'][ice_product_type][market_hub]['30d_vol'] = market_hub_ice_product_history.filter(date__gte=datetime.now() - timedelta(days=31)).aggregate(total_vol=Sum('volume'))['total_vol']
                 context['ice_product_data'][ice_product_type][market_hub]['90d_vol'] = market_hub_ice_product_history.filter(date__gte=datetime.now() - timedelta(days=91)).aggregate(total_vol=Sum('volume'))['total_vol']
+                chart_data = list(market_hub_ice_product_history.filter(date__gte=datetime.now() - timedelta(days=14)).order_by('date').values_list('highest', flat=True))
+                context['ice_product_data'][ice_product_type][market_hub]['chart_data'] = {
+                    'color': 'lightcoral' if best_sell_price < chart_data[-1] else 'lightgreen',
+                    'values': ",".join(map(str, chart_data + [best_sell_price])),
+                    'min': min(chart_data + [best_sell_price]),
+                    'max': max(chart_data + [best_sell_price]),
+                }
         context['ice_product_data'][ice_product_type]['best_sell_price_global'] = best_sell_price_global
         context['ice_product_data'][ice_product_type]['best_buy_price_global'] = best_buy_price_global
 
-    ice_types = {
-        'Compressed Clear Icicle': { 'type_id': 28434, 'base_yield': {
-            'Heavy Water': 69,
-            'Liquid Ozone': 35, 
-            'Strontium Clathrates': 1, 
-            'Helium Isotopes': 414, 
-            'Nitrogen Isotopes': 0, 
-            'Oxygen Isotopes': 0, 
-            'Hydrogen Isotopes': 0,
-        }},
-        'Compressed White Glaze': { 'type_id': 28444, 'base_yield': {
-            'Heavy Water': 69,
-            'Liquid Ozone': 35, 
-            'Strontium Clathrates': 1, 
-            'Helium Isotopes': 0, 
-            'Nitrogen Isotopes': 414, 
-            'Oxygen Isotopes': 0, 
-            'Hydrogen Isotopes': 0,
-        }},
-        'Compressed Blue Ice': { 'type_id': 28433, 'base_yield': {
-            'Heavy Water': 69,
-            'Liquid Ozone': 35, 
-            'Strontium Clathrates': 1, 
-            'Helium Isotopes': 0, 
-            'Nitrogen Isotopes': 0, 
-            'Oxygen Isotopes': 414, 
-            'Hydrogen Isotopes': 0,
-        }},
-        'Compressed Glacial Mass': { 'type_id': 28438, 'base_yield': {
-            'Heavy Water': 69,
-            'Liquid Ozone': 35, 
-            'Strontium Clathrates': 1, 
-            'Helium Isotopes': 0, 
-            'Nitrogen Isotopes': 0, 
-            'Oxygen Isotopes': 0, 
-            'Hydrogen Isotopes': 414,
-        }},
-        'Compressed Enriched Clear Icicle': { 'type_id': 28436, 'base_yield': {
-            'Heavy Water': 104,
-            'Liquid Ozone': 55, 
-            'Strontium Clathrates': 1, 
-            'Helium Isotopes': 483, 
-            'Nitrogen Isotopes': 0, 
-            'Oxygen Isotopes': 0, 
-            'Hydrogen Isotopes': 0,
-        }},
-        'Compressed Pristine White Glaze': { 'type_id': 28441, 'base_yield': {
-            'Heavy Water': 104,
-            'Liquid Ozone': 55, 
-            'Strontium Clathrates': 1, 
-            'Helium Isotopes': 0, 
-            'Nitrogen Isotopes': 483, 
-            'Oxygen Isotopes': 0, 
-            'Hydrogen Isotopes': 0,
-        }},
-        'Compressed Thick Blue Ice': { 'type_id': 28443, 'base_yield': {
-            'Heavy Water': 104,
-            'Liquid Ozone': 55, 
-            'Strontium Clathrates': 1, 
-            'Helium Isotopes': 0, 
-            'Nitrogen Isotopes': 0, 
-            'Oxygen Isotopes': 483, 
-            'Hydrogen Isotopes': 0,
-        }},
-        'Compressed Smooth Glacial Mass': { 'type_id': 28442, 'base_yield': {
-            'Heavy Water': 104,
-            'Liquid Ozone': 55, 
-            'Strontium Clathrates': 1, 
-            'Helium Isotopes': 0, 
-            'Nitrogen Isotopes': 0, 
-            'Oxygen Isotopes': 0, 
-            'Hydrogen Isotopes': 483,
-        }},
-        'Compressed Glare Crust': { 'type_id': 28439, 'base_yield': {
-            'Heavy Water': 1381,
-            'Liquid Ozone': 691, 
-            'Strontium Clathrates': 35, 
-            'Helium Isotopes': 0, 
-            'Nitrogen Isotopes': 0, 
-            'Oxygen Isotopes': 0, 
-            'Hydrogen Isotopes': 0,
-        }},
-        'Compressed Dark Glitter': { 'type_id': 28435, 'base_yield': {
-            'Heavy Water': 691,
-            'Liquid Ozone': 1381, 
-            'Strontium Clathrates': 69, 
-            'Helium Isotopes': 0, 
-            'Nitrogen Isotopes': 0, 
-            'Oxygen Isotopes': 0, 
-            'Hydrogen Isotopes': 0,
-        }},
-        'Compressed Gelidus': { 'type_id': 28437, 'base_yield': {
-            'Heavy Water': 345,
-            'Liquid Ozone': 691, 
-            'Strontium Clathrates': 104, 
-            'Helium Isotopes': 0, 
-            'Nitrogen Isotopes': 0, 
-            'Oxygen Isotopes': 0, 
-            'Hydrogen Isotopes': 0,
-        }},
-        'Compressed Krystallos': { 'type_id': 28440, 'base_yield': {
-            'Heavy Water': 173,
-            'Liquid Ozone': 691, 
-            'Strontium Clathrates': 173, 
-            'Helium Isotopes': 0, 
-            'Nitrogen Isotopes': 0, 
-            'Oxygen Isotopes': 0, 
-            'Hydrogen Isotopes': 0,
-        }},
-    }
-    context['ice_types'] = ice_types
-    ice_types_type_ids = [ice_type['type_id'] for ice_type in ice_types.values()]
-    ice_sell_orders = market_service.get_ice_sell_orders(ice_types_type_ids)
-    ice_history = market_service.get_ice_history(ice_types_type_ids, market_hubs.values())
+        average_sell_price = {
+            '7d': market_service.get_average_transaction_price(type_id=ICE_PRODUCT_TYPES[ice_product_type], days_back=7, is_buy=False) * (1-market_service.get_sales_tax()-market_service.get_brokers_fee()),
+            '14d': market_service.get_average_transaction_price(type_id=ICE_PRODUCT_TYPES[ice_product_type], days_back=14, is_buy=False) * (1-market_service.get_sales_tax()-market_service.get_brokers_fee()),
+            '30d': market_service.get_average_transaction_price(type_id=ICE_PRODUCT_TYPES[ice_product_type], days_back=30, is_buy=False) * (1-market_service.get_sales_tax()-market_service.get_brokers_fee()),
+            '90d': market_service.get_average_transaction_price(type_id=ICE_PRODUCT_TYPES[ice_product_type], days_back=90, is_buy=False) * (1-market_service.get_sales_tax()-market_service.get_brokers_fee()),
+        }
+        average_transaction_prices['sell'][ice_product_type] = average_sell_price
 
-    for ice_type in ice_types:
+    context['ice_types'] = ICE_TYPES
+    ice_types_type_ids = [ice_type['type_id'] for ice_type in ICE_TYPES.values()]
+    ice_sell_orders = market_service.get_ice_sell_orders(ice_types_type_ids)
+    ice_history = market_service.get_ice_history(ice_types_type_ids, MARKET_HUBS.values())
+
+    for ice_type in ICE_TYPES:
         context['ice_data'][ice_type] = {}
         best_price_global = 999999999
         best_full_cargo_average_price = 999999999
         best_market_hub_full_cargo_price = 999999999999
-        for market_hub in market_hubs:
+        for market_hub in MARKET_HUBS:
             context['ice_data'][ice_type][market_hub] = {}
-            market_hub_ice_sell_orders = ice_sell_orders.filter(region_id=market_hubs[market_hub], type_id=ice_types[ice_type]['type_id']).order_by('price')
-            market_hub_ice_history = ice_history.filter(region_id=market_hubs[market_hub], type_id=ice_types[ice_type]['type_id']).order_by('-date')
+            market_hub_ice_sell_orders = ice_sell_orders.filter(region_id=MARKET_HUBS[market_hub], type_id=ICE_TYPES[ice_type]['type_id']).order_by('price')
+            market_hub_ice_history = ice_history.filter(region_id=MARKET_HUBS[market_hub], type_id=ICE_TYPES[ice_type]['type_id']).order_by('-date')
             if market_hub_ice_sell_orders.exists():
                 market_hub_sell_orders_total_volume = market_hub_ice_sell_orders.aggregate(total_volume=Sum('volume_remain'))['total_volume']
                 accumulated_volume = 0.0
@@ -281,11 +307,11 @@ def market_ice_index(request):
                 total_sell_price = 0
                 total_buy_price = 0
                 context['ice_data'][ice_type][market_hub]['reprocess'] = {}
-                for ice_product_type in ice_product_types:
-                    ice_product_type_yield = ice_types[ice_type]['base_yield'][ice_product_type] * reprocessing_yield/100
+                for ice_product_type in ICE_PRODUCT_TYPES:
+                    ice_product_type_yield = ICE_TYPES[ice_type]['base_yield'][ice_product_type] * reprocessing_yield/100
                     sell_order_price = ice_product_type_yield * context['ice_product_data'][ice_product_type][market_hub]['best_sell_price']
                     # buy_order_price = ice_product_type_yield * context['ice_product_data'][ice_product_type][market_hub]['best_buy_price']
-                    market_hub_ice_product_buy_orders = ice_products_orders.filter(region_id=market_hubs[market_hub], type_id=ice_product_types[ice_product_type], is_buy_order=True).order_by('-price')
+                    market_hub_ice_product_buy_orders = ice_products_orders.filter(region_id=MARKET_HUBS[market_hub], type_id=ICE_PRODUCT_TYPES[ice_product_type], is_buy_order=True).order_by('-price')
 
                     accumulated_buy_volume = 0.0
                     total_buy_order_cost = 0.0
@@ -325,4 +351,38 @@ def market_ice_index(request):
         context['ice_data'][ice_type]['Amarr']['reprocess']['sell_price_profit'] = context['ice_data'][ice_type]['Amarr']['reprocess']['total_sell_price']*context['params']['freighter_capacity']/100 - best_market_hub_full_cargo_price
         context['ice_data'][ice_type]['Amarr']['reprocess']['buy_price_profit'] = context['ice_data'][ice_type]['Amarr']['reprocess']['total_buy_price'] - best_market_hub_full_cargo_price
 
+        average_buy_price = {
+            '7d': market_service.get_average_transaction_price(type_id=ICE_TYPES[ice_type]['type_id'], days_back=7, is_buy=True),
+            '14d': market_service.get_average_transaction_price(type_id=ICE_TYPES[ice_type]['type_id'], days_back=14, is_buy=True),
+            '30d': market_service.get_average_transaction_price(type_id=ICE_TYPES[ice_type]['type_id'], days_back=30, is_buy=True),
+            '90d': market_service.get_average_transaction_price(type_id=ICE_TYPES[ice_type]['type_id'], days_back=90, is_buy=True),
+        }
+        average_sell_price = {
+            '7d': calculate_average_sell_price_from_yield(ice_type, {item: data['7d'] for item, data in average_transaction_prices['sell'].items()}, reprocessing_yield),
+            '14d': calculate_average_sell_price_from_yield(ice_type, {item: data['14d'] for item, data in average_transaction_prices['sell'].items()}, reprocessing_yield),
+            '30d': calculate_average_sell_price_from_yield(ice_type, {item: data['30d'] for item, data in average_transaction_prices['sell'].items()}, reprocessing_yield),
+            '90d': calculate_average_sell_price_from_yield(ice_type, {item: data['90d'] for item, data in average_transaction_prices['sell'].items()}, reprocessing_yield),
+        }
+        average_transaction_prices['buy'][ice_type] = average_buy_price
+        average_transaction_prices['sell'][ice_type] = average_sell_price
+        average_transaction_prices['gain'][ice_type] = {
+            '7d': average_sell_price['7d'] - average_buy_price['7d'],
+            '14d': average_sell_price['14d'] - average_buy_price['14d'],
+            '30d': average_sell_price['30d'] - average_buy_price['30d'],
+            '90d': average_sell_price['90d'] - average_buy_price['90d'],
+        }
+        average_transaction_prices['gain_percent'][ice_type] = {
+            '7d': average_transaction_prices['gain'][ice_type]['7d'] / average_buy_price['7d'] * 100 if average_buy_price['7d'] != 0 else 0,
+            '14d': average_transaction_prices['gain'][ice_type]['14d'] / average_buy_price['14d'] * 100 if average_buy_price['14d'] != 0 else 0,
+            '30d': average_transaction_prices['gain'][ice_type]['30d'] / average_buy_price['30d'] * 100 if average_buy_price['30d'] != 0 else 0,
+            '90d': average_transaction_prices['gain'][ice_type]['90d'] / average_buy_price['90d'] * 100 if average_buy_price['90d'] != 0 else 0,
+        }
+
+    context['average_transaction_prices'] = average_transaction_prices
     return render(request, "market/ice.html", context)
+
+def calculate_average_sell_price_from_yield(ice_type, prices, reprocessing_yield=100):
+    total_price = 0
+    for ice_product_type in ICE_PRODUCT_TYPES:
+        total_price += ICE_TYPES[ice_type]['base_yield'][ice_product_type] * reprocessing_yield/100 * prices[ice_product_type]
+    return total_price
