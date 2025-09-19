@@ -226,9 +226,9 @@ def market_ice_index(request):
                 context['ice_product_data'][ice_product_type][market_hub]['7d_vol'] = market_hub_ice_product_history.filter(date__gte=datetime.now() - timedelta(days=8)).aggregate(total_vol=Sum('volume'))['total_vol']
                 context['ice_product_data'][ice_product_type][market_hub]['30d_vol'] = market_hub_ice_product_history.filter(date__gte=datetime.now() - timedelta(days=31)).aggregate(total_vol=Sum('volume'))['total_vol']
                 context['ice_product_data'][ice_product_type][market_hub]['90d_vol'] = market_hub_ice_product_history.filter(date__gte=datetime.now() - timedelta(days=91)).aggregate(total_vol=Sum('volume'))['total_vol']
-                chart_data = list(market_hub_ice_product_history.filter(date__gte=datetime.now() - timedelta(days=14)).order_by('date').values_list('highest', flat=True))
+                chart_data = list(market_hub_ice_product_history.filter(date__gte=datetime.now() - timedelta(days=30)).order_by('date').values_list('highest', flat=True))
                 context['ice_product_data'][ice_product_type][market_hub]['chart_data'] = {
-                    'color': 'lightcoral' if best_sell_price < chart_data[-1] else 'lightgreen',
+                    'color': ('lightcoral' if best_sell_price < chart_data[-1] else 'lightgreen') if chart_data else 'white',
                     'values': ",".join(map(str, chart_data + [best_sell_price])),
                     'min': min(chart_data + [best_sell_price]),
                     'max': max(chart_data + [best_sell_price]),
@@ -346,10 +346,10 @@ def market_ice_index(request):
         context['ice_data'][ice_type]['best_price'] = best_price_global
         context['ice_data'][ice_type]['best_full_cargo_average_price'] = best_full_cargo_average_price
         context['ice_data'][ice_type]['best_market_hub_full_cargo_price'] = best_market_hub_full_cargo_price
-        context['ice_data'][ice_type]['Jita']['reprocess']['sell_price_profit'] = context['ice_data'][ice_type]['Jita']['reprocess']['total_sell_price']*context['params']['freighter_capacity']/100 - best_market_hub_full_cargo_price
-        context['ice_data'][ice_type]['Jita']['reprocess']['buy_price_profit'] = context['ice_data'][ice_type]['Jita']['reprocess']['total_buy_price'] - best_market_hub_full_cargo_price
-        context['ice_data'][ice_type]['Amarr']['reprocess']['sell_price_profit'] = context['ice_data'][ice_type]['Amarr']['reprocess']['total_sell_price']*context['params']['freighter_capacity']/100 - best_market_hub_full_cargo_price
-        context['ice_data'][ice_type]['Amarr']['reprocess']['buy_price_profit'] = context['ice_data'][ice_type]['Amarr']['reprocess']['total_buy_price'] - best_market_hub_full_cargo_price
+        context['ice_data'][ice_type]['Jita']['reprocess']['sell_price_profit'] = context['ice_data'][ice_type]['Jita']['reprocess']['total_sell_price']*(1-market_service.get_sales_tax()-market_service.get_brokers_fee())*context['params']['freighter_capacity']/100 - best_market_hub_full_cargo_price
+        context['ice_data'][ice_type]['Jita']['reprocess']['buy_price_profit'] = context['ice_data'][ice_type]['Jita']['reprocess']['total_buy_price']*(1-market_service.get_sales_tax()) - best_market_hub_full_cargo_price
+        context['ice_data'][ice_type]['Amarr']['reprocess']['sell_price_profit'] = context['ice_data'][ice_type]['Amarr']['reprocess']['total_sell_price']*(1-market_service.get_sales_tax()-market_service.get_brokers_fee())*context['params']['freighter_capacity']/100 - best_market_hub_full_cargo_price
+        context['ice_data'][ice_type]['Amarr']['reprocess']['buy_price_profit'] = context['ice_data'][ice_type]['Amarr']['reprocess']['total_buy_price']*(1-market_service.get_sales_tax()) - best_market_hub_full_cargo_price
 
         average_buy_price = {
             '7d': market_service.get_average_transaction_price(type_id=ICE_TYPES[ice_type]['type_id'], days_back=7, is_buy=True),
