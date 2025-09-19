@@ -20,8 +20,8 @@
     <td>{{ item_data|get_by_key:trade_item.type_id|get_by_key:'global_lowest_sell_order'|get_by_key:'price'|isk_value}}</td>
     <td>{{ item_data|get_by_key:trade_item.type_id|get_by_key:'global_lowest_sell_order'|get_by_key:'hub'}}</td>
     {% with sell_history=item_data_hub|get_by_key:'my_sell_history' %}
-    <td>{{ sell_history|get_by_key:'volume' }}</td>
-    <td>{{ sell_history|get_by_key:'avg_price'|isk_value }}</td>
+    <!-- <td>{{ sell_history|get_by_key:'volume' }}</td>
+    <td>{{ sell_history|get_by_key:'avg_price'|isk_value }}</td> -->
     <td class="history-last-price"><a href="#">{{ sell_history|get_by_key:'last_price'|isk_value }}</a></td>
     {% endwith %}
     <td>{{ item_data_hub|get_by_key:'my_buy_volume' }}</td>
@@ -35,8 +35,8 @@
     <td>{{ item_data|get_by_key:trade_item.type_id|get_by_key:'global_highest_buy_order'|get_by_key:'price'|isk_value}}</td>
     <td>{{ item_data|get_by_key:trade_item.type_id|get_by_key:'global_highest_buy_order'|get_by_key:'hub'}}</td>
     {% with buy_history=item_data_hub|get_by_key:'my_buy_history' %}
-    <td>{{ buy_history|get_by_key:'volume' }}</td>
-    <td>{{ buy_history|get_by_key:'avg_price'|isk_value }}</td>
+    <!-- <td>{{ buy_history|get_by_key:'volume' }}</td>
+    <td>{{ buy_history|get_by_key:'avg_price'|isk_value }}</td> -->
     <td class="history-last-price"><a href="#">{{ buy_history|get_by_key:'last_price'|isk_value }}</a></td>
     {% endwith %}
     <td>{{ item_data_hub|get_by_key:'history_daily_volume_avg'|floatformat:0 }}</td>
