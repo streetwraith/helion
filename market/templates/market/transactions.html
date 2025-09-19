@@ -26,6 +26,8 @@
     <option value="{{ trade_hub.station_id }}" {% if filters|get_by_key:'location_id' == trade_hub.station_id %}selected{% endif %}>{{ trade_hub.name }}</option>
     {% endfor %}
   </select>
+  <label for="type_name">Name</label>
+  <input type="text" id="type_name" name="type_name" value="{{ filters|get_by_key:'type_name' }}">
   <button type="submit">filter</button>
 </form>
 
