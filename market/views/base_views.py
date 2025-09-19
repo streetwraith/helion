@@ -30,8 +30,8 @@ def shopping_list(request):
     if request.method == 'POST':
         query = request.POST.get('items')
         item_names = []
-        pattern = re.compile(r"^(.*?)\s*x?(\d+)?\s*$", re.IGNORECASE)  
-        # Captures: item name (.*?) and optional "x<number>"
+        pattern = re.compile(r"^(.*?)(?:\s+x(\d+))?\s*$", re.IGNORECASE)
+        # Captures: item name (.*?) and optional " x<number>"
 
         for line in query.splitlines():
             line = line.strip().lower()  # Normalize: strip spaces and lowercase
