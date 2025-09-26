@@ -100,10 +100,10 @@
 <table>
     <tr>
         <th></th>
-        <th colspan="8">
+        <th colspan="9">
             Jita
         </th>
-        <th colspan="8">
+        <th colspan="9">
             Amarr
         </th>
     </tr>
@@ -121,6 +121,7 @@
         <th><span>90d vol</span></th> -->
         <th><span>best buy price</span></th>
         <th><span>best buy vol</span></th>
+        <th><span>stock</span></th>
 
         <th>h/l</th>
         <th><span>chart</span></th>
@@ -133,6 +134,7 @@
         <th><span>90d vol</span></th> -->
         <th><span>best buy price</span></th>
         <th><span>best buy vol</span></th>
+        <th><span>stock</span></th>
     </tr>
     {% for ice_product_type in ice_product_types %}
     {% with ice_product_type_id=ice_product_types|get_by_key:ice_product_type %}
@@ -154,6 +156,7 @@
         <td>{{ ice_product|get_by_key:'90d_vol'|isk_value_k }}</td> -->
         <td>{{ ice_product|get_by_key:'best_buy_price' }}</td>
         <td>{{ ice_product|get_by_key:'best_buy_order_volume'|isk_value }}</td>
+        <td>{{ ice_product|get_by_key:'stock'|isk_value_mil }}</td>
     {% endwith %}
     {% with ice_product=ice_product_data|get_by_key:ice_product_type|get_by_key:'Amarr' %}
         <td style="font-size:50%; height: 32px;">
@@ -171,6 +174,7 @@
         <td>{{ ice_product|get_by_key:'90d_vol'|isk_value_k }}</td> -->
         <td>{{ ice_product|get_by_key:'best_buy_price' }}</td>
         <td>{{ ice_product|get_by_key:'best_buy_order_volume'|isk_value }}</td>
+        <td>{{ ice_product|get_by_key:'stock'|isk_value_mil }}</td>
     </tr>
     {% endwith %}
     {% endwith %}

@@ -165,7 +165,7 @@ def market_trade_hub(request, region_id):
     character_assets = market_service.get_character_assets(
         character_id=character_id,
         trade_items=list(trade_items.values_list('type_id', flat=True)),
-        location_id=trade_hub_region.station_id
+        location_ids=trade_hub_region.station_id
     )
 
     # Get all market orders in trade hub range

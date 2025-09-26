@@ -14,6 +14,14 @@ MARKET_HUBS = {
     'Rens': REGION_ID_HEIMATAR
 }
 
+MARKET_HUB_LOCATION_IDS = {
+    'Jita': 60003760,
+    'Amarr': 60008494,
+    'Dodixie': 60011866,
+    'Hek': 60005686,
+    'Rens': 60004588
+}
+
 FREIGHTER_HULL_CAPACITY = {
     'fenrir': 435000,
     'charon': 465000,
@@ -196,8 +204,11 @@ def market_ice_index(request):
         'gain_percent': {},
     }
 
+    ice_products_stock = market_service.get_character_assets(request.session['esi_token']['character_id'], [MARKET_HUB_LOCATION_IDS['Jita'], MARKET_HUB_LOCATION_IDS['Amarr']], ICE_PRODUCT_TYPES.values())
+
     for ice_product_type in ICE_PRODUCT_TYPES:
         context['ice_product_data'][ice_product_type] = {}
+
         best_sell_price_global = 0
         best_buy_price_global = 999999999
         for market_hub in ['Jita', 'Amarr']:
@@ -233,6 +244,11 @@ def market_ice_index(request):
                     'min': min(chart_data + [best_sell_price]),
                     'max': max(chart_data + [best_sell_price]),
                 }
+
+            if ICE_PRODUCT_TYPES[ice_product_type] in ice_products_stock[MARKET_HUB_LOCATION_IDS[market_hub]]:
+                context['ice_product_data'][ice_product_type][market_hub]['stock'] = ice_products_stock[MARKET_HUB_LOCATION_IDS[market_hub]][ICE_PRODUCT_TYPES[ice_product_type]]
+            else:
+                context['ice_product_data'][ice_product_type][market_hub]['stock'] = 0
         context['ice_product_data'][ice_product_type]['best_sell_price_global'] = best_sell_price_global
         context['ice_product_data'][ice_product_type]['best_buy_price_global'] = best_buy_price_global
 

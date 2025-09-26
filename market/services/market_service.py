@@ -433,15 +433,38 @@ def get_trade_history(type_id, location_id=None, is_buy=False):
         history['last_price'] = transactions.latest('date').unit_price
     return history
 
-def get_character_assets(character_id, location_id, trade_items):
-    character_assets = {}
+def get_character_assets(character_id, location_ids, trade_items):
     api_character_assets = esi.client.Assets.get_characters_character_id_assets(character_id=character_id, token = Token.get_token(character_id, 'esi-assets.read_assets.v1').valid_access_token()).results()
-    for index, value in enumerate(api_character_assets):
-        type_id = value['type_id']
-        if type_id in trade_items and value['location_type'] == 'station' and value['location_id'] == location_id:
-            if type_id not in character_assets:
-                character_assets[type_id] = 0
-            character_assets[type_id] = value['quantity'] + character_assets[type_id]
+
+    # Check if original parameter was a list to determine return format
+    return_by_location = isinstance(location_ids, list)
+
+    # Ensure location_ids is a list for processing
+    if not return_by_location:
+        location_ids = [location_ids]
+
+    if return_by_location:
+        # Return format: {location_id: {type_id: quantity}}
+        character_assets = {}
+        for index, value in enumerate(api_character_assets):
+            type_id = value['type_id']
+            location_id = value['location_id']
+            if type_id in trade_items and value['location_type'] == 'station' and location_id in location_ids:
+                if location_id not in character_assets:
+                    character_assets[location_id] = {}
+                if type_id not in character_assets[location_id]:
+                    character_assets[location_id][type_id] = 0
+                character_assets[location_id][type_id] = value['quantity'] + character_assets[location_id][type_id]
+    else:
+        # Return format: {type_id: quantity} (aggregated totals)
+        character_assets = {}
+        for index, value in enumerate(api_character_assets):
+            type_id = value['type_id']
+            if type_id in trade_items and value['location_type'] == 'station' and value['location_id'] in location_ids:
+                if type_id not in character_assets:
+                    character_assets[type_id] = 0
+                character_assets[type_id] = value['quantity'] + character_assets[type_id]
+
     return character_assets
 
 def get_market_history(region_id, type_id, days_back=90):
