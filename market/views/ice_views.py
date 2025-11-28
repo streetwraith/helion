@@ -245,7 +245,7 @@ def market_ice_index(request):
                     'max': max(chart_data + [best_sell_price]),
                 }
 
-            if MARKET_HUB_LOCATION_IDS[market_hub] in ICE_PRODUCT_TYPES[ice_product_type] in ice_products_stock[MARKET_HUB_LOCATION_IDS[market_hub]]:
+            if MARKET_HUB_LOCATION_IDS[market_hub] in ice_products_stock and ICE_PRODUCT_TYPES[ice_product_type] in ice_products_stock[MARKET_HUB_LOCATION_IDS[market_hub]]:
                 context['ice_product_data'][ice_product_type][market_hub]['stock'] = ice_products_stock[MARKET_HUB_LOCATION_IDS[market_hub]][ICE_PRODUCT_TYPES[ice_product_type]]
             else:
                 context['ice_product_data'][ice_product_type][market_hub]['stock'] = 0
