@@ -82,9 +82,11 @@ def import_type_materials(request):
         data = yaml.safe_load(file)
         type_materials = []
         for type_id, value in data.items():
-            for material in value['materials']:
-                type_material = TypeMaterials(type_id=type_id, material_type_id=material['materialTypeID'], quantity=material['quantity'])
-                type_materials.append(type_material)
+            # print(f'type_id: {type_id}, value: {value}')
+            if 'materials' in value:
+                for material in value['materials']:
+                    type_material = TypeMaterials(type_id=type_id, material_type_id=material['materialTypeID'], quantity=material['quantity'])
+                    type_materials.append(type_material)
 
     TypeMaterials.objects.all().delete()
     TypeMaterials.objects.bulk_create(type_materials)

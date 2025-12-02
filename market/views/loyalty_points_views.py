@@ -30,7 +30,10 @@ class LpDeal():
             return 0;
 
     def profit_per_lp(self):
-        return self.profit()/self.lp_cost;
+        if self.lp_cost is not None and self.lp_cost > 0:
+            return self.profit()/self.lp_cost;
+        else:
+            return 0;
 
 def lp_index(request):
     if request.method == 'POST':
