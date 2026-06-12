@@ -204,14 +204,14 @@ def market_ice_index(request):
         'gain_percent': {},
     }
 
-    ice_products_stock = market_service.get_character_assets(request.session['esi_token']['character_id'], [MARKET_HUB_LOCATION_IDS['Jita'], MARKET_HUB_LOCATION_IDS['Amarr']], ICE_PRODUCT_TYPES.values())
+    ice_products_stock = market_service.get_character_assets(request.session['esi_token']['character_id'], [MARKET_HUB_LOCATION_IDS['Jita'], MARKET_HUB_LOCATION_IDS['Amarr'], MARKET_HUB_LOCATION_IDS['Hek'], MARKET_HUB_LOCATION_IDS['Rens']], ICE_PRODUCT_TYPES.values())
 
     for ice_product_type in ICE_PRODUCT_TYPES:
         context['ice_product_data'][ice_product_type] = {}
 
         best_sell_price_global = 0
         best_buy_price_global = 999999999
-        for market_hub in ['Jita', 'Amarr']:
+        for market_hub in ['Jita', 'Amarr', 'Hek', 'Rens']:
             context['ice_product_data'][ice_product_type][market_hub] = {'best_sell_price': 0, 'best_buy_price': 999999999,'best_buy_order_volume': 0}
             market_hub_ice_product_sell_orders = ice_products_orders.filter(region_id=MARKET_HUBS[market_hub], type_id=ICE_PRODUCT_TYPES[ice_product_type], is_buy_order=False).order_by('price')
             market_hub_ice_product_buy_orders = ice_products_orders.filter(region_id=MARKET_HUBS[market_hub], type_id=ICE_PRODUCT_TYPES[ice_product_type], is_buy_order=True).order_by('-price')
@@ -318,7 +318,7 @@ def market_ice_index(request):
                 context['ice_data'][ice_type][market_hub]['30d_vol'] = market_hub_ice_history.filter(date__gte=datetime.now() - timedelta(days=31)).aggregate(total_vol=Sum('volume'))['total_vol']
                 context['ice_data'][ice_type][market_hub]['90d_vol'] = market_hub_ice_history.filter(date__gte=datetime.now() - timedelta(days=91)).aggregate(total_vol=Sum('volume'))['total_vol']
 
-            if market_hub == 'Jita' or market_hub == 'Amarr':
+            if market_hub == 'Jita' or market_hub == 'Amarr' or market_hub == 'Hek' or market_hub == 'Rens':
                 input_volume = context['params']['freighter_capacity']/100
                 total_sell_price = 0
                 total_buy_price = 0
@@ -366,6 +366,10 @@ def market_ice_index(request):
         context['ice_data'][ice_type]['Jita']['reprocess']['buy_price_profit'] = context['ice_data'][ice_type]['Jita']['reprocess']['total_buy_price']*(1-market_service.get_sales_tax()) - best_market_hub_full_cargo_price
         context['ice_data'][ice_type]['Amarr']['reprocess']['sell_price_profit'] = context['ice_data'][ice_type]['Amarr']['reprocess']['total_sell_price']*(1-market_service.get_sales_tax()-market_service.get_brokers_fee())*context['params']['freighter_capacity']/100 - best_market_hub_full_cargo_price
         context['ice_data'][ice_type]['Amarr']['reprocess']['buy_price_profit'] = context['ice_data'][ice_type]['Amarr']['reprocess']['total_buy_price']*(1-market_service.get_sales_tax()) - best_market_hub_full_cargo_price
+        context['ice_data'][ice_type]['Hek']['reprocess']['sell_price_profit'] = context['ice_data'][ice_type]['Hek']['reprocess']['total_sell_price']*(1-market_service.get_sales_tax()-market_service.get_brokers_fee())*context['params']['freighter_capacity']/100 - best_market_hub_full_cargo_price
+        context['ice_data'][ice_type]['Hek']['reprocess']['buy_price_profit'] = context['ice_data'][ice_type]['Hek']['reprocess']['total_buy_price']*(1-market_service.get_sales_tax()) - best_market_hub_full_cargo_price
+        context['ice_data'][ice_type]['Rens']['reprocess']['sell_price_profit'] = context['ice_data'][ice_type]['Rens']['reprocess']['total_sell_price']*(1-market_service.get_sales_tax()-market_service.get_brokers_fee())*context['params']['freighter_capacity']/100 - best_market_hub_full_cargo_price
+        context['ice_data'][ice_type]['Rens']['reprocess']['buy_price_profit'] = context['ice_data'][ice_type]['Rens']['reprocess']['total_buy_price']*(1-market_service.get_sales_tax()) - best_market_hub_full_cargo_price
 
         average_buy_price = {
             '7d': market_service.get_average_transaction_price(type_id=ICE_TYPES[ice_type]['type_id'], days_back=7, is_buy=True),
