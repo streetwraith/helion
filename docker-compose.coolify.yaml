@@ -12,7 +12,6 @@ x-app: &app
   build:
     context: .
     dockerfile: Dockerfile
-  image: eve-helion:latest          # build once, reuse across web/worker/beat
   restart: unless-stopped
   environment: &app-env
     DEBUG: ${DEBUG}
