@@ -6,6 +6,8 @@
 #     Traefik labels + attaches coolify-proxy — we don't hand-write proxy labels here;
 #   - Postgres/Redis are separate Coolify-managed resources (eve-postgres / helion-redis),
 #     reached via DATABASE_URL / REDIS_URL — they are NOT defined in this file.
+#   - `exclude_from_hc` is a Coolify-specific field (preprocessed by Coolify, stripped before
+#     `docker compose`); it is NOT valid standalone compose.
 # Point Coolify's "Docker Compose Location" at this file.
 
 x-app: &app
@@ -32,13 +34,14 @@ x-app: &app
 services:
   web:
     <<: *app
-    # Coolify's schema rejects compose-5.3 'pre_start', so migrate at the front of the command:
-    # run migrations to completion, THEN exec gunicorn. gunicorn (and thus the port) only comes
-    # up after migrate, so the TCP healthcheck below doubles as a "migrations done" signal that
-    # worker/beat gate on — nothing runs against an unmigrated DB, nothing crash-loops.
+    # migrate at the front of the command (Coolify rejects compose-5.3 pre_start; its pre-deploy
+    # command no-ops for compose). gunicorn binds only after migrate, so the healthcheck below
+    # (HTTP GET /login/ -> 200) is also a "migrations done" signal that worker/beat gate on.
     command: ["sh", "-c", "python manage.py migrate --noinput && exec gunicorn helion.wsgi --bind 0.0.0.0:8000 --timeout 600 --log-file -"]
+    # HTTP check via python (no curl/wget in slim). Host header set so Django ALLOWED_HOSTS
+    # returns 200 instead of 400; urlopen raises (non-zero exit) on any non-2xx.
     healthcheck:
-      test: ["CMD", "python", "-c", "import socket; socket.create_connection(('127.0.0.1', 8000), 2).close()"]
+      test: ["CMD", "python", "-c", "import urllib.request as u; u.urlopen(u.Request('http://127.0.0.1:8000/login/', headers={'Host': 'helion.entropiadev.com'}), timeout=4)"]
       interval: 10s
       timeout: 5s
       retries: 12
@@ -48,6 +51,7 @@ services:
 
   worker:
     <<: *app
+    exclude_from_hc: true
     depends_on:
       web:
         condition: service_healthy
@@ -55,6 +59,7 @@ services:
 
   beat:
     <<: *app
+    exclude_from_hc: true
     depends_on:
       web:
         condition: service_healthy
