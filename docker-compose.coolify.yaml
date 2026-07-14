@@ -32,27 +32,30 @@ x-app: &app
 services:
   web:
     <<: *app
-    # pre_start (compose 5.3+ init container): run migrations to completion BEFORE gunicorn
-    # starts. If migrate fails (non-zero), the container never starts — no serving against an
-    # unmigrated DB. worker/beat wait on web, so nothing races an empty schema.
-    pre_start:
-      - command: python manage.py migrate --noinput
-    # gunicorn binds all interfaces (not its 127.0.0.1 default) so coolify-proxy can reach it.
-    command: gunicorn helion.wsgi --bind 0.0.0.0:8000 --timeout 600 --log-file -
+    # Coolify's schema rejects compose-5.3 'pre_start', so migrate at the front of the command:
+    # run migrations to completion, THEN exec gunicorn. gunicorn (and thus the port) only comes
+    # up after migrate, so the TCP healthcheck below doubles as a "migrations done" signal that
+    # worker/beat gate on — nothing runs against an unmigrated DB, nothing crash-loops.
+    command: ["sh", "-c", "python manage.py migrate --noinput && exec gunicorn helion.wsgi --bind 0.0.0.0:8000 --timeout 600 --log-file -"]
+    healthcheck:
+      test: ["CMD", "python", "-c", "import socket; socket.create_connection(('127.0.0.1', 8000), 2).close()"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 90s
     expose:
       - "8000"
 
   worker:
     <<: *app
-    # start only after web (which runs migrate in pre_start) has started
     depends_on:
       web:
-        condition: service_started
+        condition: service_healthy
     command: celery -A helion worker --loglevel=info
 
   beat:
     <<: *app
     depends_on:
       web:
-        condition: service_started
+        condition: service_healthy
     command: celery -A helion beat --loglevel=info
