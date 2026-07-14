@@ -1,0 +1,50 @@
+# Coolify deployment compose for the eve-helion project.
+#
+# NOT a standalone `docker compose up` file:
+#   - env vars are injected by Coolify (defined in the Coolify UI, substituted below);
+#   - the web domain (helion.entropiadev.com) is set in the Coolify UI, which wires the
+#     Traefik labels + attaches coolify-proxy — we don't hand-write proxy labels here;
+#   - Postgres/Redis are separate Coolify-managed resources (eve-postgres / helion-redis),
+#     reached via DATABASE_URL / REDIS_URL — they are NOT defined in this file.
+# Point Coolify's "Docker Compose Location" at this file.
+
+x-app: &app
+  build:
+    context: .
+    dockerfile: Dockerfile
+  image: eve-helion:latest          # build once, reuse across web/worker/beat
+  restart: unless-stopped
+  environment: &app-env
+    DEBUG: ${DEBUG}
+    SECRET_KEY: ${SECRET_KEY}
+    DATABASE_URL: ${DATABASE_URL}
+    REDIS_URL: ${REDIS_URL}
+    ALLOWED_HOSTS: ${ALLOWED_HOSTS}
+    ESI_CLIENT_ID: ${ESI_CLIENT_ID}
+    ESI_CLIENT_SECRET: ${ESI_CLIENT_SECRET}
+    ESI_CLIENT_SCOPE: ${ESI_CLIENT_SCOPE}
+    ESI_CLIENT_CALLBACK_URL: ${ESI_CLIENT_CALLBACK_URL}
+    ESI_CLIENT_USER_AGENT: ${ESI_CLIENT_USER_AGENT}
+    ESI_USER_CONTACT_EMAIL: ${ESI_USER_CONTACT_EMAIL}
+    ESI_CONNECTION_POOL_MAXSIZE: ${ESI_CONNECTION_POOL_MAXSIZE}
+    MARKET_FETCH_THREADS: ${MARKET_FETCH_THREADS}
+    CELERY_BEAT_SCHEDULER: ${CELERY_BEAT_SCHEDULER}
+
+services:
+  web:
+    <<: *app
+    # gunicorn binds all interfaces (not its 127.0.0.1 default) so coolify-proxy can reach it.
+    command: gunicorn helion.wsgi --bind 0.0.0.0:8000 --timeout 600 --log-file -
+    expose:
+      - "8000"
+
+  worker:
+    <<: *app
+    command: celery -A helion worker --loglevel=info
+
+  beat:
+    <<: *app
+    command: celery -A helion beat --loglevel=info
+
+# migrate runs once per deploy via Coolify's pre-deployment command
+# (`python manage.py migrate`), not as a service here.

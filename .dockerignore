@@ -1,0 +1,24 @@
+.git
+.gitignore
+.venv/
+__pycache__/
+*.py[cod]
+*$py.class
+.cache
+cache/
+db.sqlite3
+.DS_Store
+Thumbs.db
+.vscode/
+
+# local env — never in the build context (also gitignored)
+.env
+
+# raw SDE import source (huge, gitignored) — data lives in the DB, not the image
+sde/sde/
+
+# build/deploy + docs not needed at runtime
+Dockerfile
+docker-compose*.yml
+docker-compose*.yaml
+*.md
