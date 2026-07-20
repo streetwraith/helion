@@ -33,7 +33,6 @@ urlpatterns = [
     # path('callback', views.callback, name='auth.callback'),
 
     path('market/', include('market.urls')),
-    path('sde/', include('sde.urls')),
     
     path('admin/', admin.site.urls),
 ]
