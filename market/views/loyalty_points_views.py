@@ -1,4 +1,4 @@
-from sde.models import SdeTypeId, NpcCorporation
+from evesde.models import Type, NpcCorporation
 from market.models import MarketOrder, TradeHub
 from django.shortcuts import render, redirect
 from market.services import market_service
@@ -56,7 +56,7 @@ def lp_data(request, trade_type, location, corporation_name):
     lp_deals = []
     for index, value in enumerate(resp):
         lp_deal = LpDeal(**value)
-        lp_deal.name = SdeTypeId.objects.get(type_id=lp_deal.type_id).name
+        lp_deal.name = Type.objects.get(type_id=lp_deal.type_id).name
         lp_item_best_order = None
         if trade_type == 'buy':
             lp_item_best_order = MarketOrder.objects.filter(is_buy_order=True, type_id=lp_deal.type_id).order_by('-price').first()
@@ -71,7 +71,7 @@ def lp_data(request, trade_type, location, corporation_name):
                 required_item_best_order = MarketOrder.objects.filter(region_id__in=trade_hub_region_ids, is_in_trade_hub_range=True, is_buy_order=False, type_id=item['type_id']).order_by('price').first()
                 required_item = {
                     'type_id': item['type_id'],
-                    'name': SdeTypeId.objects.get(type_id=item['type_id']).name,
+                    'name': Type.objects.get(type_id=item['type_id']).name,
                     'quantity': item['quantity'],
                     'price': 0,
                     'location': ''

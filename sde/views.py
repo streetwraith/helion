@@ -1,6 +1,7 @@
 from django.shortcuts import render, redirect
 import yaml
 from sde.models import SdeTypeId, MarketGroup, NpcCorporation, SolarSystem, TypeMaterials
+from evesde.models import Type
 from market.models import TradeItem, TradeHub
 from market.services import market_service
 import os
@@ -153,7 +154,7 @@ def sync_trade_items_data(request):
     to_save = []
     for trade_item in trade_items:
         if not trade_item.name or not trade_item.group_id or not trade_item.market_group_id:
-            sde_type_id = SdeTypeId.objects.get(type_id=trade_item.type_id)
+            sde_type_id = Type.objects.get(type_id=trade_item.type_id)
             trade_item.name = sde_type_id.name
             trade_item.group_id = sde_type_id.group_id
             trade_item.market_group_id = sde_type_id.market_group_id

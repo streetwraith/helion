@@ -2,7 +2,6 @@ from django.views.decorators.csrf import csrf_exempt
 from market.services import market_service
 from django.template.loader import render_to_string
 from django.http import JsonResponse
-from sde.models import SdeTypeId
 from market.models import TradeItem, TradeHub
 from helion.providers import esi
 from esi.models import Token

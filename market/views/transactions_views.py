@@ -2,7 +2,7 @@ from django.shortcuts import render
 from django.core.paginator import Paginator
 from market.models import MarketTransaction, TradeItem, TradeHub
 from market.services import market_service
-from sde.services import sde_service
+from evesde import services as sde_service
 
 def market_transactions(request):
     page_number = request.GET.get('page')

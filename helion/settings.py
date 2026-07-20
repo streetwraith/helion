@@ -50,6 +50,7 @@ INSTALLED_APPS = [
     'helion',
     'market.apps.MarketConfig',
     'sde.apps.SdeConfig',
+    'evesde.apps.EvesdeConfig',
     'mathfilters',
     # 'django_cron',
     'esi',

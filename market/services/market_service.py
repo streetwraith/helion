@@ -2,7 +2,7 @@ from helion.providers import esi
 from esi.models import Token
 import os
 from market.models import MarketOrder, MarketTransaction, MarketRegionStatus, TradeItem, TradeHub, MarketHistory, WalletJournal, MarketNotification, MarketOrderUndercut, A4EMarketHistoryVolume, SystemHubJumps
-from sde.models import SdeTypeId
+from evesde.models import Type
 
 from datetime import date, datetime, timedelta, timezone
 import statistics
@@ -22,26 +22,26 @@ def find_type_ids_by_market_groups(market_group_id=[], excluded_meta_ids=[]):
     query = """
         WITH RECURSIVE market_group_hierarchy AS (
             -- Base case: Start with the chosen market_group_id
-            SELECT market_group_id
-            FROM sde_marketgroup
-            WHERE market_group_id = %s  -- Replace with your chosen ID
+            SELECT _key AS market_group_id
+            FROM sde.market_groups
+            WHERE _key = %s  -- Replace with your chosen ID
 
             UNION ALL
 
             -- Recursive step: Find all child market groups
-            SELECT mg.market_group_id
-            FROM sde_marketgroup mg
+            SELECT mg._key
+            FROM sde.market_groups mg
             INNER JOIN market_group_hierarchy mgh ON mg.parent_group_id = mgh.market_group_id
         )
         -- Get all type_ids that belong to any of the market_group_ids found
-        SELECT type_id, meta_id
-        FROM sde_sdetypeid
+        SELECT _key AS type_id, meta_group_id AS meta_id
+        FROM sde.types
         WHERE market_group_id IN (SELECT market_group_id FROM market_group_hierarchy)
     """
 
     if excluded_meta_ids:
         placeholders = ', '.join(['%s'] * len(excluded_meta_ids))
-        query += f" AND (meta_id IS NULL OR meta_id NOT IN ({placeholders}))"
+        query += f" AND (meta_group_id IS NULL OR meta_group_id NOT IN ({placeholders}))"
         params = [market_group_id] + list(excluded_meta_ids)
     else:
         params = [market_group_id]
@@ -146,7 +146,7 @@ def find_undercut_buy_orders(region_id, character_id):
         return results
 
 def trade_item_add(type_id):
-    sde_type_id = SdeTypeId.objects.get(type_id=type_id)
+    sde_type_id = Type.objects.get(type_id=type_id)
     trade_item = TradeItem(type_id=type_id)
     trade_item.name = sde_type_id.name
     trade_item.group_id = sde_type_id.group_id
@@ -170,7 +170,7 @@ def get_market_transactions(*character_ids, type_id=None, type_name=None, locati
         filters['type_id'] = int(type_id)
     if type_name:
         # Fetch type_ids based on fuzzy match (case-insensitive contains)
-        matching_type_ids = list(SdeTypeId.objects.filter(name__icontains=type_name.lower()).values_list('type_id', flat=True))
+        matching_type_ids = list(Type.objects.filter(name__icontains=type_name.lower()).values_list('type_id', flat=True))
         if 'type_id' in filters:
             del filters['type_id']
         filters['type_id__in'] = matching_type_ids
@@ -643,17 +643,17 @@ def get_shopping_list_prices(item_names):
 
     query = f"""
     SELECT
-        s.name,
+        s.name_en,
         mo.region_id,
         MIN(mo.price) AS lowest_sell_price
     FROM market_marketorder mo
-    JOIN sde_sdetypeid s ON mo.type_id = s.type_id
+    JOIN sde.types s ON mo.type_id = s._key
     WHERE mo.is_buy_order = FALSE
     AND mo.is_in_trade_hub_range = TRUE
     AND mo.region_id IN ({region_placeholders})
-    AND lower(s.name) in ({item_placeholders})
-    GROUP BY s.name, mo.region_id
-    ORDER BY s.name, mo.region_id;
+    AND lower(s.name_en) in ({item_placeholders})
+    GROUP BY s.name_en, mo.region_id
+    ORDER BY s.name_en, mo.region_id;
     """
     params = region_ids + item_names
     with connection.cursor() as cursor:

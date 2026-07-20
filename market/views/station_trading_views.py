@@ -4,10 +4,9 @@ from django.db.models import F, ExpressionWrapper, Subquery, OuterRef, Min, Floa
 from helion.providers import esi
 from esi.models import Token
 from market.models import MarketOrder, TradeItem, TradeHub, MarketRegionStatus, MarketOrderUndercut
-from sde.models import SdeTypeId
 import time
 from market.services import market_service
-from sde.services import sde_service
+from evesde import services as sde_service
 from datetime import datetime, timezone
 from market.constants import REGION_ID_FORGE, REGION_ID_DOMAIN
 import math
