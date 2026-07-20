@@ -132,3 +132,13 @@ class A4EMarketHistoryVolume(models.Model):
     class Meta:
         db_table = 'a4e_market_history_volume'  # Adjust if the actual table name differs
         managed = False  # Prevents Django from managing the table
+
+class SystemHubJumps(models.Model):
+    # Jumps from a solar system to its region's trade hub. Non-CCP, ESI-derived;
+    # rebuilt by `manage.py recompute_hub_jumps`. Lives here rather than on the sde
+    # solar-system table because the sde schema is read-only, owned by sdemanager.
+    system_id = models.BigIntegerField(primary_key=True)
+    jumps_to_trade_hub = models.IntegerField()
+
+    def __str__(self):
+        return str(self.system_id) + ': ' + str(self.jumps_to_trade_hub) + ' jumps'

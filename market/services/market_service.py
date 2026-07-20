@@ -1,8 +1,8 @@
 from helion.providers import esi
 from esi.models import Token
 import os
-from market.models import MarketOrder, MarketTransaction, MarketRegionStatus, TradeItem, TradeHub, MarketHistory, WalletJournal, MarketNotification, MarketOrderUndercut, A4EMarketHistoryVolume
-from sde.models import SdeTypeId, SolarSystem
+from market.models import MarketOrder, MarketTransaction, MarketRegionStatus, TradeItem, TradeHub, MarketHistory, WalletJournal, MarketNotification, MarketOrderUndercut, A4EMarketHistoryVolume, SystemHubJumps
+from sde.models import SdeTypeId
 
 from datetime import date, datetime, timedelta, timezone
 import statistics
@@ -317,7 +317,7 @@ def fetch_market_orders_parallel(region_id):
     return region_id, results
 
 def process_market_orders(results, region_id, character_id=None):
-    region_solar_systems = SolarSystem.objects.filter(region_id=region_id)
+    hub_jumps = dict(SystemHubJumps.objects.values_list('system_id', 'jumps_to_trade_hub'))
     region_trade_hub = TradeHub.objects.get(region_id=region_id)
     character_order_ids = {}
 
@@ -346,8 +346,8 @@ def process_market_orders(results, region_id, character_id=None):
                 if value['system_id'] != region_trade_hub.system_id:
                     is_order_in_range = False
             else:
-                order_system = region_solar_systems.get(system_id=value['system_id'])
-                if int(value['range']) < order_system.jumps_to_trade_hub:
+                system_jumps = hub_jumps.get(value['system_id'])
+                if system_jumps is not None and int(value['range']) < system_jumps:
                     is_order_in_range = False
         elif not value['is_buy_order'] and value['location_id'] != region_trade_hub.station_id:
             is_order_in_range = False
@@ -378,7 +378,7 @@ def save_market_orders(market_orders):
         execute_values(cursor, sql, values)  # Efficient bulk insert
 
 def update_market_orders(region_id):
-    region_solar_systems = SolarSystem.objects.filter(region_id=region_id)
+    hub_jumps = dict(SystemHubJumps.objects.values_list('system_id', 'jumps_to_trade_hub'))
     region_trade_hub = TradeHub.objects.get(region_id=region_id)
 
     market_orders = []
@@ -397,8 +397,8 @@ def update_market_orders(region_id):
                 if market_order.system_id != region_trade_hub.system_id:
                     is_order_in_range = False
             else:
-                order_system = region_solar_systems.get(system_id=market_order.system_id)
-                if int(market_order.range) < order_system.jumps_to_trade_hub:
+                system_jumps = hub_jumps.get(market_order.system_id)
+                if system_jumps is not None and int(market_order.range) < system_jumps:
                     is_order_in_range = False
         elif not market_order.is_buy_order and market_order.location_id != region_trade_hub.station_id:
             is_order_in_range = False
