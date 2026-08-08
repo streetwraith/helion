@@ -1,0 +1,290 @@
+"""Smoke/characterization tests: every page renders with realistic fixtures.
+
+External I/O (ESI) is stubbed at the market_service / view-module seam; the
+database paths run for real against fixtures.
+"""
+from datetime import date, timedelta
+from types import SimpleNamespace
+
+import pytest
+from django.urls import reverse
+from django.utils import timezone
+
+from evesde.models import NpcCorporation, Type
+from market.models import A4EMarketHistoryVolume, MarketTransaction, TradeItem
+from market.services import market_service
+
+from .conftest import CHARACTER_ID
+from .test_market_service_db import JITA_REGION, JITA_STATION, add_order, add_transaction, add_type
+
+AMARR_REGION = 10000043
+AMARR_STATION = 60008494
+AMARR_SYSTEM = 30002187
+
+pytestmark = pytest.mark.django_db
+
+
+@pytest.fixture
+def no_esi_assets(monkeypatch):
+    monkeypatch.setattr(market_service, "get_character_assets", lambda *a, **kw: {})
+
+
+def add_a4e_volume(type_id, volume=91):
+    A4EMarketHistoryVolume.objects.create(
+        region_id=JITA_REGION, type_id=type_id, date=date.today(), order_count=1, volume=volume
+    )
+
+
+def test_anonymous_user_is_redirected_to_login(client, db, trade_hubs):
+    response = client.get("/market/")
+    assert response.status_code == 302
+    assert response.url.startswith("/login/")
+
+
+def test_helion_index(auth_client, trade_hubs):
+    assert auth_client.get("/").status_code == 200
+
+
+def test_characters_page(auth_client, trade_hubs):
+    assert auth_client.get("/characters/").status_code == 200
+
+
+def test_market_index(auth_client, trade_hubs):
+    response = auth_client.get("/market/")
+    assert response.status_code == 200
+    regions = response.context["market_regions"]
+    assert len(regions) == 5
+    assert all(region.trade_hub is not None for region in regions)
+    assert "wallet_statistics" in response.context
+
+
+def test_refresh_all_data_redirects(character_client, trade_hubs, monkeypatch):
+    for name in ("update_market_transactions", "refresh_all_trade_hub_orders", "get_wallet_journal"):
+        monkeypatch.setattr(market_service, name, lambda *a, **kw: None)
+    response = character_client.get(reverse("refresh_all_data"))
+    assert response.status_code == 302 and response.url == reverse("market_index")
+
+
+def test_region_orders_refresh_is_post_only(character_client, trade_hubs, monkeypatch):
+    monkeypatch.setattr(market_service, "refresh_trade_hub_orders", lambda *a, **kw: None)
+    url = reverse("market_region_orders_refresh", kwargs={"region_id": JITA_REGION})
+    assert character_client.get(url).status_code == 405
+    assert character_client.post(url).status_code == 302
+
+
+class TestShoppingList:
+    def test_get_renders_empty_form(self, auth_client, trade_hubs):
+        assert auth_client.get(reverse("shopping_list")).status_code == 200
+
+    def test_post_prices_table(self, auth_client, trade_hubs):
+        add_type(34, "Tritanium")
+        add_order(1, 34, 4.0)
+        response = auth_client.post(reverse("shopping_list"), {"items": "Tritanium x2\n\nBogus Item"})
+        assert response.status_code == 200
+        assert response.context["table_data"] == {"Tritanium": {JITA_REGION: 4.0}}
+        assert response.context["region_totals"][JITA_REGION] == 4.0
+
+
+class TestTransactions:
+    def test_page_renders_with_history(self, character_client, trade_hubs):
+        add_type(34, "Tritanium")
+        add_transaction(1, 34, 10, 4.0, is_buy=True)
+        add_transaction(2, 34, 5, 5.0, is_buy=False)
+        response = character_client.get(reverse("market_transactions"))
+        assert response.status_code == 200
+        assert response.context["page_obj"].paginator.count == 2
+        assert response.context["type_names_dict"][34] == "Tritanium"
+
+    def test_filters(self, character_client, trade_hubs):
+        add_type(34, "Tritanium")
+        add_transaction(1, 34, 10, 4.0, is_buy=True)
+        response = character_client.get(
+            reverse("market_transactions"), {"is_buy": "False", "type_name": "trit"}
+        )
+        assert response.status_code == 200
+        assert response.context["page_obj"].paginator.count == 0
+
+
+class TestHauling:
+    def test_index_get(self, auth_client, trade_hubs):
+        assert auth_client.get(reverse("market_hauling_index")).status_code == 200
+
+    def test_index_post_redirects_to_calc(self, auth_client, trade_hubs):
+        response = auth_client.post(reverse("market_hauling_index"), {
+            "trade_type": "stb", "from_location": "Jita", "to_location": "Amarr",
+            "max_vol": "7200", "max_price": "1000000000",
+        })
+        assert response.status_code == 302
+        assert "hauling_stb/Jita/Amarr" in response.url
+
+    @pytest.fixture
+    def deal_data(self, trade_hubs):
+        add_type(34, "Tritanium")
+        add_order(1, 34, 100_000_000.0, volume_remain=1)  # Jita sell
+        add_order(2, 34, 120_000_000.0, is_buy=True, volume_remain=1,  # Amarr buy
+                  region_id=AMARR_REGION, location_id=AMARR_STATION, system_id=AMARR_SYSTEM)
+        add_order(3, 34, 120_000_000.0, volume_remain=1,  # Amarr sell
+                  region_id=AMARR_REGION, location_id=AMARR_STATION, system_id=AMARR_SYSTEM)
+        add_a4e_volume(34)
+
+    def test_sell_to_buy_finds_profitable_deal(self, auth_client, deal_data):
+        response = auth_client.get(
+            reverse("market_hauling_sell_to_buy",
+                    kwargs={"from_location": "Jita", "to_location": "Amarr"})
+        )
+        assert response.status_code == 200
+        deals = response.context["deals"]
+        assert len(deals) == 1
+        deal = deals[0]
+        assert deal.type_id == 34 and deal.type_id_name == "Tritanium"
+        assert deal.amount == 1
+        assert deal.profit == pytest.approx(120_000_000.0 * 0.964 - 100_000_000.0)
+
+    def test_sell_to_sell_finds_profitable_deal(self, auth_client, deal_data):
+        response = auth_client.get(
+            reverse("market_hauling_sell_to_sell",
+                    kwargs={"from_location": "Jita", "to_location": "Amarr"})
+        )
+        assert response.status_code == 200
+        deals = response.context["deals"]
+        assert len(deals) == 1
+        assert deals[0].price_jita == 100_000_000.0
+        assert deals[0].profit == pytest.approx(120_000_000.0 * 0.964 / 100 * 100 - 100_000_000.0, rel=1e-6)
+
+
+class TestStationTrading:
+    def test_trade_hub_page(self, character_client, trade_hubs, no_esi_assets):
+        add_type(34, "Tritanium")
+        TradeItem.objects.create(type_id=34, name="Tritanium", group_id=18, market_group_id=999)
+        add_order(1, 34, 4.0)
+        add_order(2, 34, 3.0, is_buy=True)
+        add_a4e_volume(34)
+        response = character_client.get(
+            reverse("market_trade_hub", kwargs={"region_id": AMARR_REGION})
+        )
+        assert response.status_code == 200
+        item_data = response.context["item_data"]
+        assert 34 in item_data
+        assert item_data[34]["regions"][JITA_REGION]["a4e_market_history_volume"] == pytest.approx(1.0)
+        assert response.context["trade_hub_region"].name == "Amarr"
+
+    def test_mistakes_page(self, auth_client, trade_hubs):
+        add_type(34, "Tritanium")
+        add_order(1, 34, 100.0, is_buy=True, volume_remain=100)
+        # Sell at exactly the buy price (within the 4th-significant-digit step)
+        # and above the 1M ISK total-value floor.
+        add_order(2, 34, 100.0, volume_remain=10001)
+        response = auth_client.get(
+            reverse("market_trade_hub_mistakes", kwargs={"region_id": JITA_REGION})
+        )
+        assert response.status_code == 200
+        rows = response.context["matching_type_ids"]
+        assert len(rows) == 1
+        assert rows[0]["type_id"] == 34 and rows[0]["name"] == "Tritanium"
+
+
+class TestIce:
+    def test_redirects_to_defaults_and_renders(self, character_client, trade_hubs, no_esi_assets):
+        response = character_client.get(reverse("market_ice_index"))
+        assert response.status_code == 302  # fills in default params
+
+        response = character_client.get(reverse("market_ice_index"), follow=True)
+        assert response.status_code == 200
+        assert len(response.context["ice_data"]) == 12
+        assert len(response.context["ice_product_data"]) == 7
+        # (50+3 rig)*1.055 Tatara*1.15 Rep V*1.10 RepEff V*1.10 Ice V*1.04 implant
+        assert response.context["params"]["reprocessing_yield"] == pytest.approx(80.918, abs=0.001)
+
+
+class TestLoyaltyPoints:
+    @pytest.fixture
+    def corp(self, trade_hubs):
+        return NpcCorporation.objects.create(corporation_id=1000125, name="Caldari Navy")
+
+    def test_lp_index(self, auth_client, corp):
+        response = auth_client.get(reverse("lp_index"))
+        assert response.status_code == 200
+        assert list(response.context["corporations"]) == [corp]
+
+    def test_lp_data(self, auth_client, corp, monkeypatch):
+        add_type(603, "Merlin")
+        add_type(34, "Tritanium")
+        add_order(1, 603, 2_000_000.0)
+        add_order(2, 34, 4.0)
+        offers = [
+            {"ak_cost": 0, "isk_cost": 100_000.0, "lp_cost": 100, "quantity": 1,
+             "offer_id": 1, "type_id": 603, "required_items": []},
+            {"ak_cost": 0, "isk_cost": 50_000.0, "lp_cost": 50, "quantity": 1,
+             "offer_id": 2, "type_id": 603,
+             "required_items": [{"type_id": 34, "quantity": 2}]},
+        ]
+        fake_esi = SimpleNamespace(client=SimpleNamespace(Loyalty=SimpleNamespace(
+            get_loyalty_stores_corporation_id_offers=lambda corporation_id: SimpleNamespace(
+                results=lambda: offers))))
+        monkeypatch.setattr("market.views.loyalty_points_views.esi", fake_esi)
+
+        response = auth_client.get(reverse("lp_data", kwargs={
+            "trade_type": "sell", "location": "Jita", "corporation_name": "Caldari Navy"}))
+        assert response.status_code == 200
+        deals = response.context["deals"]
+        assert len(deals) == 2
+        assert all(deal.name == "Merlin" and deal.price == 2_000_000.0 for deal in deals)
+        with_required = next(d for d in deals if d.required_items)
+        assert with_required.required_items[0]["name"] == "Tritanium"
+        assert with_required.required_items[0]["price"] == 4.0
+
+
+class TestAjax:
+    XHR = {"x-requested-with": "XMLHttpRequest"}
+
+    def test_transaction_history(self, character_client, trade_hubs):
+        add_type(34, "Tritanium")
+        add_transaction(1, 34, 10, 4.0)
+        response = character_client.get(
+            reverse("transaction_history"), {"type_id": 34}, headers=self.XHR
+        )
+        assert response.status_code == 200
+        assert "html" in response.json()
+
+    def test_market_history(self, character_client, trade_hubs, monkeypatch):
+        monkeypatch.setattr(market_service, "update_market_history", lambda **kw: None)
+        response = character_client.post(
+            reverse("market_history"), {"type_id": 34, "region_id": JITA_REGION},
+            headers=self.XHR,
+        )
+        assert response.status_code == 200
+        assert "html" in response.json()
+
+    def test_trade_item_add_and_del(self, character_client, trade_hubs):
+        add_type(34, "Tritanium")
+        response = character_client.post(
+            reverse("trade_item_add_or_del"), {"operation": "add", "type_id": 34},
+            headers=self.XHR,
+        )
+        assert response.status_code == 200
+        assert TradeItem.objects.filter(type_id=34).exists()
+
+        response = character_client.post(
+            reverse("trade_item_add_or_del"), {"operation": "del", "type_id": 34},
+            headers=self.XHR,
+        )
+        assert response.status_code == 200
+        assert not TradeItem.objects.filter(type_id=34).exists()
+
+    def test_market_open_in_game(self, character_client, trade_hubs, monkeypatch):
+        fake_esi = SimpleNamespace(client=SimpleNamespace(User_Interface=SimpleNamespace(
+            post_ui_openwindow_marketdetails=lambda **kw: SimpleNamespace(results=lambda: None))))
+        fake_token = SimpleNamespace(
+            get_token=lambda character_id, scope: SimpleNamespace(valid_access_token=lambda: "t"))
+        monkeypatch.setattr("market.views.ajax_views.esi", fake_esi)
+        monkeypatch.setattr("market.views.ajax_views.Token", fake_token)
+
+        response = character_client.post(
+            reverse("market_open_in_game"), {"type_id": 34}, headers=self.XHR
+        )
+        assert response.status_code == 200
+        assert response.json() == {"message": "done"}
+
+    def test_market_open_in_game_rejects_non_xhr(self, character_client, trade_hubs):
+        response = character_client.post(reverse("market_open_in_game"), {"type_id": 34})
+        assert response.status_code == 400

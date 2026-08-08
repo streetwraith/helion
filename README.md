@@ -14,3 +14,12 @@ uv run manage.py runserver
 ```
 
 Market scans and history updates run as Celery tasks against the same Redis broker (`celery -A helion worker` / `beat`).
+
+## Tests
+
+Test dependencies are pinned in `requirements-dev.txt` (production builds from `requirements.txt` alone). The suite creates a throwaway `test_<dbname>` database, so the connecting role needs `CREATEDB` — or set `TEST_DATABASE_URL` in `.env` to a role that has it; tests swap to that connection automatically.
+
+```sh
+uv pip install -r requirements-dev.txt
+uv run pytest
+```

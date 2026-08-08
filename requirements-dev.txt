@@ -1,0 +1,5 @@
+# Dev/test-only dependencies. NOT installed in the prod image, which builds from
+# requirements.txt alone. Install with: uv pip install -r requirements-dev.txt
+-r requirements.txt
+pytest==8.4.1
+pytest-django==4.11.1
