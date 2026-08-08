@@ -32,7 +32,7 @@ environ.Env.read_env(os.path.join(BASE_DIR, '.env'))
 SECRET_KEY = env('SECRET_KEY')
 
 # SECURITY WARNING: don't run with debug turned on in production!
-DEBUG = env('DEBUG', False)
+DEBUG = env('DEBUG')
 
 ALLOWED_HOSTS = env.list('ALLOWED_HOSTS', default=['*'])
 CSRF_TRUSTED_ORIGINS = env.list('CSRF_TRUSTED_ORIGINS', default=[])
@@ -51,8 +51,9 @@ INSTALLED_APPS = [
     'market.apps.MarketConfig',
     'evesde.apps.EvesdeConfig',
     'mathfilters',
-    # 'django_cron',
     'esi',
+    'django_celery_beat',
+    'django_celery_results',
 ]
 
 MIDDLEWARE = [
@@ -65,7 +66,6 @@ MIDDLEWARE = [
     'django.contrib.messages.middleware.MessageMiddleware',
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
     'helion.middleware.LoginRequiredMiddleware',
-    'market.middleware.LogRequestMiddleware',
 ]
 
 ROOT_URLCONF = 'helion.urls'
@@ -136,8 +136,11 @@ USE_TZ = True
 # Static files (CSS, JavaScript, Images)
 # https://docs.djangoproject.com/en/5.0/howto/static-files/
 
-STATIC_URL = 'static/'
+STATIC_URL = '/static/'
 STATIC_ROOT = env.str('STATIC_ROOT', default=BASE_DIR / 'staticfiles')
+STATICFILES_DIRS = [
+    BASE_DIR / 'market/static',
+]
 
 WHITENOISE_USE_FINDERS = True
 WHITENOISE_AUTOREFRESH = DEBUG
@@ -182,31 +185,18 @@ LOGGING = {
             'level': 'INFO',
             'propagate': True,
         },
+        'helion': {
+            'handlers': ['console'],
+            'level': 'INFO',
+            'propagate': True,
+        },
+        'market': {
+            'handlers': ['console'],
+            'level': 'INFO',
+            'propagate': True,
+        },
     },
 }
-
-# if not DEBUG:
-#     LOGGING['handlers']['file'] = {
-#         'level': 'ERROR',
-#         'class': 'logging.handlers.RotatingFileHandler',
-#         'filename': os.path.join('/', 'errors.log'),
-#         'maxBytes': 1024*1024,
-#         'backupCount': 30,
-#         'formatter': 'verbose',
-#     }
-#     LOGGING['root']['handlers'].append('file')
-#     LOGGING['loggers']['django']['handlers'].append('file')
-#     LOGGING['loggers']['celery']['handlers'].append('file')
-#     LOGGING['loggers']['esi']['handlers'].append('file')
-
-STATIC_URL = '/static/'
-STATICFILES_DIRS = [
-    BASE_DIR / 'market/static',  # Adjust this if your static directory is elsewhere
-]
-
-# CRON_CLASSES = [
-#     "market.cron.UpdateMarketData",
-# ]
 
 SESSION_ENGINE = 'django.contrib.sessions.backends.db'
 
@@ -224,8 +214,6 @@ CELERY_BROKER_URL = replace_redis_db(REDIS_URL, 1)
 CELERY_BEAT_SCHEDULER = env.str('CELERY_BEAT_SCHEDULER')
 CELERY_RESULT_BACKEND = 'django-db'
 CELERY_RESULT_EXTENDED = True
-INSTALLED_APPS += ['django_celery_beat']
-INSTALLED_APPS += ['django_celery_results']
 
 CACHES = {
     'default': {

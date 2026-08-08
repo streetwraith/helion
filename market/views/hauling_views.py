@@ -1,9 +1,13 @@
+import logging
+
 from django.shortcuts import render, redirect
 from django.http import QueryDict
-from market.models import MarketOrder, TradeHub, A4EMarketHistoryVolume
+from market.models import MarketOrder, TradeHub
 from evesde.models import Type
 from market.services import market_service
 from django.db.models import Sum, Min
+
+logger = logging.getLogger(__name__)
 
 class MarketDeal():
     def __init__(self, type_id=None, price_from=None, price_to=None, price_jita=None, amount=None, profit=None):
@@ -56,7 +60,7 @@ def market_hauling_index(request):
         return render(request, "market/hauling/hauling_index.html", {'max_price': '1000000000', 'max_vol': '7200'})
 
 def market_hauling_sell_to_buy(request, from_location, to_location):
-    print(f'calculating hauling profit: from {from_location} to {to_location}')
+    logger.info("calculating hauling profit: from %s to %s", from_location, to_location)
 
     max_vol = request.GET.get('max_vol', '520000.0')
     try:
@@ -204,7 +208,7 @@ def market_hauling_sell_to_buy(request, from_location, to_location):
     })
 
 def market_hauling_sell_to_sell(request, from_location, to_location):
-    print(f'calculating hauling profit (sell to sell): from {from_location} to {to_location}')
+    logger.info("calculating hauling profit (sell to sell): from %s to %s", from_location, to_location)
 
     max_vol = request.GET.get('max_vol', '520000.0')
     try:

@@ -20,19 +20,15 @@ from django.urls import include, path, re_path
 from . import views
 
 urlpatterns = [
-    # path('accounts/', include('django.contrib.auth.urls')),
-    # path('accounts/login/', auth_views.LoginView.as_view()),
     path('login/', auth_views.LoginView.as_view(template_name="user/login.html"), name='login'),
     path('logout/', auth_views.LogoutView.as_view(), name='logout'),
 
     path('', views.index, name='helion.index'),
     path('characters/', views.characters, name='characters'),
 
-    # url(r'^sso/', include('esi.urls', namespace='esi')),
     re_path(r'^sso/', include(('esi.urls', 'esi'), namespace='esi')),
-    # path('callback', views.callback, name='auth.callback'),
 
     path('market/', include('market.urls')),
-    
+
     path('admin/', admin.site.urls),
 ]

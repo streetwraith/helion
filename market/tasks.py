@@ -1,24 +1,27 @@
+import logging
+import time
+
 from celery import shared_task
 from django.core.cache import cache
 
 from market.services import market_service
 from market.models import TradeHub
 from esi.models import Token
-import time
+
+logger = logging.getLogger(__name__)
 
 @shared_task(bind=True)
 def update_market_orders(self):
-    print("running update_market_orders task...")
     lock_id = "update_market_orders_lock"
     # Use cache or Redis lock to prevent overlapping
     if cache.add(lock_id, "locked", timeout=600):  # Lock for 10 minutes
         try:
-            print("running update_market_orders task...")
+            logger.info("running update_market_orders task...")
             market_service.refresh_all_trade_hub_orders()
         finally:
             cache.delete(lock_id)
     else:
-        print("Task already running, skipping.")
+        logger.info("Task already running, skipping.")
 
 @shared_task(bind=True)
 def update_wallet_transactions(self, character_name):
@@ -27,12 +30,12 @@ def update_wallet_transactions(self, character_name):
     if cache.add(lock_id, "locked", timeout=300):  # Lock for 5 minutes
         try:
             character_id = Token.objects.get(character_name=character_name).character_id
-            print("running update_market_orders task...")
+            logger.info("running update_wallet_transactions task...")
             market_service.update_market_transactions(character_id=character_id)
         finally:
             cache.delete(lock_id)
     else:
-        print("Task already running, skipping.")
+        logger.info("Task already running, skipping.")
 
 @shared_task(bind=True)
 def update_wallet_journal(self, character_name):
@@ -41,12 +44,12 @@ def update_wallet_journal(self, character_name):
     if cache.add(lock_id, "locked", timeout=300):  # Lock for 5 minutes
         try:
             character_id = Token.objects.get(character_name=character_name).character_id
-            print("running update_market_orders task...")
+            logger.info("running update_wallet_journal task...")
             market_service.get_wallet_journal(character_id=character_id)
         finally:
             cache.delete(lock_id)
     else:
-        print("Task already running, skipping.")
+        logger.info("Task already running, skipping.")
 
 @shared_task(bind=True)
 def refresh_trade_hub_orders(self, trade_hub_name, character_name):
@@ -64,10 +67,10 @@ def refresh_trade_hub_orders(self, trade_hub_name, character_name):
         finally:
             cache.delete(lock_id)
     else:
-        print("Task already running, skipping.")
+        logger.info("Task already running, skipping.")
 
 @shared_task(bind=True)
-def update_market_history(self, trade_hub_name, market_group_id, excluded_meta_ids=[]):
+def update_market_history(self, trade_hub_name, market_group_id, excluded_meta_ids=None):
     if not trade_hub_name or not market_group_id:
         return
     region_id = TradeHub.objects.get(name=trade_hub_name).region_id
@@ -80,10 +83,10 @@ def update_market_history(self, trade_hub_name, market_group_id, excluded_meta_i
             for type_id in type_ids:
                 try:
                     market_service.update_market_history(region_id=region_id, type_id=type_id)
-                except Exception as e:
-                    print(f"Error updating market history for type_id {type_id}: {e}")
+                except Exception:
+                    logger.exception("Error updating market history for type_id %s", type_id)
                 time.sleep(1)
         finally:
             cache.delete(lock_id)
     else:
-        print("Task already running, skipping.")
+        logger.info("Task already running, skipping.")

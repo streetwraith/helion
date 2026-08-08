@@ -1,18 +1,13 @@
-from django.shortcuts import render
-# from regex import F
-from django.db.models import F, ExpressionWrapper, Subquery, OuterRef, Min, FloatField, Max, Q
-from helion.providers import esi
-from esi.models import Token
-from market.models import MarketOrder, TradeItem, TradeHub, MarketRegionStatus, MarketOrderUndercut
-import time
-from market.services import market_service
-from evesde import services as sde_service
-from datetime import datetime, timezone
-from market.constants import REGION_ID_FORGE, REGION_ID_DOMAIN
 import math
-from django.db.models import Avg, Sum
-from django.db.models.functions import Extract
-from datetime import timedelta
+from datetime import datetime, timedelta, timezone
+
+from django.db.models import ExpressionWrapper, F, FloatField, Max, Min, Q, Sum
+from django.shortcuts import render
+
+from evesde import services as sde_service
+from market.constants import REGION_ID_DOMAIN, REGION_ID_FORGE
+from market.models import MarketOrder, MarketOrderUndercut, MarketRegionStatus, TradeHub, TradeItem
+from market.services import market_service
 
 def _fourth_significant_digit(price):
     if price == 0:
@@ -235,12 +230,10 @@ def market_trade_hub(request, region_id):
             is_buy=True
         )
 
-        # Calculate profit and liquidity
+        # Realized profit over the volume that has completed a full buy-sell cycle
         volume_for_profit = min(my_sell_history['volume'], my_buy_history['volume'])
-        liquidity = 0
         my_profit = 0
         if volume_for_profit > 0:
-            liquidity = my_sell_history['volume'] / my_buy_history['volume'] * 100
             my_profit = volume_for_profit * my_sell_history['avg_price'] - volume_for_profit * my_buy_history['avg_price']
 
         # Get station orders

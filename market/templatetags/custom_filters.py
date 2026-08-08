@@ -22,7 +22,7 @@ def isk_value(value):
     return "{:,.0f}".format(value)
 
 @register.filter(name='isk_value_k')
-def isk_value_mil(value):
+def isk_value_k(value):
     if(value == 0 or value == None or isinstance(value, dict) or value == ''):
         return 0
     return "{:,.1f}k".format(value/1000)
