@@ -1,12 +1,16 @@
-from market.models import MarketRegionStatus, TradeHub, WalletJournal, MarketTransaction
-from django.shortcuts import render, redirect
-from market.services import market_service
-from django.views.decorators.http import require_POST
-from django.utils import timezone
-from datetime import timedelta
-from django.db.models import Sum, F
-from concurrent.futures import ThreadPoolExecutor, as_completed
+import logging
 import re
+from datetime import timedelta
+
+from django.db.models import F, Sum
+from django.shortcuts import redirect, render
+from django.utils import timezone
+from django.views.decorators.http import require_POST
+
+from market.models import MarketRegionStatus, TradeHub, WalletJournal
+from market.services import market_service
+
+logger = logging.getLogger(__name__)
 
 def index(request):
     market_regions = MarketRegionStatus.objects.all()
@@ -18,11 +22,11 @@ def index(request):
     return render(request, "market/index.html", context)
 
 def refresh_all_data(request):
-    print(f"refreshing transactions..")
-    market_service.update_market_transactions(request.session['esi_token']['character_id']) 
-    print(f"refreshing trade hub orders..")
+    logger.info("refreshing transactions..")
+    market_service.update_market_transactions(request.session['esi_token']['character_id'])
+    logger.info("refreshing trade hub orders..")
     market_service.refresh_all_trade_hub_orders()
-    print(f'updating wallet journal..')
+    logger.info("updating wallet journal..")
     market_service.get_wallet_journal(request.session['esi_token']['character_id'])
     return redirect('market_index')
 
@@ -78,7 +82,7 @@ def shopping_list(request):
 
 @require_POST
 def market_region_orders_refresh(request, region_id):
-    print((f"refreshing region orders: {region_id}"))
+    logger.info("refreshing region orders: %s", region_id)
     market_service.refresh_trade_hub_orders(region_id=region_id, character_id=request.session['esi_token']['character_id'])
     return redirect('market_index')
 
@@ -104,14 +108,11 @@ class WalletStatistics():
             if ret == None:
                 return 0
         elif ref_type == 'buy':
-            contracts_ret = self.journal_data.filter(date__gte=start, date__lt=end, ref_type=['contract_reward_deposited']).aggregate(total=Sum('amount'))['total']
-            if contracts_ret == None:
-                contracts_ret = 0
-            ret = self.transaction_data.filter(date__gte=start, date__lt=end, is_buy=True).aggregate(total=Sum(F('quantity') * F('unit_price')))['total'] or 0 + contracts_ret
-            if ret == None:
-                return 0 + contracts_ret
-            else:
-                ret = ret + contracts_ret
+            contracts_ret = self.journal_data.filter(date__gte=start, date__lt=end, ref_type='contract_reward_deposited').aggregate(total=Sum('amount'))['total'] or 0
+            transactions_ret = self.transaction_data.filter(date__gte=start, date__lt=end, is_buy=True).aggregate(total=Sum(F('quantity') * F('unit_price')))['total'] or 0
+            # Deposited courier rewards are negative journal amounts; they are a
+            # cost, so subtract to add their absolute value to the buy total.
+            ret = transactions_ret - contracts_ret
         elif ref_type == 'profit':
             ret = self.get_data_for_range('sell', days_to, days_from) - self.get_data_for_range('buy', days_to, days_from) + self.get_data_for_range('brokers_fee', days_to, days_from) + self.get_data_for_range('transaction_tax', days_to, days_from)
             if ret == None:

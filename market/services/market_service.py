@@ -1,24 +1,24 @@
-from helion.providers import esi
-from esi.models import Token
-import os
-from market.models import MarketOrder, MarketTransaction, MarketRegionStatus, TradeItem, TradeHub, MarketHistory, WalletJournal, MarketNotification, MarketOrderUndercut, A4EMarketHistoryVolume, SystemHubJumps
-from evesde.models import Type
-
-from datetime import date, datetime, timedelta, timezone
+import logging
 import statistics
 import time
-from email.utils import parsedate_to_datetime
 from concurrent.futures import ThreadPoolExecutor, as_completed
-from django.db import connection, transaction
-from django.utils.timezone import localtime
-from psycopg2.extras import execute_values
-from django.db.models import Max, Min, Sum, F
+from datetime import datetime, timedelta, timezone
+from email.utils import parsedate_to_datetime
 
 import environ
+from django.db import connection, transaction
+from django.db.models import F, Max, Sum
+from psycopg2.extras import execute_values
+
+from esi.models import Token
+from evesde.models import Type
+from helion.providers import esi
+from market.models import MarketOrder, MarketTransaction, MarketRegionStatus, TradeItem, TradeHub, MarketHistory, WalletJournal, MarketOrderUndercut, A4EMarketHistoryVolume, SystemHubJumps
 
 env = environ.Env()
+logger = logging.getLogger(__name__)
 
-def find_type_ids_by_market_groups(market_group_id=[], excluded_meta_ids=[]):
+def find_type_ids_by_market_groups(market_group_id, excluded_meta_ids=None):
     query = """
         WITH RECURSIVE market_group_hierarchy AS (
             -- Base case: Start with the chosen market_group_id
@@ -48,11 +48,10 @@ def find_type_ids_by_market_groups(market_group_id=[], excluded_meta_ids=[]):
 
     with connection.cursor() as cursor:
         cursor.execute(query, params)
-        results = [row[0] for row in cursor.fetchall()]
-        connection.close()
-        return results
+        return [row[0] for row in cursor.fetchall()]
 
-def save_market_order_undercuts(region_id, character_id, is_buy, market_order_undercut_data=[]):
+def save_market_order_undercuts(region_id, character_id, is_buy, market_order_undercut_data=None):
+    market_order_undercut_data = market_order_undercut_data or []
     new_market_order_undercuts = [
         MarketOrderUndercut(
             type_id=market_order_undercut[0],
@@ -104,9 +103,7 @@ def find_undercut_sell_orders(region_id, character_id):
 
     with connection.cursor() as cursor:
         cursor.execute(query, [character_id, region_id])
-        results = cursor.fetchall()
-        connection.close()
-        return results
+        return cursor.fetchall()
 
 def find_undercut_buy_orders(region_id, character_id):
     query = """
@@ -141,9 +138,7 @@ def find_undercut_buy_orders(region_id, character_id):
 
     with connection.cursor() as cursor:
         cursor.execute(query, [character_id, region_id])
-        results = cursor.fetchall()
-        connection.close()
-        return results
+        return cursor.fetchall()
 
 def trade_item_add(type_id):
     sde_type_id = Type.objects.get(type_id=type_id)
@@ -240,14 +235,13 @@ def refresh_trade_hub_orders(region_id, character_id=None):
     region_id, orders = fetch_market_orders_parallel(region_id)
     region_id, orders = process_market_orders(orders, region_id, character_id)
     with transaction.atomic():
-        print(f"region {region_id}, deleting old orders..")
+        logger.info("region %s, replacing old orders..", region_id)
         MarketOrder.objects.filter(region_id=region_id).delete()
-        print(f"region {region_id}, saving new orders..")
         save_market_orders(orders)
     region_status = MarketRegionStatus.objects.get(region_id=region_id)
     region_status.orders = len(orders)
     region_status.save()
-    print(f"region {region_id}, orders updated: {region_status.orders}")
+    logger.info("region %s, orders updated: %s", region_id, region_status.orders)
 
 def refresh_all_trade_hub_orders():
     market_regions = MarketRegionStatus.objects.all()
@@ -264,13 +258,14 @@ def refresh_all_trade_hub_orders():
             region_status = MarketRegionStatus.objects.get(region_id=region_id)
             region_status.orders = len(orders)
             region_status.save()
-            print(f"region {region_id}, orders updated: {region_status.orders}")
+            logger.info("region %s, orders updated: %s", region_id, region_status.orders)
 
 def fetch_market_orders_page(region_id, page):
     operation = esi.client.Market.get_markets_region_id_orders(region_id=region_id, order_type='all', page=page)
     operation.request_config.also_return_response = True
     data, response = operation.result()
-    print(f'region {region_id}, page {page}, elements: {len(data)}, expires: {response.headers.get("Expires")}, last modified: {response.headers.get("Last-Modified")}')
+    logger.info("region %s, page %s, elements: %s, expires: %s, last modified: %s",
+                region_id, page, len(data), response.headers.get("Expires"), response.headers.get("Last-Modified"))
     return data, response
 
 def fetch_market_orders_parallel(region_id):
@@ -295,7 +290,7 @@ def fetch_market_orders_parallel(region_id):
     wait_seconds = 0
     if time_since_last_modified > max_allowed_age:
         wait_seconds = (expires_time - now).total_seconds() + wait_after_expiration_seconds
-        print(f"region {region_id}, waiting {wait_seconds:.2f} seconds for data refresh..")
+        logger.info("region %s, waiting %.2f seconds for data refresh..", region_id, wait_seconds)
         time.sleep(wait_seconds)
         result, response = fetch_market_orders_page(region_id, 1)
         results.extend(result)
@@ -303,7 +298,8 @@ def fetch_market_orders_parallel(region_id):
     else:
         results.extend(result)
 
-    print(f'region {region_id}, total pages to fetch: {total_pages}, expires: {response.headers.get("Expires")}, last modified: {response.headers.get("Last-Modified")}')
+    logger.info("region %s, total pages to fetch: %s, expires: %s, last modified: %s",
+                region_id, total_pages, response.headers.get("Expires"), response.headers.get("Last-Modified"))
 
     with ThreadPoolExecutor(max_workers=threads) as executor:
         futures = [
@@ -368,55 +364,17 @@ def save_market_orders(market_orders):
     values = [
         tuple(data[col] for col in columns) for data in market_orders
     ]
-    # SQL query using column names
+    # ESI pagination can shift orders between pages mid-fetch, so the same
+    # order_id may appear twice in one batch; keep the first copy.
     sql = f"""
-    INSERT INTO market_marketorder ({", ".join(columns)}) 
+    INSERT INTO market_marketorder ({", ".join(columns)})
     VALUES %s
+    ON CONFLICT (order_id) DO NOTHING
     """
     
     with connection.cursor() as cursor:
         execute_values(cursor, sql, values)  # Efficient bulk insert
 
-def update_market_orders(region_id):
-    hub_jumps = dict(SystemHubJumps.objects.values_list('system_id', 'jumps_to_trade_hub'))
-    region_trade_hub = TradeHub.objects.get(region_id=region_id)
-
-    market_orders = []
-    region_market_data = esi.client.Market.get_markets_region_id_orders(region_id=region_id, order_type='all').results()
-
-    for index, value in enumerate(region_market_data):
-        market_order = MarketOrder(**value)
-        market_order.region_id = region_id
-        is_order_in_range = True
-        if market_order.is_buy_order and market_order.location_id != region_trade_hub.station_id:
-            if market_order.range == 'region':
-                is_order_in_range = True
-            elif market_order.range == 'station':
-                is_order_in_range = False
-            elif market_order.range == 'solarsystem':
-                if market_order.system_id != region_trade_hub.system_id:
-                    is_order_in_range = False
-            else:
-                system_jumps = hub_jumps.get(market_order.system_id)
-                if system_jumps is not None and int(market_order.range) < system_jumps:
-                    is_order_in_range = False
-        elif not market_order.is_buy_order and market_order.location_id != region_trade_hub.station_id:
-            is_order_in_range = False
-
-        market_order.is_in_trade_hub_range = is_order_in_range
-        market_orders.append(market_order)
-
-    MarketOrder.objects.filter(region_id=region_id).delete()
-    MarketOrder.objects.bulk_create(market_orders, 
-        update_conflicts=True, 
-        unique_fields=['order_id'], 
-        update_fields=['duration', 'is_buy_order', 'issued', 'location_id', 'min_volume', 'price', 'range', 'system_id', 'type_id', 'volume_remain', 'volume_total', 'region_id', 'is_in_trade_hub_range', 'character_id']
-    )
-
-    region_status = MarketRegionStatus.objects.get(region_id=region_id)
-    region_status.orders = len(market_orders)
-    region_status.save()
-    
 def get_trade_history(type_id, location_id=None, is_buy=False):
     history = {
         'volume': 0,
@@ -514,125 +472,56 @@ def update_market_history(region_id, type_id):
         history_entry = MarketHistory(**elem)
         history_entry.type_id = type_id
         history_entry.region_id = region_id
-        # if history_entry.date < (date.today() - timedelta(days=90)):
-            # continue
         history.append(history_entry)
 
     MarketHistory.objects.filter(region_id=region_id, type_id=type_id).delete()
     ret = MarketHistory.objects.bulk_create(history)
-    print(f"Market history updated for {type_id} in {region_id}: {len(ret)} records")
+    logger.info("Market history updated for %s in %s: %s records", type_id, region_id, len(ret))
     return ret
 
-def filter_order_list(input_list, region_id=None, location_id=None, type_id=None, is_buy_order=None, location_id__in=[]):
-    result = input_list
-    if region_id is not None:
-        result = list(filter(lambda order: order['region_id'] == region_id, result))
-    if location_id is not None:
-        result = list(filter(lambda order: order['location_id'] == location_id, result))
-    if type_id is not None:
-        result = list(filter(lambda order: order['type_id'] == type_id, result))
-    if is_buy_order is True:
-        result = list(filter(lambda order: 'is_buy_order' in order and order['is_buy_order'] == True, result))
-    if is_buy_order is False:
-        result = list(filter(lambda order: 'is_buy_order' not in order or order['is_buy_order'] != True, result))
-    if len(location_id__in) > 0:
-        result = list(filter(lambda order: order['location_id'] in location_id__in, result))
-    return result
+def _price_distance(avg, lowest, highest):
+    # Position of the average price within the low-high band, in percent.
+    # Undefined when inputs are missing or the band is flat (highest == lowest).
+    if avg is None or lowest is None or highest is None or highest == lowest:
+        return None
+    return (avg - lowest) / (highest - lowest) * 100
 
 def calculate_market_history_averages(history, region_id, type_id):
-    if not history or len(history) == 0:
+    if not history:
         return None
-    
-    avg_daily_volume = 0
-    volume_total = 0
-    avg_avg = None
-    avg_highest = None
-    avg_lowest = None
-    avg_distance = None
-    median_avg = None
-    median_highest = None
-    median_lowest = None
-    median_distance = None
 
-    try:
-        avg_daily_volume = statistics.mean([item.volume for item in history])
-        volume_total = sum(item.volume for item in history)
-        # avg_daily_volume = sum(item.volume for item in history)/14
+    # Gap-filled history rows carry None prices; only real records count.
+    averages = [item.average for item in history if item.average is not None]
+    highs = [item.highest for item in history if item.highest is not None]
+    lows = [item.lowest for item in history if item.lowest is not None]
 
-        avg_avg = statistics.mean([item.average for item in history if item.average is not None])
-        avg_highest = statistics.mean([item.highest for item in history if item.highest is not None])
-        avg_lowest = statistics.mean([item.lowest for item in history if item.lowest is not None])
-        median_avg = statistics.median([item.average for item in history if item.average is not None])
-        median_highest = statistics.median([item.highest for item in history if item.highest is not None])
-        median_lowest = statistics.median([item.lowest for item in history if item.lowest is not None])
+    avg_avg = statistics.mean(averages) if averages else None
+    avg_highest = statistics.mean(highs) if highs else None
+    avg_lowest = statistics.mean(lows) if lows else None
+    median_avg = statistics.median(averages) if averages else None
+    median_highest = statistics.median(highs) if highs else None
+    median_lowest = statistics.median(lows) if lows else None
 
-        avg_distance = (avg_avg-avg_lowest)/(avg_highest-avg_lowest)*100
-        median_distance = (median_avg-median_lowest)/(median_highest-median_lowest)*100
-    except Exception as e:
-        print(f'statistics error: {e}')
-        
     data = {
         'type_id': type_id,
         'region_id': region_id,
-        'avg_daily_volume': avg_daily_volume,
-        'volume_total': volume_total,
+        'avg_daily_volume': statistics.mean([item.volume for item in history]),
+        'volume_total': sum(item.volume for item in history),
         'avg_avg': avg_avg,
         'avg_highest': avg_highest,
         'avg_lowest': avg_lowest,
-        'avg_distance': avg_distance,
+        'avg_distance': _price_distance(avg_avg, avg_lowest, avg_highest),
         'median_avg': median_avg,
         'median_highest': median_highest,
         'median_lowest': median_lowest,
-        'median_distance': median_distance
+        'median_distance': _price_distance(median_avg, median_lowest, median_highest)
     }
     return data
 
 def calculate_market_history_average_volume(history):
-    if not history or len(history) == 0:
+    if not history:
         return None
-    
-    avg_daily_volume = 0
-
-    try:
-        avg_daily_volume = statistics.mean([item.volume for item in history])
-    except Exception as e:
-        print(f'statistics error: {e}')
-        
-    return avg_daily_volume
-
-def create_order_undercut_notifications(undercut_data, character_id):
-    # Extract order_ids and their competitor_issued timestamps
-    order_ids = [order[0] for order in undercut_data]
-    order_issued_map = {order[0]: order[4] for order in undercut_data}
-
-    # Fetch notifications for given orders
-    existing_notifications = MarketNotification.objects.filter(
-        order_id__in=order_ids, 
-        character_id=character_id,
-        event_type="market_order_undercut"
-    ).values("order_id", "created_at")
-
-    # Filter notifications that were created after the competitor was issued
-    filtered_notifications = [
-        notification for notification in existing_notifications
-        if notification["created_at"] > order_issued_map[notification["order_id"]]
-    ]
-
-    existing_orders_notified = {n["order_id"] for n in filtered_notifications}
-
-    # Find orders that haven't been notified yet
-    new_notifications = [
-        MarketNotification(
-            order_id=order[0],
-            character_id=character_id,
-            event_type="market_order_undercut",
-            notification_data={"competitor_price": order[5], "competitor_order_id": order[3], "competitor_issued": localtime(order[4]).isoformat()}
-        )
-        for order in undercut_data if order[0] not in existing_orders_notified
-    ]
-
-    # Bulk insert new notifications
-    MarketNotification.objects.bulk_create(new_notifications)
+    return statistics.mean([item.volume for item in history])
 
 def get_shopping_list_prices(item_names):
     region_ids = list(TradeHub.objects.values_list('region_id', flat=True))
@@ -658,9 +547,7 @@ def get_shopping_list_prices(item_names):
     params = region_ids + item_names
     with connection.cursor() as cursor:
         cursor.execute(query, params)
-        results = cursor.fetchall()
-        connection.close()
-        return results
+        return cursor.fetchall()
     
 def get_a4e_market_history_volume(type_ids):
     # Get date range for last 90 days
@@ -703,11 +590,6 @@ def get_ice_sell_orders(ice_types):
     sell_orders = MarketOrder.objects.filter(is_buy_order=False, is_in_trade_hub_range=True, type_id__in=ice_types)
     return sell_orders
 
-def update_ice_market_history(ice_types, region_ids):
-    for region_id in region_ids:
-        for ice_type in ice_types:
-            update_market_history(region_id, ice_type)
-
 def get_ice_history(ice_types, region_ids):
     return MarketHistory.objects.filter(type_id__in=ice_types, region_id__in=region_ids)
 
@@ -715,23 +597,16 @@ def get_ice_products_orders(ice_product_types):
     orders = MarketOrder.objects.filter(is_in_trade_hub_range=True, type_id__in=ice_product_types)
     return orders
 
-def update_ice_products_market_history(ice_product_types, region_ids):
-    for region_id in region_ids:
-        for ice_product_type in ice_product_types:
-            update_market_history(region_id, ice_product_type)
-
 def get_ice_products_history(ice_product_types, region_ids):
     return MarketHistory.objects.filter(type_id__in=ice_product_types, region_id__in=region_ids)
 
-def get_average_transaction_price(type_id, region_id=None, days_back=90, is_buy=False):
+def get_average_transaction_price(type_id, days_back=90, is_buy=False):
     filters = {
         'type_id': type_id,
         'is_buy': is_buy,
         'is_personal': True,
-        'date__gte': datetime.now() - timedelta(days=days_back)
+        'date__gte': datetime.now(timezone.utc) - timedelta(days=days_back)
     }
-    if region_id is not None:
-        filters['region_id'] = region_id
     transactions = MarketTransaction.objects.filter(**filters)
     result = transactions.aggregate(
         avg_price=Sum(F('unit_price') * F('quantity')) / Sum('quantity')

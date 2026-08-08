@@ -1,6 +1,7 @@
-from datetime import datetime, timedelta
+from datetime import timedelta
 from django.shortcuts import render, redirect
 from django.urls import reverse
+from django.utils import timezone
 from urllib.parse import urlencode
 from market.services import market_service
 from market.constants import REGION_ID_HEIMATAR, REGION_ID_DOMAIN, REGION_ID_FORGE, REGION_ID_SINQLAISON, REGION_ID_METROPOLIS
@@ -151,6 +152,8 @@ ICE_TYPES = {
 }
 
 def market_ice_index(request):
+    # MarketHistory.date rows are UTC days (ESI convention); compare date-to-date.
+    today = timezone.now().date()
     context = {}
     context['params'] = {
         'rig_modifier': int(request.GET.get('rig_modifier', 3)),
@@ -213,6 +216,9 @@ def market_ice_index(request):
         best_buy_price_global = 999999999
         for market_hub in ['Jita', 'Amarr', 'Hek', 'Rens']:
             context['ice_product_data'][ice_product_type][market_hub] = {'best_sell_price': 0, 'best_buy_price': 999999999,'best_buy_order_volume': 0}
+            # Reset per hub: chart_data below reads this even when the hub has no
+            # sell orders, and must not see the previous iteration's price.
+            best_sell_price = 0
             market_hub_ice_product_sell_orders = ice_products_orders.filter(region_id=MARKET_HUBS[market_hub], type_id=ICE_PRODUCT_TYPES[ice_product_type], is_buy_order=False).order_by('price')
             market_hub_ice_product_buy_orders = ice_products_orders.filter(region_id=MARKET_HUBS[market_hub], type_id=ICE_PRODUCT_TYPES[ice_product_type], is_buy_order=True).order_by('-price')
             if market_hub_ice_product_sell_orders.exists():
@@ -231,13 +237,13 @@ def market_ice_index(request):
                 context['ice_product_data'][ice_product_type][market_hub]['best_buy_order_volume']= best_buy_order_volume
             market_hub_ice_product_history = ice_products_history.filter(region_id=MARKET_HUBS[market_hub], type_id=ICE_PRODUCT_TYPES[ice_product_type]).order_by('-date')
             if market_hub_ice_product_history.exists():
-                context['ice_product_data'][ice_product_type][market_hub]['7d_avg_price'] = market_hub_ice_product_history.filter(date__gte=datetime.now() - timedelta(days=8)).aggregate(avg_price=Avg('highest'))['avg_price']
-                context['ice_product_data'][ice_product_type][market_hub]['30d_avg_price'] = market_hub_ice_product_history.filter(date__gte=datetime.now() - timedelta(days=31)).aggregate(avg_price=Avg('highest'))['avg_price']
-                context['ice_product_data'][ice_product_type][market_hub]['90d_avg_price'] = market_hub_ice_product_history.filter(date__gte=datetime.now() - timedelta(days=91)).aggregate(avg_price=Avg('highest'))['avg_price']
-                context['ice_product_data'][ice_product_type][market_hub]['7d_vol'] = market_hub_ice_product_history.filter(date__gte=datetime.now() - timedelta(days=8)).aggregate(total_vol=Sum('volume'))['total_vol']
-                context['ice_product_data'][ice_product_type][market_hub]['30d_vol'] = market_hub_ice_product_history.filter(date__gte=datetime.now() - timedelta(days=31)).aggregate(total_vol=Sum('volume'))['total_vol']
-                context['ice_product_data'][ice_product_type][market_hub]['90d_vol'] = market_hub_ice_product_history.filter(date__gte=datetime.now() - timedelta(days=91)).aggregate(total_vol=Sum('volume'))['total_vol']
-                chart_data = list(market_hub_ice_product_history.filter(date__gte=datetime.now() - timedelta(days=30)).order_by('date').values_list('highest', flat=True))
+                context['ice_product_data'][ice_product_type][market_hub]['7d_avg_price'] = market_hub_ice_product_history.filter(date__gte=today - timedelta(days=8)).aggregate(avg_price=Avg('highest'))['avg_price']
+                context['ice_product_data'][ice_product_type][market_hub]['30d_avg_price'] = market_hub_ice_product_history.filter(date__gte=today - timedelta(days=31)).aggregate(avg_price=Avg('highest'))['avg_price']
+                context['ice_product_data'][ice_product_type][market_hub]['90d_avg_price'] = market_hub_ice_product_history.filter(date__gte=today - timedelta(days=91)).aggregate(avg_price=Avg('highest'))['avg_price']
+                context['ice_product_data'][ice_product_type][market_hub]['7d_vol'] = market_hub_ice_product_history.filter(date__gte=today - timedelta(days=8)).aggregate(total_vol=Sum('volume'))['total_vol']
+                context['ice_product_data'][ice_product_type][market_hub]['30d_vol'] = market_hub_ice_product_history.filter(date__gte=today - timedelta(days=31)).aggregate(total_vol=Sum('volume'))['total_vol']
+                context['ice_product_data'][ice_product_type][market_hub]['90d_vol'] = market_hub_ice_product_history.filter(date__gte=today - timedelta(days=91)).aggregate(total_vol=Sum('volume'))['total_vol']
+                chart_data = list(market_hub_ice_product_history.filter(date__gte=today - timedelta(days=30)).order_by('date').values_list('highest', flat=True))
                 context['ice_product_data'][ice_product_type][market_hub]['chart_data'] = {
                     'color': ('lightcoral' if best_sell_price < chart_data[-1] else 'lightgreen') if chart_data else 'white',
                     'values': ",".join(map(str, chart_data + [best_sell_price])),
@@ -311,12 +317,12 @@ def market_ice_index(request):
                     best_market_hub_full_cargo_price = full_cargo_average_price * context['params']['freighter_capacity']/100
                 
             if market_hub_ice_history.exists():
-                context['ice_data'][ice_type][market_hub]['7d_avg_price'] = market_hub_ice_history.filter(date__gte=datetime.now() - timedelta(days=8)).aggregate(avg_price=Avg('highest'))['avg_price']
-                context['ice_data'][ice_type][market_hub]['30d_avg_price'] = market_hub_ice_history.filter(date__gte=datetime.now() - timedelta(days=31)).aggregate(avg_price=Avg('highest'))['avg_price']
-                context['ice_data'][ice_type][market_hub]['90d_avg_price'] = market_hub_ice_history.filter(date__gte=datetime.now() - timedelta(days=91)).aggregate(avg_price=Avg('highest'))['avg_price']
-                context['ice_data'][ice_type][market_hub]['7d_vol'] = market_hub_ice_history.filter(date__gte=datetime.now() - timedelta(days=8)).aggregate(total_vol=Sum('volume'))['total_vol']
-                context['ice_data'][ice_type][market_hub]['30d_vol'] = market_hub_ice_history.filter(date__gte=datetime.now() - timedelta(days=31)).aggregate(total_vol=Sum('volume'))['total_vol']
-                context['ice_data'][ice_type][market_hub]['90d_vol'] = market_hub_ice_history.filter(date__gte=datetime.now() - timedelta(days=91)).aggregate(total_vol=Sum('volume'))['total_vol']
+                context['ice_data'][ice_type][market_hub]['7d_avg_price'] = market_hub_ice_history.filter(date__gte=today - timedelta(days=8)).aggregate(avg_price=Avg('highest'))['avg_price']
+                context['ice_data'][ice_type][market_hub]['30d_avg_price'] = market_hub_ice_history.filter(date__gte=today - timedelta(days=31)).aggregate(avg_price=Avg('highest'))['avg_price']
+                context['ice_data'][ice_type][market_hub]['90d_avg_price'] = market_hub_ice_history.filter(date__gte=today - timedelta(days=91)).aggregate(avg_price=Avg('highest'))['avg_price']
+                context['ice_data'][ice_type][market_hub]['7d_vol'] = market_hub_ice_history.filter(date__gte=today - timedelta(days=8)).aggregate(total_vol=Sum('volume'))['total_vol']
+                context['ice_data'][ice_type][market_hub]['30d_vol'] = market_hub_ice_history.filter(date__gte=today - timedelta(days=31)).aggregate(total_vol=Sum('volume'))['total_vol']
+                context['ice_data'][ice_type][market_hub]['90d_vol'] = market_hub_ice_history.filter(date__gte=today - timedelta(days=91)).aggregate(total_vol=Sum('volume'))['total_vol']
 
             if market_hub == 'Jita' or market_hub == 'Amarr' or market_hub == 'Hek' or market_hub == 'Rens':
                 input_volume = context['params']['freighter_capacity']/100
@@ -326,7 +332,6 @@ def market_ice_index(request):
                 for ice_product_type in ICE_PRODUCT_TYPES:
                     ice_product_type_yield = ICE_TYPES[ice_type]['base_yield'][ice_product_type] * reprocessing_yield/100
                     sell_order_price = ice_product_type_yield * context['ice_product_data'][ice_product_type][market_hub]['best_sell_price']
-                    # buy_order_price = ice_product_type_yield * context['ice_product_data'][ice_product_type][market_hub]['best_buy_price']
                     market_hub_ice_product_buy_orders = ice_products_orders.filter(region_id=MARKET_HUBS[market_hub], type_id=ICE_PRODUCT_TYPES[ice_product_type], is_buy_order=True).order_by('-price')
 
                     accumulated_buy_volume = 0.0
@@ -342,10 +347,6 @@ def market_ice_index(request):
                             total_buy_order_cost += order.price * remaining_volume
                             accumulated_buy_volume += remaining_volume
                             break  # We've reached the target
-
-                    # total_buy_order_average_price = 0
-                    # if accumulated_buy_volume != 0:
-                            # total_buy_order_average_price = total_buy_order_cost / accumulated_buy_volume
 
                     context['ice_data'][ice_type][market_hub]['reprocess'][ice_product_type] = {
                         'yield': ice_product_type_yield,
