@@ -6,8 +6,9 @@ from datetime import datetime, timedelta, timezone
 from email.utils import parsedate_to_datetime
 
 import environ
+from django.core.cache import cache
 from django.db import connection, transaction
-from django.db.models import F, Max, Sum
+from django.db.models import F, Max, Min, Sum
 from psycopg2.extras import execute_values
 
 from esi.models import Token
@@ -618,3 +619,50 @@ def get_brokers_fee(faction_standing=9.75, corporation_standing=10.0, broker_rel
 
 def get_sales_tax():
     return 0.0337
+
+PLEX_TYPE_ID = 44992
+LARGE_SKILL_INJECTOR_TYPE_ID = 40520
+SKILL_EXTRACTOR_TYPE_ID = 40519
+# PLEX trades on a global market and never appears in normal region order
+# feeds; ESI exposes it as this pseudo-region.
+GLOBAL_PLEX_MARKET_REGION_ID = 19000001
+JITA_STATION_ID = 60003760
+PRICE_TICKER_CACHE_SECONDS = 600  # matches the Jita order sync cadence
+
+def get_price_ticker():
+    """Best-ask prices for the header ticker. None values mean no data."""
+    ticker = cache.get('price_ticker')
+    if ticker is None:
+        ticker = {
+            'plex': fetch_plex_best_ask(),
+            'lsi': get_jita_best_ask(LARGE_SKILL_INJECTOR_TYPE_ID),
+            'extractor': get_jita_best_ask(SKILL_EXTRACTOR_TYPE_ID),
+        }
+        cache.set('price_ticker', ticker, PRICE_TICKER_CACHE_SECONDS)
+    return ticker
+
+def get_jita_best_ask(type_id):
+    return MarketOrder.objects.filter(
+        type_id=type_id, location_id=JITA_STATION_ID, is_buy_order=False
+    ).aggregate(best=Min('price'))['best']
+
+def fetch_plex_best_ask():
+    # Runs in the request path (on ticker cache miss); the header must never
+    # break a page, so any ESI failure degrades to None and is logged.
+    try:
+        prices = []
+        page = 1
+        while page <= 10:  # hard bound; PLEX sells fit one page today
+            operation = esi.client.Market.get_markets_region_id_orders(
+                region_id=GLOBAL_PLEX_MARKET_REGION_ID, type_id=PLEX_TYPE_ID,
+                order_type='sell', page=page)
+            operation.request_config.also_return_response = True
+            data, response = operation.result()
+            prices.extend(order['price'] for order in data)
+            if page >= int(response.headers.get('X-Pages', 1)):
+                break
+            page += 1
+        return min(prices, default=None)
+    except Exception:
+        logger.exception("PLEX price fetch failed")
+        return None

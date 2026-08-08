@@ -6,6 +6,7 @@ from django.contrib.auth.models import User
 from django.db import connection
 
 from market.models import MarketRegionStatus, TradeHub
+from market.services import market_service
 
 
 @pytest.fixture(scope="session")
@@ -65,6 +66,27 @@ def django_db_setup(django_db_setup, django_db_blocker):
     with django_db_blocker.unblock():
         with connection.cursor() as cursor:
             cursor.execute(SDE_DDL)
+
+
+class FakeCache:
+    """Minimal cache stand-in so tests never touch the shared dev Redis."""
+
+    def __init__(self):
+        self._data = {}
+
+    def get(self, key, default=None):
+        return self._data.get(key, default)
+
+    def set(self, key, value, timeout=None):
+        self._data[key] = value
+
+
+@pytest.fixture(autouse=True)
+def isolated_price_ticker(monkeypatch):
+    # The header price ticker (context processor) runs on every authenticated
+    # page render: keep all tests off the network and off the dev Redis.
+    monkeypatch.setattr(market_service, "cache", FakeCache())
+    monkeypatch.setattr(market_service, "fetch_plex_best_ask", lambda: None)
 
 
 CHARACTER_ID = 900001
