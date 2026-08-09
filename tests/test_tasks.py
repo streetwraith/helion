@@ -1,5 +1,7 @@
-"""The cache_lock mutex that serializes the Celery tasks."""
+"""The cache_lock mutex that serializes the Celery tasks, and rate-limit backoff."""
 import pytest
+
+from esi.exceptions import ESIErrorLimitException
 
 from market import tasks
 from market.services import market_service
@@ -60,3 +62,39 @@ def test_task_runs_body_only_when_lock_is_free(lock_cache, monkeypatch):
     lock_cache.add("update_market_orders_lock", "locked")
     tasks.update_market_orders.apply()
     assert calls == [1]
+
+
+# In eager mode (.apply()) celery re-executes retries immediately and, after
+# max_retries, surfaces the original exception as a FAILURE. A real worker
+# instead re-schedules with the countdown ("Retry in Ns" in the task log).
+
+def test_rate_limited_task_retries_and_releases_lock(lock_cache, monkeypatch):
+    calls = []
+
+    def boom():
+        calls.append(1)
+        raise ESIErrorLimitException(reset=30)
+
+    monkeypatch.setattr(market_service, "refresh_all_trade_hub_orders", boom)
+    result = tasks.update_market_orders.apply()
+    assert len(calls) == 4  # first run + max_retries=3: the retry path engaged
+    assert result.status == "FAILURE"  # gives up after max retries, loudly
+    assert isinstance(result.result, ESIErrorLimitException)
+    assert "update_market_orders_lock" not in lock_cache._data
+
+
+def test_history_task_backs_off_instead_of_hammering(lock_cache, monkeypatch, trade_hubs):
+    calls = []
+
+    def boom(region_id, type_id):
+        calls.append(type_id)
+        raise ESIErrorLimitException(reset=30)
+
+    monkeypatch.setattr(market_service, "find_type_ids_by_market_groups",
+                        lambda market_group_id, excluded_meta_ids=None: [1, 2])
+    monkeypatch.setattr(market_service, "update_market_history", boom)
+    monkeypatch.setattr(tasks.time, "sleep", lambda seconds: None)
+
+    result = tasks.update_market_history.apply(args=("Jita", 4))
+    assert result.status == "FAILURE"
+    assert calls == [1, 1, 1, 1]  # every attempt stopped at type 1: no hammering on

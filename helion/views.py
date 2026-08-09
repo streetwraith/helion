@@ -50,7 +50,9 @@ def characters(request, *args, **kwargs):
     if request.GET.get('show_skills', False):
         character_id = request.session['esi_token']['character_id']
         token = Token.get_token(character_id, 'esi-skills.read_skills.v1')
-        character_skills = esi.client.Skills.get_characters_character_id_skills(character_id=character_id, token = token.valid_access_token()).results()
+        # use_etag=False: runs in the request path and always needs the body.
+        character_skills = esi.client.Skills.GetCharactersCharacterIdSkills(
+            character_id=character_id, token=token).result(use_etag=False).model_dump()
         context['character_skills'] = character_skills
         skills = Type.objects.filter(type_id__in=[skill['skill_id'] for skill in character_skills['skills']]).values('type_id', 'name')
         context['skill_names'] = {skill['type_id']: skill['name'] for skill in skills}

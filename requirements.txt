@@ -3,7 +3,7 @@ django_environ==0.12.0
 gunicorn==23.0.0
 PyYAML==6.0.1
 django-mathfilters==1.0.0
-django-esi==8.1.0
+django-esi==9.9.0
 whitenoise==6.9.0
 django-redis==5.4.0
 celery[redis]==5.4.0

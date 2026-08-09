@@ -67,13 +67,13 @@ class TestFetchPlexBestAsk:
             assert region_id == market_service.GLOBAL_PLEX_MARKET_REGION_ID
             assert type_id == market_service.PLEX_TYPE_ID
             assert order_type == "sell"
-            operation = SimpleNamespace(request_config=SimpleNamespace())
+            page_data = [SimpleNamespace(**order) for order in pages[page - 1]]
             response = SimpleNamespace(headers={"X-Pages": str(len(pages))})
-            operation.result = lambda: (pages[page - 1], response)
+            operation = SimpleNamespace(result=lambda **kw: (page_data, response))
             return operation
 
         return SimpleNamespace(
-            client=SimpleNamespace(Market=SimpleNamespace(get_markets_region_id_orders=get_orders))
+            client=SimpleNamespace(Market=SimpleNamespace(GetMarketsRegionIdOrders=get_orders))
         )
 
     def test_min_price_across_pages(self, monkeypatch):
@@ -93,7 +93,7 @@ class TestFetchPlexBestAsk:
             raise RuntimeError("ESI down")
 
         fake = SimpleNamespace(
-            client=SimpleNamespace(Market=SimpleNamespace(get_markets_region_id_orders=boom))
+            client=SimpleNamespace(Market=SimpleNamespace(GetMarketsRegionIdOrders=boom))
         )
         monkeypatch.setattr(esi_sync, "esi", fake)
         assert real_fetch_plex_best_ask() is None

@@ -18,8 +18,14 @@ FAKE_TOKEN = SimpleNamespace(
     get_token=lambda character_id, scope: SimpleNamespace(valid_access_token=lambda: "t"))
 
 
+def esi_model(data):
+    """Mimics a pydantic result item from the django-esi 9.x client."""
+    return SimpleNamespace(model_dump=lambda data=data: data, **data)
+
+
 def fake_wallet_esi(monkeypatch, endpoint, payload):
-    wallet = SimpleNamespace(**{endpoint: lambda **kw: SimpleNamespace(results=lambda: payload)})
+    items = [esi_model(entry) for entry in payload]
+    wallet = SimpleNamespace(**{endpoint: lambda **kw: SimpleNamespace(results=lambda **kw: items)})
     monkeypatch.setattr(esi_sync, "esi", SimpleNamespace(client=SimpleNamespace(Wallet=wallet)))
     monkeypatch.setattr(esi_sync, "Token", FAKE_TOKEN)
 
@@ -38,7 +44,7 @@ class TestGetWalletJournal:
         return [dict(self.FULL, date=now), dict(self.MINIMAL, date=now)]
 
     def test_maps_optional_fields_when_present_or_absent(self, monkeypatch):
-        fake_wallet_esi(monkeypatch, "get_characters_character_id_wallet_journal", self.payload())
+        fake_wallet_esi(monkeypatch, "GetCharactersCharacterIdWalletJournal", self.payload())
         esi_sync.get_wallet_journal(CHARACTER_ID)
 
         full = WalletJournal.objects.get(journal_id=1)
@@ -54,12 +60,12 @@ class TestGetWalletJournal:
         assert minimal.tax is None
 
     def test_rerun_updates_existing_rows(self, monkeypatch):
-        fake_wallet_esi(monkeypatch, "get_characters_character_id_wallet_journal", self.payload())
+        fake_wallet_esi(monkeypatch, "GetCharactersCharacterIdWalletJournal", self.payload())
         esi_sync.get_wallet_journal(CHARACTER_ID)
 
         changed = self.payload()
         changed[0]["amount"] = -150.0
-        fake_wallet_esi(monkeypatch, "get_characters_character_id_wallet_journal", changed)
+        fake_wallet_esi(monkeypatch, "GetCharactersCharacterIdWalletJournal", changed)
         esi_sync.get_wallet_journal(CHARACTER_ID)
 
         assert WalletJournal.objects.count() == 2
@@ -75,16 +81,16 @@ class TestUpdateMarketTransactions:
         }]
 
     def test_creates_rows_with_character_id(self, monkeypatch):
-        fake_wallet_esi(monkeypatch, "get_characters_character_id_wallet_transactions", self.payload())
+        fake_wallet_esi(monkeypatch, "GetCharactersCharacterIdWalletTransactions", self.payload())
         esi_sync.update_market_transactions(CHARACTER_ID)
         row = MarketTransaction.objects.get(transaction_id=1)
         assert row.character_id == CHARACTER_ID
         assert (row.quantity, row.unit_price, row.is_buy) == (10, 4.0, True)
 
     def test_rerun_updates_existing_rows(self, monkeypatch):
-        fake_wallet_esi(monkeypatch, "get_characters_character_id_wallet_transactions", self.payload())
+        fake_wallet_esi(monkeypatch, "GetCharactersCharacterIdWalletTransactions", self.payload())
         esi_sync.update_market_transactions(CHARACTER_ID)
-        fake_wallet_esi(monkeypatch, "get_characters_character_id_wallet_transactions",
+        fake_wallet_esi(monkeypatch, "GetCharactersCharacterIdWalletTransactions",
                         self.payload(unit_price=5.0))
         esi_sync.update_market_transactions(CHARACTER_ID)
         assert MarketTransaction.objects.count() == 1
@@ -128,10 +134,11 @@ class FakePagedMarket:
         }
         self.page_fetches = []
 
-    def get_markets_region_id_orders(self, region_id, order_type, page):
+    def GetMarketsRegionIdOrders(self, region_id, order_type, page):
         self.page_fetches.append(page)
-        operation = SimpleNamespace(request_config=SimpleNamespace())
-        operation.result = lambda: (self.pages[page - 1], SimpleNamespace(headers=self.headers))
+        page_data = [esi_model(entry) for entry in self.pages[page - 1]]
+        operation = SimpleNamespace()
+        operation.result = lambda **kw: (page_data, SimpleNamespace(headers=self.headers))
         return operation
 
 
@@ -166,6 +173,20 @@ class TestFetchMarketOrdersParallel:
         assert sleeps[0] == pytest.approx(15, abs=2)
         assert market.page_fetches[:2] == [1, 1]  # page 1 refetched after the wait
         assert len(results) == 3
+
+    def test_page_fan_out_is_capped(self, monkeypatch):
+        now = datetime.now(dt_timezone.utc)
+        monkeypatch.setattr(esi_sync, "MAX_MARKET_ORDER_PAGES", 2)
+        market = FakePagedMarket([[{"o": 1}], [{"o": 2}], [{"o": 3}]],
+                                 last_modified=now, expires=now + timedelta(seconds=300))
+        monkeypatch.setattr(esi_sync, "esi",
+                            SimpleNamespace(client=SimpleNamespace(Market=market)))
+        monkeypatch.setattr(esi_sync.time, "sleep", lambda seconds: None)
+
+        region_id, results = esi_sync.fetch_market_orders_parallel(JITA_REGION)
+
+        assert market.page_fetches == [1, 2]  # X-Pages said 3, cap is 2
+        assert len(results) == 2
 
     def test_already_expired_data_does_not_sleep_negative(self, monkeypatch):
         now = datetime.now(dt_timezone.utc)

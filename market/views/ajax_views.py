@@ -4,14 +4,24 @@ from django.template.loader import render_to_string
 from django.http import JsonResponse
 from market.models import TradeItem, TradeHub
 from helion.providers import esi
+from esi.exceptions import ESIBucketLimitException, ESIErrorLimitException
 from esi.models import Token
+
+ESI_RATE_LIMIT_EXCEPTIONS = (ESIErrorLimitException, ESIBucketLimitException)
+
+def _rate_limited_response(exc):
+    return JsonResponse(
+        {'error': 'ESI rate limited', 'retry_after': int(exc.reset or 60)}, status=429)
 
 @csrf_exempt
 def market_history(request):
     if request.headers.get('x-requested-with') == 'XMLHttpRequest':
         type_id = request.POST.get('type_id')
         region_id = request.POST.get('region_id')
-        market_service.update_market_history(region_id=region_id, type_id=type_id)
+        try:
+            market_service.update_market_history(region_id=region_id, type_id=type_id)
+        except ESI_RATE_LIMIT_EXCEPTIONS as exc:
+            return _rate_limited_response(exc)
         history = market_service.get_market_history(region_id=region_id, type_id=type_id)
         result = market_service.calculate_market_history_averages(history=history, region_id=region_id, type_id=type_id)
         html = render_to_string('market/hauling/_fragment_hauling_sts_history.html', {'data': result})
@@ -50,7 +60,13 @@ def trade_item_add_or_del(request):
 def market_open_in_game(request):
     if request.headers.get('x-requested-with') == 'XMLHttpRequest':
         type_id = request.POST.get('type_id')
-        resp = esi.client.User_Interface.post_ui_openwindow_marketdetails(type_id = int(type_id), token = Token.get_token(request.session['esi_token']['character_id'], 'esi-ui.open_window.v1').valid_access_token()).results()
+        token = Token.get_token(request.session['esi_token']['character_id'], 'esi-ui.open_window.v1')
+        try:
+            # Side-effect call: never serve or store it from cache.
+            esi.client.User_Interface.PostUiOpenwindowMarketdetails(
+                type_id=int(type_id), token=token).result(use_cache=False, store_cache=False)
+        except ESI_RATE_LIMIT_EXCEPTIONS as exc:
+            return _rate_limited_response(exc)
         data = {'message': 'done'}
         return JsonResponse(data)
     else:

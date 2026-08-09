@@ -292,7 +292,7 @@ class TestAjax:
 
     def test_market_open_in_game(self, character_client, trade_hubs, monkeypatch):
         fake_esi = SimpleNamespace(client=SimpleNamespace(User_Interface=SimpleNamespace(
-            post_ui_openwindow_marketdetails=lambda **kw: SimpleNamespace(results=lambda: None))))
+            PostUiOpenwindowMarketdetails=lambda **kw: SimpleNamespace(result=lambda **kw: None))))
         fake_token = SimpleNamespace(
             get_token=lambda character_id, scope: SimpleNamespace(valid_access_token=lambda: "t"))
         monkeypatch.setattr("market.views.ajax_views.esi", fake_esi)
@@ -303,6 +303,25 @@ class TestAjax:
         )
         assert response.status_code == 200
         assert response.json() == {"message": "done"}
+
+    def test_market_open_in_game_rate_limited_returns_429(self, character_client, trade_hubs, monkeypatch):
+        from esi.exceptions import ESIErrorLimitException
+
+        def boom(**kw):
+            raise ESIErrorLimitException(reset=42)
+
+        fake_esi = SimpleNamespace(client=SimpleNamespace(
+            User_Interface=SimpleNamespace(PostUiOpenwindowMarketdetails=boom)))
+        fake_token = SimpleNamespace(
+            get_token=lambda character_id, scope: SimpleNamespace(valid_access_token=lambda: "t"))
+        monkeypatch.setattr("market.views.ajax_views.esi", fake_esi)
+        monkeypatch.setattr("market.views.ajax_views.Token", fake_token)
+
+        response = character_client.post(
+            reverse("market_open_in_game"), {"type_id": 34}, headers=self.XHR
+        )
+        assert response.status_code == 429
+        assert response.json()["retry_after"] == 42
 
     def test_market_open_in_game_rejects_non_xhr(self, character_client, trade_hubs):
         response = character_client.post(reverse("market_open_in_game"), {"type_id": 34})
