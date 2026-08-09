@@ -41,6 +41,19 @@ def test_anonymous_user_is_redirected_to_login(client, db, trade_hubs):
     assert response.url.startswith("/login/")
 
 
+def test_favicon_served_at_root_without_login(client, db):
+    # WhiteNoise (WHITENOISE_ROOT) must answer before LoginRequiredMiddleware.
+    response = client.get("/favicon.ico")
+    assert response.status_code == 200
+    assert response.headers["Content-Type"] == "image/x-icon"
+
+
+def test_icon_links_in_head(client, db, trade_hubs):
+    content = client.get("/login/").content.decode()
+    assert 'href="/favicon.ico"' in content
+    assert "icon.svg" in content and "apple-touch-icon.png" in content
+
+
 def test_helion_index(auth_client, trade_hubs):
     assert auth_client.get("/").status_code == 200
 

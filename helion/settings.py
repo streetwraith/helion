@@ -144,6 +144,9 @@ STATICFILES_DIRS = [
 
 WHITENOISE_USE_FINDERS = True
 WHITENOISE_AUTOREFRESH = DEBUG
+# Served at the URL root (bare /favicon.ico requests from old clients and
+# bots), ahead of LoginRequiredMiddleware.
+WHITENOISE_ROOT = BASE_DIR / 'helion/static_root'
 
 MEDIA_ROOT = env('MEDIA_ROOT', default=BASE_DIR / 'media')
 MEDIA_URL = env('MEDIA_PATH', default='/media/')
