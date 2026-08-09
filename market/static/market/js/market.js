@@ -80,7 +80,6 @@ $(document).ready(function(){
             beforeSend: function() {
                 link.hide();
                 spinner.show();
-                // Thread.sleep(2);
             },
             success: function(data) {
                 parent = link.closest('td.item-name')

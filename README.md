@@ -4,7 +4,7 @@ Helion is a Django web app of market tools for [EVE Online](https://www.eveonlin
 
 ## Running
 
-`requirements.txt` is the single source of truth for dependencies — it drives both the local venv and the production image. You need a PostgreSQL database, a Redis instance, and an EVE SSO application for the ESI credentials, supplied through a `.env` file at the repo root (`SECRET_KEY`, `DATABASE_URL`, `REDIS_URL`, `ESI_CLIENT_*`, `CELERY_BEAT_SCHEDULER`).
+`requirements.txt` is the single source of truth for dependencies — it drives both the local venv and the production image. You need a PostgreSQL database, a Redis instance, and an EVE SSO application for the ESI credentials, supplied through a `.env` file at the repo root (`SECRET_KEY`, `DATABASE_URL`, `REDIS_URL`, `ESI_CLIENT_*`, `ESI_USER_CONTACT_EMAIL`, `CELERY_BEAT_SCHEDULER`).
 
 ```sh
 uv venv .venv

@@ -5,10 +5,11 @@ import pytest
 from django.utils import timezone
 
 from market.models import MarketOrder
-from market.services import market_service
+from market.services import esi_sync, market_service
 # Module-level import happens at collection time, before the autouse stub in
-# conftest replaces the module attribute — this keeps the real function testable.
-from market.services.market_service import fetch_plex_best_ask as real_fetch_plex_best_ask
+# conftest replaces the esi_sync module attribute — this keeps the real
+# function testable.
+from market.services.esi_sync import fetch_plex_best_ask as real_fetch_plex_best_ask
 
 JITA_STATION = market_service.JITA_STATION_ID
 PERIMETER_STATION = 60003825
@@ -42,7 +43,7 @@ class TestGetPriceTicker:
     def test_assembles_all_three_prices(self, db, monkeypatch):
         add_order(1, LSI, 745_000_000)
         add_order(2, EXTRACTOR, 462_700_000)
-        monkeypatch.setattr(market_service, "fetch_plex_best_ask", lambda: 4_771_000)
+        monkeypatch.setattr(esi_sync, "fetch_plex_best_ask", lambda: 4_771_000)
         assert market_service.get_price_ticker() == {
             "plex": 4_771_000,
             "lsi": 745_000_000,
@@ -52,7 +53,7 @@ class TestGetPriceTicker:
     def test_result_is_cached(self, db, monkeypatch):
         calls = []
         monkeypatch.setattr(
-            market_service, "fetch_plex_best_ask", lambda: calls.append(1) or 4_771_000
+            esi_sync, "fetch_plex_best_ask", lambda: calls.append(1) or 4_771_000
         )
         first = market_service.get_price_ticker()
         second = market_service.get_price_ticker()
@@ -80,11 +81,11 @@ class TestFetchPlexBestAsk:
             [{"price": 5_000_000.0}, {"price": 4_800_000.0}],
             [{"price": 4_771_000.0}],
         ]
-        monkeypatch.setattr(market_service, "esi", self._fake_esi(pages))
+        monkeypatch.setattr(esi_sync, "esi", self._fake_esi(pages))
         assert real_fetch_plex_best_ask() == 4_771_000.0
 
     def test_none_when_no_orders(self, monkeypatch):
-        monkeypatch.setattr(market_service, "esi", self._fake_esi([[]]))
+        monkeypatch.setattr(esi_sync, "esi", self._fake_esi([[]]))
         assert real_fetch_plex_best_ask() is None
 
     def test_none_on_esi_failure(self, monkeypatch):
@@ -94,7 +95,7 @@ class TestFetchPlexBestAsk:
         fake = SimpleNamespace(
             client=SimpleNamespace(Market=SimpleNamespace(get_markets_region_id_orders=boom))
         )
-        monkeypatch.setattr(market_service, "esi", fake)
+        monkeypatch.setattr(esi_sync, "esi", fake)
         assert real_fetch_plex_best_ask() is None
 
 
@@ -102,7 +103,7 @@ class TestHeaderRendering:
     def test_ticker_shown_to_authenticated_user(self, auth_client, trade_hubs, monkeypatch):
         add_order(1, LSI, 745_000_000)
         add_order(2, EXTRACTOR, 462_700_000)
-        monkeypatch.setattr(market_service, "fetch_plex_best_ask", lambda: 4_771_000)
+        monkeypatch.setattr(esi_sync, "fetch_plex_best_ask", lambda: 4_771_000)
         response = auth_client.get("/")
         content = response.content.decode()
         assert "PLEX: 4.8m" in content

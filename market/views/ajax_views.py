@@ -16,6 +16,7 @@ def market_history(request):
         result = market_service.calculate_market_history_averages(history=history, region_id=region_id, type_id=type_id)
         html = render_to_string('market/hauling/_fragment_hauling_sts_history.html', {'data': result})
         return JsonResponse({'html': html}, safe=False)
+    return JsonResponse({'error': 'bad request'}, status=400)
 
 @csrf_exempt
 def transaction_history(request):
@@ -25,6 +26,7 @@ def transaction_history(request):
         result = market_service.get_market_transactions(character_id, type_id=type_id, limit=20)
         html = render_to_string('market/_fragment_transaction_history.html', {'data': result, 'trade_hubs': list(TradeHub.objects.all())})
         return JsonResponse({'html': html}, safe=False)
+    return JsonResponse({'error': 'bad request'}, status=400)
 
 @csrf_exempt
 def trade_item_add_or_del(request):
@@ -42,6 +44,7 @@ def trade_item_add_or_del(request):
             trade_item.name = trade_item_name
             html = render_to_string('market/_fragment_item_name.html', {'item_name': trade_item.name, 'type_id': trade_item.type_id, 'is_trade_item': False, 'show_add_del': True})
             return JsonResponse({'html': html}, safe=False)
+    return JsonResponse({'error': 'bad request'}, status=400)
 
 @csrf_exempt
 def market_open_in_game(request):

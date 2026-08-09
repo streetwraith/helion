@@ -178,6 +178,10 @@ class TestShoppingListPrices:
         assert ("Tritanium", JITA_REGION, 4.0) in results
         assert ("Tritanium", 10000043, 6.0) in results
 
+    def test_empty_name_list_returns_no_rows(self, trade_hubs):
+        # Regression: used to render an invalid SQL `IN ()` clause.
+        assert market_service.get_shopping_list_prices([]) == []
+
 
 class TestUndercutQueries:
     def test_undercut_sell_orders(self):

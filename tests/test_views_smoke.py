@@ -84,6 +84,12 @@ class TestShoppingList:
         assert response.context["table_data"] == {"Tritanium": {JITA_REGION: 4.0}}
         assert response.context["region_totals"][JITA_REGION] == 4.0
 
+    def test_post_empty_list_renders(self, auth_client, trade_hubs):
+        # Regression: an all-blank submission used to 500 on invalid SQL.
+        response = auth_client.post(reverse("shopping_list"), {"items": "\n  \n"})
+        assert response.status_code == 200
+        assert response.context["table_data"] == {}
+
 
 class TestTransactions:
     def test_page_renders_with_history(self, character_client, trade_hubs):
@@ -288,3 +294,9 @@ class TestAjax:
     def test_market_open_in_game_rejects_non_xhr(self, character_client, trade_hubs):
         response = character_client.post(reverse("market_open_in_game"), {"type_id": 34})
         assert response.status_code == 400
+
+    def test_all_ajax_views_reject_non_xhr(self, character_client, trade_hubs):
+        # Regression: these used to return None -> 500 without the XHR header.
+        assert character_client.post(reverse("market_history"), {}).status_code == 400
+        assert character_client.get(reverse("transaction_history")).status_code == 400
+        assert character_client.post(reverse("trade_item_add_or_del"), {}).status_code == 400

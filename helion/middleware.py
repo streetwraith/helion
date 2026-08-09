@@ -11,7 +11,7 @@ class LoginRequiredMiddleware:
                 reverse('login'),
             ]
 
-            if not request.path in public_paths:
+            if request.path not in public_paths:
                 return redirect("/login/?next=%s" % request.path)
         response = self.get_response(request)
         return response

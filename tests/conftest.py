@@ -6,7 +6,7 @@ from django.contrib.auth.models import User
 from django.db import connection
 
 from market.models import MarketRegionStatus, TradeHub
-from market.services import market_service
+from market.services import esi_sync, orders
 
 
 @pytest.fixture(scope="session")
@@ -85,8 +85,10 @@ class FakeCache:
 def isolated_price_ticker(monkeypatch):
     # The header price ticker (context processor) runs on every authenticated
     # page render: keep all tests off the network and off the dev Redis.
-    monkeypatch.setattr(market_service, "cache", FakeCache())
-    monkeypatch.setattr(market_service, "fetch_plex_best_ask", lambda: None)
+    # Patched at the defining modules: get_price_ticker lives in orders and
+    # reaches the PLEX fetch through the esi_sync module attribute.
+    monkeypatch.setattr(orders, "cache", FakeCache())
+    monkeypatch.setattr(esi_sync, "fetch_plex_best_ask", lambda: None)
 
 
 CHARACTER_ID = 900001

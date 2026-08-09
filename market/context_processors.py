@@ -1,4 +1,4 @@
-from market.models import MarketRegionStatus, TradeHub
+from market.models import TradeHub
 from market.services import market_service
 
 def global_site_data(request):

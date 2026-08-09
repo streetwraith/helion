@@ -24,14 +24,13 @@ def market_transactions(request):
     paginator = Paginator(market_transactions, 100)
     page_obj = paginator.get_page(page_number)
 
-    history_buy = {}
-    history_sell = {}
-    for market_transaction in page_obj.object_list:
-        history = market_service.get_trade_history(type_id=market_transaction.type_id, is_buy=not market_transaction.is_buy)
-        if market_transaction.is_buy:
-            history_sell[market_transaction.type_id] = history
-        if not market_transaction.is_buy:
-            history_buy[market_transaction.type_id] = history
+    # Each row shows the opposite-side history of its type: buys show the
+    # sell history and sells show the buy history. Two bulk queries per side.
+    page_transactions = list(page_obj.object_list)
+    history_sell = market_service.get_trade_history_bulk(
+        {t.type_id for t in page_transactions if t.is_buy}, is_buy=False)
+    history_buy = market_service.get_trade_history_bulk(
+        {t.type_id for t in page_transactions if not t.is_buy}, is_buy=True)
 
     unique_type_ids = page_obj.object_list.values_list('type_id', flat=True)
     type_names_dict = sde_service.get_type_names(unique_type_ids)

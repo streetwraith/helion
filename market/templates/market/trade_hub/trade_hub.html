@@ -28,77 +28,13 @@
             <th colspan="11">buy</th>
             <th colspan="3">hvol</th>
         </tr>
-        <tr>
-            <th>item</th>
-            <th>spr</th>
-            <th>profit</th>
-            <th>stock</th>
-            <th>v</th>
-            <th>p</th>
-            <th>u</th>
-            <th>uc</th>
-            <th>uca</th>
-            <th>o24</th>
-            <th>station</th>
-            <th class="jita">{% if trade_hub_region.name != 'Jita' %}jita{% else %}amarr{% endif %}</th>
-            <th colspan="2">best</th>
-            <!-- <th>hv</th>
-            <th>havgp</th> -->
-            <th>hlastp</th>
-            <th>v</th>
-            <th>p</th>
-            <th>u</th>
-            <th>uc</th>
-            <th>uca</th>
-            <th>o24</th>
-            <th>station</th>
-            <th class="jita">{% if trade_hub_region.name != 'Jita' %}jita{% else %}amarr{% endif %}</th>
-            <th colspan="2">best</th>
-            <!-- <th>hv</th>
-            <th>havgp</th> -->
-            <th>hlastp</th>
-            <th>curr</th>
-            <th>{% if trade_hub_region.name != 'Jita' %}jita{% else %}amarr{% endif %}</th>
-            <th>a4e</th>
-        </tr>
+        {% include 'market/trade_hub/_fragment_trade_hub_header_row.html' with jita_class=True %}
     </thead>
     <tbody>
         {% include 'market/trade_hub/_fragment_trade_hub_data_rows.html' with item_dict=item_dict item_data=item_data is_trade_items=True %}
     </tbody>
     <tfoot>
-        <tr>
-            <th>item</th>
-            <th>spr</th>
-            <th>profit</th>
-            <th>stock</th>
-            <th>v</th>
-            <th>p</th>
-            <th>u</th>
-            <th>uc</th>
-            <th>uca</th>
-            <th>o24</th>
-            <th>station</th>
-            <th>{% if trade_hub_region.name != 'Jita' %}jita{% else %}amarr{% endif %}</th>
-            <th colspan="2">best</th>
-            <!-- <th>hv</th>
-            <th>havgp</th> -->
-            <th>hlastp</th>
-            <th>v</th>
-            <th>p</th>
-            <th>u</th>
-            <th>uc</th>
-            <th>uca</th>
-            <th>o24</th>
-            <th>station</th>
-            <th>{% if trade_hub_region.name != 'Jita' %}jita{% else %}amarr{% endif %}</th>
-            <th colspan="2">best</th>
-            <!-- <th>hv</th>
-            <th>havgp</th> -->
-            <th>hlastp</th>
-            <th>curr</th>
-            <th>{% if trade_hub_region.name != 'Jita' %}jita{% else %}amarr{% endif %}</th>
-            <th>a4e</th>
-        </tr>
+        {% include 'market/trade_hub/_fragment_trade_hub_header_row.html' %}
         <tr>
             <th colspan="4"></th>
             <th colspan="11">sell</th>
@@ -118,77 +54,13 @@
             <th colspan="11">buy</th>
             <th colspan="3">hvol</th>
         </tr>
-        <tr>
-            <th>item</th>
-            <th>spr</th>
-            <th>profit</th>
-            <th>stock</th>
-            <th>v</th>
-            <th>p</th>
-            <th>u</th>
-            <th>uc</th>
-            <th>uca</th>
-            <th>o24</th>
-            <th>station</th>
-            <th class="jita">{% if trade_hub_region.name != 'Jita' %}jita{% else %}amarr{% endif %}</th>
-            <th colspan="2">best</th>
-            <!-- <th>hv</th>
-            <th>havgp</th> -->
-            <th>hlastp</th>
-            <th>v</th>
-            <th>p</th>
-            <th>u</th>
-            <th>uc</th>
-            <th>uca</th>
-            <th>o24</th>
-            <th>station</th>
-            <th class="jita">{% if trade_hub_region.name != 'Jita' %}jita{% else %}amarr{% endif %}</th>
-            <th colspan="2">best</th>
-            <!-- <th>hv</th>
-            <th>havgp</th> -->
-            <th>hlastp</th>
-            <th>curr</th>
-            <th>{% if trade_hub_region.name != 'Jita' %}jita{% else %}amarr{% endif %}</th>
-            <th>a4e</th>
-        </tr>
+        {% include 'market/trade_hub/_fragment_trade_hub_header_row.html' with jita_class=True %}
     </thead>
     <tbody>
         {% include 'market/trade_hub/_fragment_trade_hub_data_rows.html' with item_dict=item_dict_extra item_data=item_data is_trade_items=False %}
     </tbody>
     <tfoot>
-        <tr>
-            <th>item</th>
-            <th>spr</th>
-            <th>profit</th>
-            <th>stock</th>
-            <th>v</th>
-            <th>p</th>
-            <th>u</th>
-            <th>uc</th>
-            <th>uca</th>
-            <th>o24</th>
-            <th>station</th>
-            <th>{% if trade_hub_region.name != 'Jita' %}jita{% else %}amarr{% endif %}</th>
-            <th colspan="2">best</th>
-            <!-- <th>hv</th>
-            <th>havgp</th> -->
-            <th>hlastp</th>
-            <th>v</th>
-            <th>p</th>
-            <th>u</th>
-            <th>uc</th>
-            <th>uca</th>
-            <th>o24</th>
-            <th>station</th>
-            <th>{% if trade_hub_region.name != 'Jita' %}jita{% else %}amarr{% endif %}</th>
-            <th colspan="2">best</th>
-            <!-- <th>hv</th>
-            <th>havgp</th> -->
-            <th>hlastp</th>
-            <th>curr</th>
-            <th>{% if trade_hub_region.name != 'Jita' %}jita{% else %}amarr{% endif %}</th>
-            <th>a4e</th>
-        </tr>
+        {% include 'market/trade_hub/_fragment_trade_hub_header_row.html' %}
         <tr>
             <th colspan="4"></th>
             <th colspan="11">sell</th>
@@ -202,4 +74,3 @@ ISK in escrow: {{ isk_in_escrow|isk_value }}<br />
 ISK in sell orders: {{ isk_in_sell_orders|isk_value }}
 
 {% endblock %}
-

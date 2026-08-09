@@ -14,6 +14,14 @@ table = 'a4e_market_history_volume'
 
 df = pd.read_csv(csv_filename, delimiter=';')
 
+# The header comes from a third-party download and is interpolated into SQL:
+# accept only the table's real columns.
+ALLOWED_COLUMNS = {'region_id', 'type_id', 'date', 'order_count', 'volume'}
+unknown = set(df.columns) - ALLOWED_COLUMNS
+if unknown:
+    print(f"Unknown columns in CSV header: {', '.join(sorted(unknown))}")
+    sys.exit(1)
+
 conn = psycopg2.connect(db_url)
 
 columns = list(df.columns)

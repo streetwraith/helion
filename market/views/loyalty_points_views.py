@@ -18,22 +18,22 @@ class LpDeal():
         self.history_averages = None
 
     def total_cost_isk(self):
-        required_items_cost = 0;
+        required_items_cost = 0
         if self.required_items is not None and len(self.required_items) > 0:
             required_items_cost = sum(required_item['price']*required_item['quantity'] for required_item in self.required_items)
         return required_items_cost + self.isk_cost
     
     def profit(self):
         if self.price is not None and self.price > 0:
-            return self.price/100*96.4 - self.total_cost_isk()
+            return self.price/100*market_service.SALE_PROCEEDS_PERCENT - self.total_cost_isk()
         else:
-            return 0;
+            return 0
 
     def profit_per_lp(self):
         if self.lp_cost is not None and self.lp_cost > 0:
-            return self.profit()/self.lp_cost;
+            return self.profit()/self.lp_cost
         else:
-            return 0;
+            return 0
 
 def lp_index(request):
     if request.method == 'POST':
@@ -54,7 +54,7 @@ def lp_data(request, trade_type, location, corporation_name):
     trade_hub_region_ids = list(TradeHub.objects.all().values_list('region_id', flat=True))
     resp = esi.client.Loyalty.get_loyalty_stores_corporation_id_offers(corporation_id=corporation.corporation_id).results()
     lp_deals = []
-    for index, value in enumerate(resp):
+    for value in resp:
         lp_deal = LpDeal(**value)
         lp_deal.name = Type.objects.get(type_id=lp_deal.type_id).name
         lp_item_best_order = None
