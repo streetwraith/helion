@@ -1,4 +1,17 @@
 
+function getCookie(name) {
+    var match = document.cookie.match('(^|;)\\s*' + name + '\\s*=\\s*([^;]+)');
+    return match ? decodeURIComponent(match[2]) : null;
+}
+
+// ajaxSend fires for every request, even when a call defines its own
+// beforeSend (which would override an ajaxSetup beforeSend).
+$(document).ajaxSend(function(event, xhr, settings) {
+    if (!/^(GET|HEAD|OPTIONS|TRACE)$/.test(settings.type)) {
+        xhr.setRequestHeader('X-CSRFToken', getCookie('csrftoken'));
+    }
+});
+
 $(document).ready(function(){
     $(".market").tablesorter();
 

@@ -7,6 +7,7 @@ from django.shortcuts import redirect, render
 from django.utils import timezone
 from django.views.decorators.http import require_POST
 
+from helion.decorators import require_character
 from market.models import MarketRegionStatus, TradeHub, WalletJournal
 from market.services import market_service
 
@@ -22,6 +23,7 @@ def index(request):
         market_region.trade_hub = hubs_by_region[market_region.region_id]
     return render(request, "market/index.html", context)
 
+@require_character
 def refresh_all_data(request):
     logger.info("refreshing transactions..")
     market_service.update_market_transactions(request.session['esi_token']['character_id'])
@@ -79,6 +81,7 @@ def shopping_list(request):
         return render(request, "market/shopping.html")
 
 @require_POST
+@require_character
 def market_region_orders_refresh(request, region_id):
     logger.info("refreshing region orders: %s", region_id)
     market_service.refresh_trade_hub_orders(region_id=region_id, character_id=request.session['esi_token']['character_id'])

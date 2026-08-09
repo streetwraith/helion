@@ -197,3 +197,24 @@ class TestFetchMarketOrdersParallel:
             expires=now - timedelta(seconds=300))
         assert sleeps == [0.0]
         assert len(results) == 3
+
+
+class TestRefreshAllTradeHubOrders:
+    def test_failed_save_keeps_old_orders(self, trade_hubs, monkeypatch):
+        MarketOrder.objects.create(**dict(
+            esi_order(999, 1.0), region_id=JITA_REGION, is_in_trade_hub_range=True))
+        MarketRegionStatus.objects.exclude(region_id=JITA_REGION).delete()
+        monkeypatch.setattr(esi_sync, "fetch_market_orders_parallel",
+                            lambda region_id: (region_id, [esi_order(1, 4.0)]))
+
+        def boom(orders):
+            raise RuntimeError("insert failed")
+        monkeypatch.setattr(esi_sync, "save_market_orders", boom)
+
+        with pytest.raises(RuntimeError):
+            esi_sync.refresh_all_trade_hub_orders()
+
+        # The delete must roll back together with the failed insert.
+        order_ids = set(MarketOrder.objects.filter(region_id=JITA_REGION)
+                        .values_list("order_id", flat=True))
+        assert order_ids == {999}

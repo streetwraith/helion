@@ -1,9 +1,11 @@
 from django.shortcuts import render
 from django.core.paginator import Paginator
+from helion.decorators import require_character
 from market.models import TradeItem
 from market.services import market_service
 from evesde import services as sde_service
 
+@require_character
 def market_transactions(request):
     page_number = request.GET.get('page')
     is_buy = request.GET.get('is_buy')

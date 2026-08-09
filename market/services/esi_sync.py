@@ -91,8 +91,9 @@ def refresh_all_trade_hub_orders():
         for future in as_completed(region_futures):
             region_id, orders = future.result()
             region_id, orders = process_market_orders(orders, region_id)
-            MarketOrder.objects.filter(region_id=region_id).delete()
-            save_market_orders(orders)
+            with transaction.atomic():
+                MarketOrder.objects.filter(region_id=region_id).delete()
+                save_market_orders(orders)
             region_status = MarketRegionStatus.objects.get(region_id=region_id)
             region_status.orders = len(orders)
             region_status.save()

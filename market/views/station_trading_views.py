@@ -5,6 +5,7 @@ from django.db.models import Count, ExpressionWrapper, F, FloatField, Max, Min, 
 from django.shortcuts import render
 
 from evesde import services as sde_service
+from helion.decorators import require_character
 from market.constants import REGION_ID_DOMAIN, REGION_ID_FORGE
 from market.models import MarketOrder, MarketOrderUndercut, MarketRegionStatus, TradeHub, TradeItem
 from market.services import market_service
@@ -156,6 +157,7 @@ def _undercut_times(undercut_rows, my_order, now):
 
     return current_time, average_time
 
+@require_character
 def market_trade_hub(request, region_id):
     context = {}
     now = datetime.now(timezone.utc)

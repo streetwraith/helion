@@ -1,7 +1,7 @@
-from django.views.decorators.csrf import csrf_exempt
 from market.services import market_service
 from django.template.loader import render_to_string
 from django.http import JsonResponse
+from helion.decorators import require_character
 from market.models import TradeItem, TradeHub
 from helion.providers import esi
 from esi.exceptions import ESIBucketLimitException, ESIErrorLimitException
@@ -13,7 +13,6 @@ def _rate_limited_response(exc):
     return JsonResponse(
         {'error': 'ESI rate limited', 'retry_after': int(exc.reset or 60)}, status=429)
 
-@csrf_exempt
 def market_history(request):
     if request.headers.get('x-requested-with') == 'XMLHttpRequest':
         type_id = request.POST.get('type_id')
@@ -28,7 +27,7 @@ def market_history(request):
         return JsonResponse({'html': html}, safe=False)
     return JsonResponse({'error': 'bad request'}, status=400)
 
-@csrf_exempt
+@require_character
 def transaction_history(request):
     if request.headers.get('x-requested-with') == 'XMLHttpRequest':
         character_id = request.session['esi_token']['character_id']
@@ -38,7 +37,6 @@ def transaction_history(request):
         return JsonResponse({'html': html}, safe=False)
     return JsonResponse({'error': 'bad request'}, status=400)
 
-@csrf_exempt
 def trade_item_add_or_del(request):
     if request.headers.get('x-requested-with') == 'XMLHttpRequest':
         operation = request.POST.get('operation')
@@ -56,7 +54,7 @@ def trade_item_add_or_del(request):
             return JsonResponse({'html': html}, safe=False)
     return JsonResponse({'error': 'bad request'}, status=400)
 
-@csrf_exempt
+@require_character
 def market_open_in_game(request):
     if request.headers.get('x-requested-with') == 'XMLHttpRequest':
         type_id = request.POST.get('type_id')

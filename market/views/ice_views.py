@@ -3,6 +3,7 @@ from django.shortcuts import render, redirect
 from django.urls import reverse
 from django.utils import timezone
 from urllib.parse import urlencode
+from helion.decorators import require_character
 from market.ice_constants import FREIGHTER_HULL_CAPACITY, ICE_PRODUCT_TYPES, ICE_TYPES
 from market.models import TradeHub
 from market.services import market_service
@@ -64,6 +65,7 @@ def _walk_order_book(orders, target_volume):
             break  # We've reached the target
     return total_cost, accumulated_volume
 
+@require_character
 def market_ice_index(request):
     # MarketHistory.date rows are UTC days (ESI convention); compare date-to-date.
     today = timezone.now().date()

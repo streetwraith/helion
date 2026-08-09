@@ -47,7 +47,10 @@ def characters(request, *args, **kwargs):
             _characters.add(t.character_name)
         context['tokens'] = token_output
 
-    if request.GET.get('show_skills', False):
+    # No require_character here: this view is the redirect target. Without a
+    # selected character the skills block is skipped and the page still lists
+    # the tokens to select.
+    if request.GET.get('show_skills', False) and request.session.get('esi_token'):
         character_id = request.session['esi_token']['character_id']
         token = Token.get_token(character_id, 'esi-skills.read_skills.v1')
         # use_etag=False: runs in the request path and always needs the body.

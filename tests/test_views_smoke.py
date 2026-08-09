@@ -7,6 +7,8 @@ from datetime import date, timedelta
 from types import SimpleNamespace
 
 import pytest
+from django.contrib.auth.models import User
+from django.test import Client
 from django.urls import reverse
 from django.utils import timezone
 
@@ -332,3 +334,65 @@ class TestAjax:
         assert character_client.post(reverse("market_history"), {}).status_code == 400
         assert character_client.get(reverse("transaction_history")).status_code == 400
         assert character_client.post(reverse("trade_item_add_or_del"), {}).status_code == 400
+
+
+class TestRequireCharacter:
+    """auth_client has no character selected: the guard redirects instead of
+    the old KeyError 500."""
+
+    @pytest.mark.parametrize("url_name,kwargs", [
+        ("market_transactions", {}),
+        ("market_trade_hub", {"region_id": JITA_REGION}),
+        ("market_ice_index", {}),
+        ("refresh_all_data", {}),
+        ("transaction_history", {}),
+    ])
+    def test_redirects_to_character_selection(self, auth_client, trade_hubs, url_name, kwargs):
+        response = auth_client.get(reverse(url_name, kwargs=kwargs))
+        assert response.status_code == 302
+        assert response.url == reverse("characters")
+
+    def test_characters_page_ignores_show_skills_without_character(self, auth_client, trade_hubs):
+        response = auth_client.get(reverse("characters"), {"show_skills": "1"})
+        assert response.status_code == 200
+
+
+class TestCsrf:
+    """The AJAX views lost @csrf_exempt; market.js sends the cookie token."""
+
+    XHR = {"X-Requested-With": "XMLHttpRequest"}
+
+    def _client_with_character(self):
+        client = Client(enforce_csrf_checks=True)
+        user = User.objects.create_user("csrf-tester", password="irrelevant")
+        client.force_login(user)
+        session = client.session
+        session["esi_token"] = {
+            "token_pk": 1,
+            "character_id": CHARACTER_ID,
+            "character_name": "Test Character",
+        }
+        session.save()
+        return client
+
+    def test_ajax_post_without_token_is_rejected(self, db, trade_hubs):
+        client = self._client_with_character()
+        response = client.post(reverse("trade_item_add_or_del"),
+                               {"operation": "add", "type_id": 34}, headers=self.XHR)
+        assert response.status_code == 403
+
+    def test_ajax_post_with_cookie_token_passes(self, db, trade_hubs, monkeypatch):
+        # Mirrors market.js: the csrftoken cookie value goes into X-CSRFToken.
+        fake_esi = SimpleNamespace(client=SimpleNamespace(User_Interface=SimpleNamespace(
+            PostUiOpenwindowMarketdetails=lambda **kw: SimpleNamespace(result=lambda **kw: None))))
+        fake_token = SimpleNamespace(
+            get_token=lambda character_id, scope: SimpleNamespace(valid_access_token=lambda: "t"))
+        monkeypatch.setattr("market.views.ajax_views.esi", fake_esi)
+        monkeypatch.setattr("market.views.ajax_views.Token", fake_token)
+
+        client = self._client_with_character()
+        client.get(reverse("characters"))  # any authenticated page render sets the cookie
+        token = client.cookies["csrftoken"].value
+        response = client.post(reverse("market_open_in_game"), {"type_id": 34},
+                               headers={**self.XHR, "X-CSRFToken": token})
+        assert response.status_code == 200
