@@ -58,6 +58,8 @@ def market_trade_hub_mistakes(request, region_id):
 
     matches = []
     for item in best_prices.iterator():
+        item['highest_buy_price'] = float(item['highest_buy_price'])
+        item['lowest_sell_price'] = float(item['lowest_sell_price'])
         min_increase = _fourth_significant_digit(item['highest_buy_price'])
         if item['lowest_sell_price'] <= item['highest_buy_price'] + min_increase:
             item['min_increase'] = min_increase
@@ -72,6 +74,10 @@ def market_trade_hub_mistakes(request, region_id):
         type_id__in=matching_type_ids, is_buy_order=False
     ).values('type_id', 'price', 'volume_remain', 'total_value')
     for row in sell_rows:
+        # Float on both sides, so the lowest-price equality tests below keep
+        # comparing like with like.
+        row['price'] = float(row['price'])
+        row['total_value'] = float(row['total_value'])
         sell_rows_by_type.setdefault(row['type_id'], []).append(row)
 
     # Jita reference prices, deliberately unfiltered (any station, any duration).

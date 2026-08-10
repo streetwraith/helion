@@ -15,12 +15,15 @@ class MarketOrder(models.Model):
     issued = models.DateTimeField()
     location_id = models.BigIntegerField(db_index=True)
     min_volume = models.IntegerField()
-    price = models.FloatField(db_index=True)
+    # ISK is stored as numeric(20,2) everywhere: ESI sends at most two
+    # decimals, and float sums accumulate drift.
+    price = models.DecimalField(max_digits=20, decimal_places=2, db_index=True)
     range = models.CharField(max_length=128)
     system_id = models.BigIntegerField()
     type_id = models.BigIntegerField(db_index=True)
-    volume_remain = models.IntegerField()
-    volume_total = models.IntegerField()
+    # Order volumes can exceed 32 bits (Tritanium-class items).
+    volume_remain = models.BigIntegerField()
+    volume_total = models.BigIntegerField()
     region_id = models.BigIntegerField()
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
@@ -40,7 +43,7 @@ class MarketTransaction(models.Model):
     location_id = models.BigIntegerField()
     quantity = models.IntegerField()
     type_id = models.BigIntegerField()
-    unit_price = models.FloatField()
+    unit_price = models.DecimalField(max_digits=20, decimal_places=2)
     class Meta:
         indexes = [
             models.Index(fields=['is_buy', 'location_id', 'type_id']),
@@ -52,14 +55,20 @@ class MarketHistory(models.Model):
     type_id = models.BigIntegerField()
     region_id = models.BigIntegerField()
     date = models.DateField(db_index=True)
-    average = models.FloatField()
-    highest = models.FloatField()
-    lowest = models.FloatField()
+    average = models.DecimalField(max_digits=20, decimal_places=2)
+    highest = models.DecimalField(max_digits=20, decimal_places=2)
+    lowest = models.DecimalField(max_digits=20, decimal_places=2)
     order_count = models.BigIntegerField()
-    volume = models.IntegerField()
+    volume = models.BigIntegerField()
     class Meta:
         indexes = [
             models.Index(fields=['type_id', 'region_id']),
+        ]
+        constraints = [
+            # The delete+insert sync maintained this only in practice; the
+            # Sum-based bulk averages assume it.
+            models.UniqueConstraint(fields=['region_id', 'type_id', 'date'],
+                                    name='uq_markethistory_region_type_date'),
         ]
     def __str__(self):
         return str(self.type_id) + ' ' + str(self.date)
@@ -83,8 +92,10 @@ class TradeItem(models.Model):
 class WalletJournal(models.Model):
     journal_id = models.BigIntegerField(primary_key=True)
     character_id = models.BigIntegerField(db_index=True)
-    amount = models.FloatField()
-    balance = models.FloatField()
+    # Four decimals: transaction_tax journal amounts really carry them
+    # (verified against prod data), so numeric(20,4) loses nothing.
+    amount = models.DecimalField(max_digits=20, decimal_places=4)
+    balance = models.DecimalField(max_digits=20, decimal_places=4)
     date = models.DateTimeField()
     description = models.CharField(max_length=512, blank=True, null=True)
     first_party_id = models.BigIntegerField(blank=True, null=True)
@@ -93,7 +104,7 @@ class WalletJournal(models.Model):
     ref_type = models.CharField(db_index=True, max_length=128)
     context_id = models.BigIntegerField(blank=True, null=True)
     context_id_type = models.CharField(max_length=128, blank=True, null=True)
-    tax = models.FloatField(blank=True, null=True)
+    tax = models.DecimalField(max_digits=20, decimal_places=4, blank=True, null=True)
     tax_receiver_id = models.BigIntegerField(blank=True, null=True)
 
 class MarketNotification(models.Model):
@@ -109,10 +120,10 @@ class MarketOrderUndercut(models.Model):
     region_id = models.BigIntegerField(db_index=True)
     character_id = models.BigIntegerField(db_index=True)
     order_id = models.BigIntegerField()
-    order_price = models.FloatField()
+    order_price = models.DecimalField(max_digits=20, decimal_places=2)
     order_issued = models.DateTimeField()
     competitor_order_id = models.BigIntegerField()
-    competitor_price = models.FloatField()
+    competitor_price = models.DecimalField(max_digits=20, decimal_places=2)
     competitor_issued = models.DateTimeField()
     is_buy_order = models.BooleanField(default=False)
     created_at = models.DateTimeField(auto_now_add=True)
@@ -120,7 +131,6 @@ class MarketOrderUndercut(models.Model):
         constraints = [
             models.UniqueConstraint(fields=['order_id', 'order_issued'], name='uc_order_modification')
         ]
-        unique_together = ('order_id', 'order_issued')
 
 class A4EMarketHistoryVolume(models.Model):
     region_id = models.BigIntegerField()

@@ -61,9 +61,3 @@ def dict_to_query(value):
         return ""
     return "&"+urllib.parse.urlencode(value)
 
-@register.filter(name='wallet_stats')
-def wallet_stats(obj, args):
-    param1, param2, param3 = args.split(',')
-    param2 = int(param2)
-    param3 = int(param3)
-    return obj.get_data_for_range(param1, param2, param3)

@@ -1,3 +1,4 @@
+from django.http import HttpResponseBadRequest
 from django.shortcuts import render
 from django.core.paginator import Paginator
 from helion.decorators import require_character
@@ -20,7 +21,10 @@ def market_transactions(request):
         elif is_buy == 'False':
             filters['is_buy'] = False
     if location_id:
-        filters['location_id'] = int(location_id)
+        try:
+            filters['location_id'] = int(location_id)
+        except ValueError:
+            return HttpResponseBadRequest('invalid location_id')
     filters['type_name'] = type_name if type_name else ''
     market_transactions = market_service.get_market_transactions(request.session['esi_token']['character_id'], location_id=location_id, is_buy=is_buy, type_name=type_name)
     paginator = Paginator(market_transactions, 100)

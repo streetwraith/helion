@@ -11,15 +11,18 @@ def find_type_ids_by_market_groups(market_group_id, excluded_meta_ids=None):
     query = """
         WITH RECURSIVE market_group_hierarchy AS (
             -- The chosen group plus, recursively, all of its child groups.
-            SELECT _key AS market_group_id
+            -- The depth bound stops a parent-link cycle in the sde data from
+            -- spinning forever; the real tree is ~5 levels deep.
+            SELECT _key AS market_group_id, 0 AS depth
             FROM sde.market_groups
             WHERE _key = %s
 
             UNION ALL
 
-            SELECT mg._key
+            SELECT mg._key, mgh.depth + 1
             FROM sde.market_groups mg
             INNER JOIN market_group_hierarchy mgh ON mg.parent_group_id = mgh.market_group_id
+            WHERE mgh.depth < 10
         )
         SELECT _key AS type_id, meta_group_id AS meta_id
         FROM sde.types

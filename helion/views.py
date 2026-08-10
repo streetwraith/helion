@@ -1,8 +1,8 @@
+from django.conf import settings
 from django.shortcuts import render, redirect
 from evesde.models import Type
 from helion.providers import esi
 from esi.models import Token
-import os
 import logging
 
 logger = logging.getLogger(__name__)
@@ -15,7 +15,7 @@ def characters(request, *args, **kwargs):
     if request.method == 'POST':
         if request.POST.get("_add", False):
             from esi.views import sso_redirect
-            return sso_redirect(request, scopes=os.getenv('ESI_CLIENT_SCOPE'), return_to='characters')
+            return sso_redirect(request, scopes=settings.ESI_CLIENT_SCOPE, return_to='characters')
 
         token_pk = request.POST.get('_token', None)
         if token_pk:

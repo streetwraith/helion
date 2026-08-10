@@ -22,10 +22,13 @@ class Command(BaseCommand):
             systems = MapSolarSystem.objects.filter(region_id=hub.region_id)
             self.stdout.write(f"{hub.name}: {systems.count()} systems in region {hub.region_id}")
             for system in systems:
-                route = esi.client.Routes.get_route_origin_destination(
-                    origin=system.system_id, destination=hub.system_id
-                ).results()
-                rows.append(SystemHubJumps(system_id=system.system_id, jumps_to_trade_hub=len(route) - 1))
+                # The compatibility-date API replaced GET /route/{o}/{d} with
+                # POST /route; an empty body keeps the old "shortest" default.
+                route = esi.client.Routes.PostRoute(
+                    body={}, origin_system_id=system.system_id, destination_system_id=hub.system_id
+                ).result(use_etag=False)
+                rows.append(SystemHubJumps(
+                    system_id=system.system_id, jumps_to_trade_hub=len(route.route) - 1))
 
         SystemHubJumps.objects.all().delete()
         SystemHubJumps.objects.bulk_create(rows)

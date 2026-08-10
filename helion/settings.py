@@ -12,7 +12,6 @@ https://docs.djangoproject.com/en/5.0/ref/settings/
 
 from pathlib import Path
 import environ
-import os
 import re
 
 env = environ.Env(  
@@ -22,8 +21,8 @@ env = environ.Env(
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
-# Take environment variables from .env file  
-environ.Env.read_env(os.path.join(BASE_DIR, '.env'))
+# Take environment variables from .env file
+environ.Env.read_env(BASE_DIR / '.env')
 
 # Quick-start development settings - unsuitable for production
 # See https://docs.djangoproject.com/en/5.0/howto/deployment/checklist/
@@ -206,6 +205,7 @@ SESSION_ENGINE = 'django.contrib.sessions.backends.db'
 LOGIN_REDIRECT_URL = '/'
 LOGOUT_REDIRECT_URL = '/'
 
+ESI_CLIENT_SCOPE = env.str('ESI_CLIENT_SCOPE')
 ESI_SSO_CLIENT_ID = env.str('ESI_CLIENT_ID')
 ESI_SSO_CLIENT_SECRET = env.str('ESI_CLIENT_SECRET')
 ESI_SSO_CALLBACK_URL = env.str('ESI_CLIENT_CALLBACK_URL')

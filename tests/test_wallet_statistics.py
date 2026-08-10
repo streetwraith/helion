@@ -6,7 +6,7 @@ from django.utils import timezone
 
 from market.models import MarketTransaction, WalletJournal
 from market.services import market_service
-from market.views.base_views import WalletStatistics
+from market.services.wallet import WalletStatistics
 
 from .conftest import CHARACTER_ID
 
@@ -60,42 +60,42 @@ def stats(db):
 
 
 def test_brokers_fee_combines_both_fee_ref_types(stats):
-    assert stats.get_data_for_range("brokers_fee", 0, 7) == -150.0
+    assert stats.brokers_fee(0, 7) == -150.0
 
 
 def test_brokers_fee_respects_window(stats):
-    assert stats.get_data_for_range("brokers_fee", 7, 14) == -70.0
-    assert stats.get_data_for_range("brokers_fee", 14, 21) == 0
+    assert stats.brokers_fee(7, 14) == -70.0
+    assert stats.brokers_fee(14, 21) == 0
 
 
 def test_transaction_tax(stats):
-    assert stats.get_data_for_range("transaction_tax", 0, 7) == -50.0
+    assert stats.transaction_tax(0, 7) == -50.0
 
 
 def test_sell_sums_revenue_ref_types(stats):
-    assert stats.get_data_for_range("sell", 0, 7) == 2000.0
+    assert stats.sell(0, 7) == 2000.0
 
 
 def test_buy_counts_deposited_rewards_as_cost(stats):
     # 10 x 100 bought + 200 escrowed as courier reward (negative journal amount).
-    assert stats.get_data_for_range("buy", 0, 7) == 1200.0
+    assert stats.buy(0, 7) == 1200.0
 
 
 def test_buy_empty_window_is_zero(stats):
-    assert stats.get_data_for_range("buy", 14, 21) == 0
+    assert stats.buy(14, 21) == 0
 
 
 def test_profit_identity(stats):
-    sell = stats.get_data_for_range("sell", 0, 7)
-    buy = stats.get_data_for_range("buy", 0, 7)
-    fees = stats.get_data_for_range("brokers_fee", 0, 7)
-    tax = stats.get_data_for_range("transaction_tax", 0, 7)
-    assert stats.get_data_for_range("profit", 0, 7) == sell - buy + fees + tax == 600.0
+    sell = stats.sell(0, 7)
+    buy = stats.buy(0, 7)
+    fees = stats.brokers_fee(0, 7)
+    tax = stats.transaction_tax(0, 7)
+    assert stats.profit(0, 7) == sell - buy + fees + tax == 600.0
 
 
 def test_fees_to_profit_ratio(stats):
-    assert stats.get_data_for_range("f/p", 0, 7) == pytest.approx(-150.0 / 600.0 * 100)
+    assert stats.fee_to_profit(0, 7) == pytest.approx(-150.0 / 600.0 * 100)
 
 
 def test_fees_to_profit_ratio_zero_profit(stats):
-    assert stats.get_data_for_range("f/p", 14, 21) == 0
+    assert stats.fee_to_profit(14, 21) == 0

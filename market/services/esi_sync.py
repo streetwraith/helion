@@ -69,9 +69,8 @@ def get_wallet_journal(character_id):
         update_fields=['amount', 'balance', 'date', 'description', 'first_party_id', 'second_party_id', 'reason', 'ref_type', 'context_id', 'context_id_type', 'tax', 'tax_receiver_id']
     )
 
-def refresh_trade_hub_orders(region_id, character_id=None):
-    region_id, orders = fetch_market_orders_parallel(region_id)
-    region_id, orders = process_market_orders(orders, region_id, character_id)
+def _replace_region_orders(region_id, orders):
+    """Atomically swap a region's orders and record the count in the status row."""
     with transaction.atomic():
         logger.info("region %s, replacing old orders..", region_id)
         MarketOrder.objects.filter(region_id=region_id).delete()
@@ -80,6 +79,11 @@ def refresh_trade_hub_orders(region_id, character_id=None):
     region_status.orders = len(orders)
     region_status.save()
     logger.info("region %s, orders updated: %s", region_id, region_status.orders)
+
+def refresh_trade_hub_orders(region_id, character_id=None):
+    region_id, orders = fetch_market_orders_parallel(region_id)
+    region_id, orders = process_market_orders(orders, region_id, character_id)
+    _replace_region_orders(region_id, orders)
 
 def refresh_all_trade_hub_orders():
     market_regions = MarketRegionStatus.objects.all()
@@ -91,13 +95,7 @@ def refresh_all_trade_hub_orders():
         for future in as_completed(region_futures):
             region_id, orders = future.result()
             region_id, orders = process_market_orders(orders, region_id)
-            with transaction.atomic():
-                MarketOrder.objects.filter(region_id=region_id).delete()
-                save_market_orders(orders)
-            region_status = MarketRegionStatus.objects.get(region_id=region_id)
-            region_status.orders = len(orders)
-            region_status.save()
-            logger.info("region %s, orders updated: %s", region_id, region_status.orders)
+            _replace_region_orders(region_id, orders)
 
 # A broken X-Pages header must not fan out into an unbounded number of
 # requests; Jita is ~410 pages today.

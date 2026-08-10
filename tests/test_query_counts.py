@@ -107,6 +107,41 @@ def test_ice_page_query_ceiling(character_client, trade_hubs, monkeypatch):
 
 def test_index_wallet_table_query_ceiling(auth_client, trade_hubs):
     auth_client.get("/")  # warm the ticker cache
-    # 6 metrics x 5 windows through the memoized WalletStatistics: one
+    # 6 metrics x 5 windows through the memoized WalletStatistics methods: one
     # aggregate per base metric and window (profit and f/p reuse the cache).
     assert count_queries(auth_client, "/") <= 40
+
+
+def test_lp_data_queries_do_not_grow_with_offers(auth_client, trade_hubs, monkeypatch):
+    from types import SimpleNamespace
+
+    from evesde.models import NpcCorporation
+
+    NpcCorporation.objects.create(corporation_id=1000125, name="Caldari Navy")
+    add_type(34, "Tritanium")
+
+    def install_offers(count, first_type_id):
+        offers = []
+        for i in range(count):
+            type_id = first_type_id + i
+            add_type(type_id, f"Item {type_id}")
+            add_order(1000 + type_id, type_id, 2_000_000.0)
+            offers.append({"ak_cost": 0, "isk_cost": 100_000.0, "lp_cost": 100, "quantity": 1,
+                           "offer_id": i, "type_id": type_id,
+                           "required_items": [{"type_id": 34, "quantity": 2}]})
+        offer_models = [SimpleNamespace(model_dump=lambda offer=offer: offer) for offer in offers]
+        fake_esi = SimpleNamespace(client=SimpleNamespace(Loyalty=SimpleNamespace(
+            GetLoyaltyStoresCorporationIdOffers=lambda corporation_id: SimpleNamespace(
+                results=lambda **kw: offer_models))))
+        monkeypatch.setattr("market.views.loyalty_points_views.esi", fake_esi)
+
+    url = reverse("lp_data", kwargs={
+        "trade_type": "sell", "location": "Jita", "corporation_name": "Caldari Navy"})
+    install_offers(2, first_type_id=600)
+    auth_client.get(url)  # warm the ticker cache
+    with_two_offers = count_queries(auth_client, url)
+
+    install_offers(20, first_type_id=700)
+    with_twenty_offers = count_queries(auth_client, url)
+
+    assert with_twenty_offers == with_two_offers

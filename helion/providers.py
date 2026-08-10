@@ -15,6 +15,8 @@ esi = ESIClientProvider(
         "GetCharactersCharacterIdSkills",
         "GetMarketsRegionIdOrders",
         "GetMarketsRegionIdHistory",
+        "GetLoyaltyStoresCorporationIdOffers",
+        "PostRoute",
         "PostUiOpenwindowMarketdetails",
     ],
 )

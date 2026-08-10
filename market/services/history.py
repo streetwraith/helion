@@ -7,39 +7,49 @@ from django.db.models import Max, Sum
 from market.models import A4EMarketHistoryVolume, MarketHistory
 
 def get_market_history(region_id, type_id, days_back=90):
+    return get_market_history_bulk(region_id, [type_id], days_back=days_back)[type_id]
+
+def get_market_history_bulk(region_id, type_ids, days_back=90):
+    """Gap-filled history per type, from one rows query for all types."""
     latest_date = MarketHistory.objects.filter(region_id=region_id).aggregate(Max('date'))['date__max']
     if not latest_date:
-        return []
+        return {type_id: [] for type_id in type_ids}
     cutoff_date = latest_date - timedelta(days=days_back)
 
     history_records = MarketHistory.objects.filter(
         region_id=region_id,
-        type_id=type_id,
+        type_id__in=type_ids,
         date__gte=cutoff_date,
         date__lte=latest_date
     ).order_by('date')
 
-    filled_history = []
-    current_date = cutoff_date
-    history_dict = {record.date: record for record in history_records}
+    records_by_type = {}
+    for record in history_records:
+        records_by_type.setdefault(record.type_id, {})[record.date] = record
 
-    while current_date <= latest_date:
-        if current_date in history_dict:
-            filled_history.append(history_dict[current_date])
-        else:
-            empty_record = MarketHistory(
-                region_id=region_id,
-                type_id=type_id,
-                date=current_date,
-                average=None,
-                highest=None,
-                lowest=None,
-                order_count=0,
-                volume=0
-            )
-            filled_history.append(empty_record)
-        current_date += timedelta(days=1)
-    return filled_history
+    filled = {}
+    for type_id in type_ids:
+        history_dict = records_by_type.get(type_id, {})
+        filled_history = []
+        current_date = cutoff_date
+        while current_date <= latest_date:
+            if current_date in history_dict:
+                filled_history.append(history_dict[current_date])
+            else:
+                empty_record = MarketHistory(
+                    region_id=region_id,
+                    type_id=type_id,
+                    date=current_date,
+                    average=None,
+                    highest=None,
+                    lowest=None,
+                    order_count=0,
+                    volume=0
+                )
+                filled_history.append(empty_record)
+            current_date += timedelta(days=1)
+        filled[type_id] = filled_history
+    return filled
 
 def get_market_history_for_types(type_ids, region_ids):
     return MarketHistory.objects.filter(type_id__in=type_ids, region_id__in=region_ids)

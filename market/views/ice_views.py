@@ -1,4 +1,5 @@
 from datetime import timedelta
+from django.http import HttpResponseBadRequest
 from django.shortcuts import render, redirect
 from django.urls import reverse
 from django.utils import timezone
@@ -53,14 +54,15 @@ def _walk_order_book(orders, target_volume):
     accumulated_volume = 0.0
     total_cost = 0.0
     for order in orders:
+        # Estimator math runs in float; prices come out of numeric columns.
         if accumulated_volume + order.volume_remain <= target_volume:
             # Take the whole order
-            total_cost += order.price * order.volume_remain
+            total_cost += float(order.price) * order.volume_remain
             accumulated_volume += order.volume_remain
         else:
             # Take only the needed part of the order
             remaining_volume = target_volume - accumulated_volume
-            total_cost += order.price * remaining_volume
+            total_cost += float(order.price) * remaining_volume
             accumulated_volume += remaining_volume
             break  # We've reached the target
     return total_cost, accumulated_volume
@@ -70,18 +72,21 @@ def market_ice_index(request):
     # MarketHistory.date rows are UTC days (ESI convention); compare date-to-date.
     today = timezone.now().date()
     context = {}
-    context['params'] = {
-        'rig_modifier': int(request.GET.get('rig_modifier', 3)),
-        'security_modifier': float(request.GET.get('security_modifier', 0.00)),
-        'structure_modifier': float(request.GET.get('structure_modifier', 0.055)),
-        'reprocessing_skill_modifier': int(request.GET.get('reprocessing_skill_modifier', 5)),
-        'reprocessing_efficiency_skill_modifier': int(request.GET.get('reprocessing_efficiency_skill_modifier', 5)),
-        'ice_processing_skill_modifier': int(request.GET.get('ice_processing_skill_modifier', 5)),
-        'implant_modifier': float(request.GET.get('implant_modifier', 0.04)),
-        'freighter_hull': request.GET.get('freighter_hull', 'providence'),
-        'freighter_skill': int(request.GET.get('freighter_skill', 4)),
-        'freighter_fit': request.GET.get('freighter_fit', 'other')
-    }
+    try:
+        context['params'] = {
+            'rig_modifier': int(request.GET.get('rig_modifier', 3)),
+            'security_modifier': float(request.GET.get('security_modifier', 0.00)),
+            'structure_modifier': float(request.GET.get('structure_modifier', 0.055)),
+            'reprocessing_skill_modifier': int(request.GET.get('reprocessing_skill_modifier', 5)),
+            'reprocessing_efficiency_skill_modifier': int(request.GET.get('reprocessing_efficiency_skill_modifier', 5)),
+            'ice_processing_skill_modifier': int(request.GET.get('ice_processing_skill_modifier', 5)),
+            'implant_modifier': float(request.GET.get('implant_modifier', 0.04)),
+            'freighter_hull': request.GET.get('freighter_hull', 'providence'),
+            'freighter_skill': int(request.GET.get('freighter_skill', 4)),
+            'freighter_fit': request.GET.get('freighter_fit', 'other')
+        }
+    except ValueError:
+        return HttpResponseBadRequest('invalid parameter')
 
     required_params = list(context['params'].keys())
     if not all(param in request.GET for param in required_params):
@@ -89,9 +94,6 @@ def market_ice_index(request):
         query_params = context['params']
         url = f'{base_url}?{urlencode(query_params)}'
         return redirect(url)
-
-    context['ice_data'] = {}
-    context['ice_product_data'] = {}
 
     reprocessing_yield = (50+context['params']['rig_modifier'])*(1+context['params']['security_modifier'])*(1+context['params']['structure_modifier'])*(1+(context['params']['reprocessing_skill_modifier']*0.03))*(1+(context['params']['reprocessing_efficiency_skill_modifier']*0.02))*(1+(context['params']['ice_processing_skill_modifier']*0.02))*(1+context['params']['implant_modifier'])
     context['params']['reprocessing_yield'] = reprocessing_yield
@@ -104,7 +106,6 @@ def market_ice_index(request):
         freighter_capacity = freighter_capacity * (0.89 ** 3)
     context['params']['freighter_capacity'] = freighter_capacity
     context['params']['freighter_ice_capacity'] = freighter_capacity/100
-    ice_units = freighter_capacity/100
 
     hubs = {hub.name: hub for hub in TradeHub.objects.filter(name__in=HUB_ORDER)}
     market_hubs = {name: hubs[name].region_id for name in HUB_ORDER}
@@ -145,34 +146,57 @@ def market_ice_index(request):
 
     ice_products_stock = market_service.get_character_assets(request.session['esi_token']['character_id'], [hub_station_ids[name] for name in REPROCESS_HUBS], ICE_PRODUCT_TYPES.values())
 
+    context['ice_product_data'] = _build_product_data(
+        product_books, product_history, ice_products_stock, market_hubs, hub_station_ids, today)
+
+    for ice_product_type in ICE_PRODUCT_TYPES:
+        average_transaction_prices['sell'][ice_product_type] = {
+            label: float(product_sell_averages[label][ICE_PRODUCT_TYPES[ice_product_type]]) * net_sell_proceeds
+            for label in PRICE_WINDOWS
+        }
+
+    context['ice_types'] = ICE_TYPES
+
+    context['ice_data'] = _build_ice_data(
+        ice_books, ice_history, product_books, context['ice_product_data'],
+        market_hubs, context['params'], ice_buy_averages, average_transaction_prices, today)
+
+    context['average_transaction_prices'] = average_transaction_prices
+    return render(request, "market/ice.html", context)
+
+def _build_product_data(product_books, product_history, ice_products_stock,
+                        market_hubs, hub_station_ids, today):
+    """Per ice product: the hub price/history/stock cells plus the global best
+    prices (bug 3: the buy sentinel semantics are preserved as-is)."""
+    product_data = {}
     for ice_product_type in ICE_PRODUCT_TYPES:
         product_id = ICE_PRODUCT_TYPES[ice_product_type]
-        context['ice_product_data'][ice_product_type] = {}
+        product_data[ice_product_type] = {}
 
         best_sell_price_global = 0
         best_buy_price_global = 999999999
         for market_hub in REPROCESS_HUBS:
             hub_data = {'best_sell_price': 0, 'best_buy_price': 999999999, 'best_buy_order_volume': 0}
-            context['ice_product_data'][ice_product_type][market_hub] = hub_data
+            product_data[ice_product_type][market_hub] = hub_data
             book = product_books.get((market_hubs[market_hub], product_id), {'sells': [], 'buys': []})
             # Reset per hub: chart_data below reads this even when the hub has no
             # sell orders, and must not see the previous iteration's price.
             best_sell_price = 0
             if book['sells']:
-                best_sell_price = book['sells'][0].price
+                best_sell_price = float(book['sells'][0].price)
                 if best_sell_price >= best_sell_price_global:
                     best_sell_price_global = best_sell_price
                 hub_data['best_sell_price'] = best_sell_price
             if book['buys']:
                 best_buy_order = book['buys'][0]
                 if best_buy_order.price >= best_buy_price_global:
-                    best_buy_price_global = best_buy_order.price
-                hub_data['best_buy_price'] = best_buy_order.price
+                    best_buy_price_global = float(best_buy_order.price)
+                hub_data['best_buy_price'] = float(best_buy_order.price)
                 hub_data['best_buy_order_volume'] = best_buy_order.volume_remain
             history_rows = product_history.get((market_hubs[market_hub], product_id), [])
             if history_rows:
                 hub_data.update(_history_window_stats(history_rows, today))
-                chart_data = [row.highest for row in history_rows if row.date >= today - timedelta(days=30)]
+                chart_data = [float(row.highest) for row in history_rows if row.date >= today - timedelta(days=30)]
                 hub_data['chart_data'] = {
                     'color': ('lightcoral' if best_sell_price < chart_data[-1] else 'lightgreen') if chart_data else 'white',
                     'values': ",".join(map(str, chart_data + [best_sell_price])),
@@ -181,25 +205,26 @@ def market_ice_index(request):
                 }
 
             hub_data['stock'] = ice_products_stock.get(hub_station_ids[market_hub], {}).get(product_id, 0)
-        context['ice_product_data'][ice_product_type]['best_sell_price_global'] = best_sell_price_global
-        context['ice_product_data'][ice_product_type]['best_buy_price_global'] = best_buy_price_global
+        product_data[ice_product_type]['best_sell_price_global'] = best_sell_price_global
+        product_data[ice_product_type]['best_buy_price_global'] = best_buy_price_global
+    return product_data
 
-        average_transaction_prices['sell'][ice_product_type] = {
-            label: product_sell_averages[label][product_id] * net_sell_proceeds
-            for label in PRICE_WINDOWS
-        }
-
-    context['ice_types'] = ICE_TYPES
-
+def _build_ice_data(ice_books, ice_history, product_books, product_data, market_hubs,
+                    params, ice_buy_averages, average_transaction_prices, today):
+    """Per ice type: hub order-book/history/reprocess cells and the transaction
+    averages (mutates average_transaction_prices, as the inline loop did)."""
+    reprocessing_yield = params['reprocessing_yield']
+    ice_units = params['freighter_ice_capacity']
+    ice_data = {}
     for ice_type in ICE_TYPES:
         type_id = ICE_TYPES[ice_type]['type_id']
-        context['ice_data'][ice_type] = {}
+        ice_data[ice_type] = {}
         best_price_global = 999999999
         best_full_cargo_average_price = 999999999
         best_market_hub_full_cargo_price = 999999999999
         for market_hub in HUB_ORDER:
             hub_data = {}
-            context['ice_data'][ice_type][market_hub] = hub_data
+            ice_data[ice_type][market_hub] = hub_data
             sell_orders = ice_books.get((market_hubs[market_hub], type_id), {'sells': []})['sells']
             history_rows = ice_history.get((market_hubs[market_hub], type_id), [])
             if sell_orders:
@@ -234,7 +259,7 @@ def market_ice_index(request):
                 hub_data['reprocess'] = reprocess
                 for ice_product_type in ICE_PRODUCT_TYPES:
                     ice_product_type_yield = ICE_TYPES[ice_type]['base_yield'][ice_product_type] * reprocessing_yield/100
-                    sell_order_price = ice_product_type_yield * context['ice_product_data'][ice_product_type][market_hub]['best_sell_price']
+                    sell_order_price = ice_product_type_yield * product_data[ice_product_type][market_hub]['best_sell_price']
                     buy_orders = product_books.get(
                         (market_hubs[market_hub], ICE_PRODUCT_TYPES[ice_product_type]), {'buys': []})['buys']
                     total_buy_order_cost, accumulated_buy_volume = _walk_order_book(
@@ -252,15 +277,15 @@ def market_ice_index(request):
                 reprocess['total_sell_price'] = total_sell_price
                 reprocess['total_buy_price'] = total_buy_price
 
-        context['ice_data'][ice_type]['best_price'] = best_price_global
-        context['ice_data'][ice_type]['best_full_cargo_average_price'] = best_full_cargo_average_price
-        context['ice_data'][ice_type]['best_market_hub_full_cargo_price'] = best_market_hub_full_cargo_price
+        ice_data[ice_type]['best_price'] = best_price_global
+        ice_data[ice_type]['best_full_cargo_average_price'] = best_full_cargo_average_price
+        ice_data[ice_type]['best_market_hub_full_cargo_price'] = best_market_hub_full_cargo_price
         for market_hub in REPROCESS_HUBS:
-            reprocess = context['ice_data'][ice_type][market_hub]['reprocess']
-            reprocess['sell_price_profit'] = reprocess['total_sell_price']*(1-market_service.get_sales_tax()-market_service.get_brokers_fee())*context['params']['freighter_capacity']/100 - best_market_hub_full_cargo_price
+            reprocess = ice_data[ice_type][market_hub]['reprocess']
+            reprocess['sell_price_profit'] = reprocess['total_sell_price']*(1-market_service.get_sales_tax()-market_service.get_brokers_fee())*params['freighter_capacity']/100 - best_market_hub_full_cargo_price
             reprocess['buy_price_profit'] = reprocess['total_buy_price']*(1-market_service.get_sales_tax()) - best_market_hub_full_cargo_price
 
-        average_buy_price = {label: ice_buy_averages[label][type_id] for label in PRICE_WINDOWS}
+        average_buy_price = {label: float(ice_buy_averages[label][type_id]) for label in PRICE_WINDOWS}
         average_sell_price = {
             label: calculate_average_sell_price_from_yield(
                 ice_type,
@@ -279,9 +304,7 @@ def market_ice_index(request):
                     if average_buy_price[label] != 0 else 0)
             for label in PRICE_WINDOWS
         }
-
-    context['average_transaction_prices'] = average_transaction_prices
-    return render(request, "market/ice.html", context)
+    return ice_data
 
 def calculate_average_sell_price_from_yield(ice_type, prices, reprocessing_yield=100):
     total_price = 0

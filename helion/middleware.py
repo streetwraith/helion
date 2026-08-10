@@ -7,11 +7,8 @@ class LoginRequiredMiddleware:
 
     def __call__(self, request):
         if not request.user.is_authenticated:
-            public_paths = [
-                reverse('login'),
-            ]
-
-            if request.path not in public_paths:
-                return redirect("/login/?next=%s" % request.path)
+            login_url = reverse('login')
+            if request.path != login_url:
+                return redirect(f"{login_url}?next={request.path}")
         response = self.get_response(request)
         return response

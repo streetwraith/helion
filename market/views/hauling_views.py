@@ -118,10 +118,8 @@ def market_hauling_sell_to_buy(request, from_location, to_location):
 
     from_orders_by_type = {}
     for order in from_orders:
-        type_id = order['type_id']
-        if type_id not in from_orders_by_type:
-            from_orders_by_type[type_id] = []
-        from_orders_by_type[type_id].append(order)
+        order['price'] = float(order['price'])  # deal math runs in float
+        from_orders_by_type.setdefault(order['type_id'], []).append(order)
 
     to_orders = MarketOrder.objects.filter(
         region_id=to_loc.region_id,
@@ -132,6 +130,7 @@ def market_hauling_sell_to_buy(request, from_location, to_location):
 
     to_orders_by_type = {}
     for order in to_orders:
+        order['price'] = float(order['price'])
         type_id = order['type_id']
         if type_id not in to_orders_by_type:
             to_orders_by_type[type_id] = []
@@ -228,10 +227,10 @@ def market_hauling_sell_to_sell(request, from_location, to_location):
         volume_remain=Sum('volume_remain')
     ).order_by('type_id')
 
-    from_orders_by_type = {
-        order['type_id']: order 
-        for order in from_orders
-    }
+    from_orders_by_type = {}
+    for order in from_orders:
+        order['price'] = float(order['price'])  # deal math runs in float
+        from_orders_by_type[order['type_id']] = order
 
     to_orders = MarketOrder.objects.filter(
         region_id=to_loc.region_id,
@@ -242,6 +241,7 @@ def market_hauling_sell_to_sell(request, from_location, to_location):
 
     to_orders_by_type = {}
     for order in to_orders:
+        order['price'] = float(order['price'])
         type_id = order['type_id']
         if type_id not in to_orders_by_type:
             to_orders_by_type[type_id] = {
@@ -252,7 +252,7 @@ def market_hauling_sell_to_sell(request, from_location, to_location):
         to_orders_by_type[type_id]['total_volume'] += order['volume_remain']
 
     jita_prices = {
-        order['type_id']: order['price']
+        order['type_id']: float(order['price'])
         for order in MarketOrder.objects.filter(
             region_id=jita_loc.region_id,
             is_in_trade_hub_range=True,

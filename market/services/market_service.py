@@ -30,6 +30,7 @@ from market.services.history import (
     get_a4e_market_history_volume,
     get_average_daily_volume_bulk,
     get_market_history,
+    get_market_history_bulk,
     get_market_history_for_types,
 )
 from market.services.orders import (
@@ -49,6 +50,7 @@ from market.services.orders import (
     trade_item_del,
 )
 from market.services.wallet import (
+    WalletStatistics,
     get_average_transaction_price,
     get_average_transaction_price_bulk,
     get_market_transactions,

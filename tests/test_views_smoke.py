@@ -70,7 +70,10 @@ def test_market_index(auth_client, trade_hubs):
     regions = response.context["market_regions"]
     assert len(regions) == 5
     assert all(region.trade_hub is not None for region in regions)
-    assert "wallet_statistics" in response.context
+    wallet_table = response.context["wallet_table"]
+    assert [row["label"] for row in wallet_table] == [
+        "buy", "sell", "taxes", "fees", "profit", "fees/profit"]
+    assert all(len(row["cells"]) == 5 for row in wallet_table)
 
 
 def test_refresh_all_data_redirects(character_client, trade_hubs, monkeypatch):
@@ -239,9 +242,10 @@ class TestLoyaltyPoints:
              "offer_id": 2, "type_id": 603,
              "required_items": [{"type_id": 34, "quantity": 2}]},
         ]
+        offer_models = [SimpleNamespace(model_dump=lambda offer=offer: offer) for offer in offers]
         fake_esi = SimpleNamespace(client=SimpleNamespace(Loyalty=SimpleNamespace(
-            get_loyalty_stores_corporation_id_offers=lambda corporation_id: SimpleNamespace(
-                results=lambda: offers))))
+            GetLoyaltyStoresCorporationIdOffers=lambda corporation_id: SimpleNamespace(
+                results=lambda **kw: offer_models))))
         monkeypatch.setattr("market.views.loyalty_points_views.esi", fake_esi)
 
         response = auth_client.get(reverse("lp_data", kwargs={
@@ -396,3 +400,15 @@ class TestCsrf:
         response = client.post(reverse("market_open_in_game"), {"type_id": 34},
                                headers={**self.XHR, "X-CSRFToken": token})
         assert response.status_code == 200
+
+
+class TestMalformedParams:
+    def test_transactions_bad_location_id_returns_400(self, character_client, trade_hubs):
+        response = character_client.get(reverse("market_transactions"), {"location_id": "abc"})
+        assert response.status_code == 400
+
+    def test_ice_bad_numeric_param_returns_400(self, character_client, trade_hubs):
+        from .test_query_counts import ICE_PAGE_PARAMS
+        params = dict(ICE_PAGE_PARAMS, rig_modifier="abc")
+        response = character_client.get(reverse("market_ice_index"), params)
+        assert response.status_code == 400

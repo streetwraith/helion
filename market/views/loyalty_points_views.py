@@ -52,36 +52,64 @@ def lp_data(request, trade_type, location, corporation_name):
     corporations = NpcCorporation.objects.all().order_by('name')
     corporation = NpcCorporation.objects.filter(name__iexact=corporation_name).get()
     trade_hub_region_ids = list(TradeHub.objects.all().values_list('region_id', flat=True))
-    resp = esi.client.Loyalty.get_loyalty_stores_corporation_id_offers(corporation_id=corporation.corporation_id).results()
+    # use_etag=False: request path, always needs the body.
+    resp = [offer.model_dump() for offer in esi.client.Loyalty.GetLoyaltyStoresCorporationIdOffers(
+        corporation_id=corporation.corporation_id).results(use_etag=False)]
+
+    # Everything per-offer is prefetched in bulk; the loop below runs no queries.
+    offer_type_ids = {value['type_id'] for value in resp}
+    required_type_ids = {
+        item['type_id'] for value in resp for item in (value.get('required_items') or [])}
+    type_names = dict(Type.objects.filter(
+        type_id__in=offer_type_ids | required_type_ids).values_list('type_id', 'name'))
+
+    if trade_type == 'buy':
+        offer_orders = MarketOrder.objects.filter(
+            is_buy_order=True, type_id__in=offer_type_ids).order_by('type_id', '-price').distinct('type_id')
+    elif trade_type == 'sell':
+        offer_orders = MarketOrder.objects.filter(
+            is_buy_order=False, type_id__in=offer_type_ids).order_by('type_id', 'price').distinct('type_id')
+    else:
+        offer_orders = MarketOrder.objects.none()
+    best_offer_orders = {order.type_id: order for order in offer_orders}
+
+    best_required_orders = {
+        order.type_id: order
+        for order in MarketOrder.objects.filter(
+            region_id__in=trade_hub_region_ids, is_in_trade_hub_range=True,
+            is_buy_order=False, type_id__in=required_type_ids,
+        ).order_by('type_id', 'price').distinct('type_id')
+    }
+
+    history_type_ids = [value['type_id'] for value in resp if value.get('required_items')]
+    filled_histories = market_service.get_market_history_bulk(loc.region_id, history_type_ids)
+
     lp_deals = []
     for value in resp:
         lp_deal = LpDeal(**value)
-        lp_deal.name = Type.objects.get(type_id=lp_deal.type_id).name
-        lp_item_best_order = None
-        if trade_type == 'buy':
-            lp_item_best_order = MarketOrder.objects.filter(is_buy_order=True, type_id=lp_deal.type_id).order_by('-price').first()
-        elif trade_type == 'sell':
-            lp_item_best_order = MarketOrder.objects.filter(is_buy_order=False, type_id=lp_deal.type_id).order_by('price').first()
+        lp_deal.name = type_names[lp_deal.type_id]
+        lp_item_best_order = best_offer_orders.get(lp_deal.type_id)
         if lp_item_best_order is not None:
-            lp_deal.price = lp_item_best_order.price
+            lp_deal.price = float(lp_item_best_order.price)  # deal math runs in float
             lp_deal.location = lp_item_best_order.location_id
-        if 'required_items' in value and len(value['required_items']) > 0:
+        if value.get('required_items'):
             required_items = []
             for item in value['required_items']:
-                required_item_best_order = MarketOrder.objects.filter(region_id__in=trade_hub_region_ids, is_in_trade_hub_range=True, is_buy_order=False, type_id=item['type_id']).order_by('price').first()
+                required_item_best_order = best_required_orders.get(item['type_id'])
                 required_item = {
                     'type_id': item['type_id'],
-                    'name': Type.objects.get(type_id=item['type_id']).name,
+                    'name': type_names[item['type_id']],
                     'quantity': item['quantity'],
                     'price': 0,
                     'location': ''
                 }
                 if required_item_best_order is not None:
-                    required_item['price'] = required_item_best_order.price
+                    required_item['price'] = float(required_item_best_order.price)
                     required_item['location'] = required_item_best_order.location_id
                 required_items.append(required_item)
             lp_deal.required_items = required_items
-            lp_deal.history_averages = market_service.calculate_market_history_averages(history=market_service.get_market_history(type_id=lp_deal.type_id, region_id=loc.region_id), type_id=lp_deal.type_id, region_id=loc.region_id)
+            lp_deal.history_averages = market_service.calculate_market_history_averages(
+                history=filled_histories[lp_deal.type_id], type_id=lp_deal.type_id, region_id=loc.region_id)
 
         lp_deals.append(lp_deal)
     lp_deals.sort(key=lambda d: d.profit_per_lp()*-1)
