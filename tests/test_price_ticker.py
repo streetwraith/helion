@@ -1,5 +1,4 @@
 """Header price ticker: Jita and PLEX best asks straight from market.orders."""
-import pytest
 from django.utils import timezone
 
 from market.services import market_service, orders

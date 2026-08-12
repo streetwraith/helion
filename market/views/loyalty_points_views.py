@@ -82,8 +82,7 @@ def lp_data(request, trade_type, location, corporation_name):
         ).order_by('type_id', 'price').distinct('type_id')
     }
 
-    # History is local and complete, so every offer gets averages inline;
-    # the on-demand ESI refresh is gone.
+    # History is local and complete, so every offer gets averages inline.
     history_type_ids = [value['type_id'] for value in resp]
     averages_by_type = market_service.calculate_market_history_averages_bulk(
         loc.region_id, history_type_ids)

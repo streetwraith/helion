@@ -9,7 +9,6 @@ from market.models import (
     CharacterAsset,
     CharacterOrder,
     MarketTransaction,
-    SystemHubJumps,
 )
 from market.services import market_service
 from marketdata.models import History, Order

@@ -23,9 +23,12 @@ def _expires(headers):
     if not value:
         return None
     try:
-        return parsedate_to_datetime(value)
+        parsed = parsedate_to_datetime(value)
     except (TypeError, ValueError):
         return None
+    # A header without a timezone parses naive and would blow up aware-datetime
+    # comparisons later; treat it as absent (the scheduler falls back to TTL).
+    return parsed if parsed.tzinfo is not None else None
 
 
 def update_market_transactions(character_id):

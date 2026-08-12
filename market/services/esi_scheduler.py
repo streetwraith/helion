@@ -112,7 +112,7 @@ def run_feed(feed, character_name):
         expires = fetch(character_id)
     except (ESIErrorLimitException, ESIBucketLimitException) as exc:
         # Not this row's fault: pause globally, keep its error state clean.
-        pause_all_fetching(getattr(exc, "reset", None))
+        pause_all_fetching(exc.reset)
         return
     except Exception as exc:
         _record_failure(state, exc)

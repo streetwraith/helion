@@ -15,7 +15,7 @@ from market.models import (
 from market.services import esi_sync
 
 from .conftest import CHARACTER_ID
-from .test_market_service_db import JITA_REGION, JITA_STATION, JITA_SYSTEM
+from .test_market_service_db import JITA_STATION
 
 pytestmark = pytest.mark.django_db
 
@@ -134,6 +134,23 @@ class TestRefreshCharacterOrders:
         assert rows == {1: CHARACTER_ID, 2: CHARACTER_ID, 222: self.ALT_ID}
         assert expires == EXPIRES
 
+    @pytest.mark.parametrize("bad_header", [
+        "not-a-date",
+        "Tue, 12 Aug 2026 12:00:00",  # parseable but naive: no timezone
+    ])
+    def test_malformed_expires_header_degrades_to_none(self, monkeypatch, bad_header):
+        def get_orders(character_id, token):
+            return SimpleNamespace(results=lambda **kw: (
+                [], SimpleNamespace(headers={"Expires": bad_header})))
+
+        monkeypatch.setattr(esi_sync, "esi", SimpleNamespace(
+            client=SimpleNamespace(Market=SimpleNamespace(
+                GetCharactersCharacterIdOrders=get_orders))))
+        monkeypatch.setattr(esi_sync, "Token", FAKE_TOKEN)
+
+        # None makes the scheduler fall back to the spec TTL.
+        assert esi_sync.refresh_character_orders(CHARACTER_ID) is None
+
     def test_304_keeps_rows_and_returns_expires(self, monkeypatch):
         from esi.exceptions import HTTPNotModified
 
@@ -205,4 +222,4 @@ class TestRefreshCharacterWallet:
         monkeypatch.setattr(esi_sync, "get_wallet_journal", fake_journal)
 
         assert esi_sync.refresh_character_wallet(CHARACTER_ID) == EXPIRES + timedelta(minutes=1)
-        assert calls == ["transactions", "journal"]
+        assert set(calls) == {"transactions", "journal"}

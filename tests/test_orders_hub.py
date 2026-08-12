@@ -1,6 +1,7 @@
 """The orders_hub view: every branch of the hub-range CASE, and the
 deliberate restriction to hub regions."""
 import pytest
+from django.core.management import call_command
 from django.utils import timezone
 
 from market.models import SystemHubJumps
@@ -71,3 +72,10 @@ class TestOrdersHubFlag:
     def test_non_hub_regions_are_invisible(self, trade_hubs):
         raw_order(1, is_buy=False, order_range="region", region_id=10000001)
         assert not OrdersHub.objects.filter(order_id=1).exists()
+
+
+def test_sync_market_views_is_idempotent(db, trade_hubs):
+    raw_order(1, is_buy=False, order_range="region", location_id=JITA_STATION)
+
+    call_command("sync_market_views")  # rerun over the existing view
+    assert OrdersHub.objects.get(order_id=1).is_in_trade_hub_range is True

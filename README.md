@@ -14,7 +14,7 @@ uv run manage.py sync_market_views
 uv run manage.py runserver
 ```
 
-`sync_market_views` creates the `orders_hub` view over the shared `market` schema; rerun it whenever that schema changes. The character-data fetches and the undercut computation run as Celery tasks against the same Redis broker (`celery -A helion worker` / `beat`) from two beat entries: `market.tasks.esi_fetch_scheduler` and `market.tasks.compute_undercuts`, each every minute. Which characters get fetched is configured at runtime in the `TrackedCharacter` admin table.
+`sync_market_views` creates the `orders_hub` view over the shared `market` schema; rerun it whenever that schema changes. The character-data fetches and the undercut computation run as Celery tasks against the same Redis broker (`celery -A helion worker` / `beat`) from two beat entries: `market.tasks.esi_fetch_scheduler` and `market.tasks.compute_undercuts`, each every minute. Which characters get fetched is configured at runtime in the `TrackedCharacter` admin table (tags: `orders`, `wallet`, `assets`).
 
 ## Tests
 

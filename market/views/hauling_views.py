@@ -326,7 +326,7 @@ def market_hauling_sell_to_sell(request, from_location, to_location):
     _attach_type_names(deals)
 
     # History is local and complete (EVE Ref via marketmanager), so the
-    # averages render inline; the on-demand ESI refresh is gone.
+    # averages render inline for every deal.
     averages_by_type = market_service.calculate_market_history_averages_bulk(
         to_loc.region_id, [deal.type_id for deal in deals])
     for deal in deals:

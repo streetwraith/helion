@@ -1,12 +1,12 @@
 """The ESI fetch scheduler: reconciliation, pacing, and the failure policy."""
-from datetime import datetime, timedelta, timezone as dt_timezone
+from datetime import timedelta
 from types import SimpleNamespace
 
 import pytest
 from django.utils import timezone
 
 from esi.errors import TokenInvalidError
-from esi.exceptions import ESIErrorLimitException, HTTPClientError
+from esi.exceptions import ESIErrorLimitException
 from esi.models import Token
 from market.models import EsiFetchState, TrackedCharacter
 from market.services import esi_scheduler
@@ -96,8 +96,6 @@ class TestWatchdog:
 
 
 class TestRunFeed:
-    EXPIRES = None  # set per test relative to now
-
     def run_with_fetch(self, monkeypatch, fetch):
         monkeypatch.setitem(esi_scheduler.FEEDS, "orders", (fetch, 1200))
         esi_scheduler.run_feed("orders", TRADER)

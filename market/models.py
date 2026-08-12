@@ -133,8 +133,9 @@ class MarketOrderUndercut(models.Model):
         ]
 
 class TrackedCharacter(models.Model):
-    # What to fetch for this character, as comma-separated tags. 'orders' is
-    # the only tag today; transactions, contracts etc. may join later.
+    # What to fetch for this character, as comma-separated tags. Valid tags
+    # are the esi_scheduler FEEDS keys: orders, wallet, assets. Unknown tags
+    # are silently ignored.
     character_name = models.CharField(max_length=128, unique=True)
     tracks = models.CharField(max_length=128, default='orders')
 

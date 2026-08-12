@@ -28,18 +28,8 @@ def cache_lock(lock_id, timeout):
 # marketmanager).
 
 @shared_task
-def esi_fetch_orders(character_name):
-    esi_scheduler.run_feed("orders", character_name)
-
-@shared_task
-def esi_fetch_wallet(character_name):
-    esi_scheduler.run_feed("wallet", character_name)
-
-@shared_task
-def esi_fetch_assets(character_name):
-    esi_scheduler.run_feed("assets", character_name)
-
-FEED_TASKS = {"orders": esi_fetch_orders, "wallet": esi_fetch_wallet, "assets": esi_fetch_assets}
+def esi_fetch_feed(feed, character_name):
+    esi_scheduler.run_feed(feed, character_name)
 
 @shared_task(bind=True)
 def esi_fetch_scheduler(self):
@@ -47,8 +37,7 @@ def esi_fetch_scheduler(self):
     with cache_lock("esi_fetch_scheduler_lock", timeout=300) as acquired:
         if not acquired:
             return
-        esi_scheduler.schedule_due_fetches(
-            lambda feed, character_name: FEED_TASKS[feed].delay(character_name))
+        esi_scheduler.schedule_due_fetches(esi_fetch_feed.delay)
 
 UNDERCUT_MARK_KEY = "undercut_mark_{region_id}"
 
@@ -72,16 +61,14 @@ def compute_undercuts(self):
             if mark is not None and status.refreshed_at <= mark:
                 continue
             for character_id in character_ids:
-                undercut_sell_orders = market_service.find_undercut_sell_orders(
-                    region_id=status.region_id, character_id=character_id)
-                market_service.save_market_order_undercuts(
-                    region_id=status.region_id, character_id=character_id,
-                    is_buy=False, market_order_undercut_data=undercut_sell_orders)
-                undercut_buy_orders = market_service.find_undercut_buy_orders(
-                    region_id=status.region_id, character_id=character_id)
-                market_service.save_market_order_undercuts(
-                    region_id=status.region_id, character_id=character_id,
-                    is_buy=True, market_order_undercut_data=undercut_buy_orders)
+                for is_buy, find_undercuts in (
+                        (False, market_service.find_undercut_sell_orders),
+                        (True, market_service.find_undercut_buy_orders)):
+                    undercuts = find_undercuts(
+                        region_id=status.region_id, character_id=character_id)
+                    market_service.save_market_order_undercuts(
+                        region_id=status.region_id, character_id=character_id,
+                        is_buy=is_buy, market_order_undercut_data=undercuts)
             # Advance only after a successful compute, so a failure retries
             # on the next beat. A lost mark costs one deduped recompute.
             cache.set(mark_key, status.refreshed_at, timeout=None)

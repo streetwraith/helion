@@ -34,7 +34,7 @@ def index(request):
     # Only the hub regions: marketmanager ingests 25 regions, the other 20
     # are outside helion's trading scope.
     market_regions = list(RegionStatus.objects.filter(
-        region_id__in=hubs_by_region).order_by('region_name'))
+        region_id__in=hubs_by_region.keys()).order_by('region_name'))
     wallet_statistics = market_service.WalletStatistics(WalletJournal.objects.filter(ref_type__in=['transaction_tax', 'brokers_fee', 'contract_brokers_fee', 'market_transaction', 'contract_collateral_payout', 'contract_price', 'contract_reward_deposited', 'contract_reward_refund', 'contract_sales_tax']), market_service.get_market_transactions())
     context = {
         "market_regions": market_regions,

@@ -160,7 +160,7 @@ def get_orders_in_hub_range(type_ids, is_buy_order=None):
 LARGE_SKILL_INJECTOR_TYPE_ID = 40520
 SKILL_EXTRACTOR_TYPE_ID = 40519
 JITA_STATION_ID = 60003760
-PRICE_TICKER_CACHE_SECONDS = 600  # matches the Jita order sync cadence
+PRICE_TICKER_CACHE_SECONDS = 600  # caps the ticker queries per page render
 
 def get_price_ticker():
     """Best-ask prices for the header ticker. None values mean no data."""
@@ -180,7 +180,6 @@ def get_jita_best_ask(type_id):
         region_id=REGION_ID_FORGE, type_id=type_id,
         location_id=JITA_STATION_ID, is_buy_order=False
     ).aggregate(best=Min('price'))['best']
-
 
 def get_plex_best_ask():
     return Order.objects.filter(

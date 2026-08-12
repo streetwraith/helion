@@ -202,10 +202,6 @@ class TestBulkHistoryAverages:
         )
 
     def test_matches_per_type_calculation(self, db):
-        from datetime import date, timedelta
-
-        from market.services import market_service
-
         latest = date(2026, 8, 1)
         self.add_history(34, latest, volume=91, price=100.0)
         self.add_history(34, latest - timedelta(days=2), volume=182, price=200.0)
@@ -220,7 +216,5 @@ class TestBulkHistoryAverages:
             assert bulk[type_id] == single
 
     def test_region_without_history_returns_none(self, db):
-        from market.services import market_service
-
         assert market_service.calculate_market_history_averages_bulk(
             10000030, [34]) == {34: None}
