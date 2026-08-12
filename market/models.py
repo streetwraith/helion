@@ -132,6 +132,24 @@ class MarketOrderUndercut(models.Model):
             models.UniqueConstraint(fields=['order_id', 'order_issued'], name='uc_order_modification')
         ]
 
+class TrackedCharacter(models.Model):
+    # What to fetch for this character, as comma-separated tags. 'orders' is
+    # the only tag today; transactions, contracts etc. may join later.
+    character_name = models.CharField(max_length=128, unique=True)
+    tracks = models.CharField(max_length=128, default='orders')
+
+    def track_list(self):
+        return [tag.strip() for tag in self.tracks.split(',') if tag.strip()]
+
+    def __str__(self):
+        return self.character_name + ' (' + self.tracks + ')'
+
+class CharacterOrder(models.Model):
+    # Which live market orders are ours, joined onto market.orders at read
+    # time. Marketmanager holds no authed token, so ownership stays helion's.
+    order_id = models.BigIntegerField(primary_key=True)
+    character_id = models.BigIntegerField(db_index=True)
+
 class SystemHubJumps(models.Model):
     # Jumps from a solar system to its region's trade hub. Non-CCP, ESI-derived;
     # rebuilt by `manage.py recompute_hub_jumps`. Lives here rather than on the sde

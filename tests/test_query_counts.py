@@ -8,7 +8,8 @@ from django.test.utils import CaptureQueriesContext
 from django.urls import reverse
 from django.utils import timezone
 
-from market.models import MarketHistory, MarketOrderUndercut, TradeItem
+from market.models import MarketOrderUndercut, TradeItem
+from marketdata.models import History
 from market.services import market_service
 
 from .conftest import CHARACTER_ID
@@ -54,7 +55,7 @@ def add_trade_hub_item(index, type_id):
     )
     add_transaction(base + 5, type_id, 10, 100.0, is_buy=True)
     add_transaction(base + 6, type_id, 5, 150.0, is_buy=False, location_id=AMARR_STATION)
-    MarketHistory.objects.create(region_id=AMARR_REGION, type_id=type_id,
+    History.objects.create(region_id=AMARR_REGION, type_id=type_id,
                                  date=timezone.now().date(), average=100.0, highest=110.0,
                                  lowest=90.0, order_count=1, volume=91)
 

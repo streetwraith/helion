@@ -40,7 +40,6 @@
             <th>trade hub</th>
             <th>orders</th>
             <th>last updated</th>
-            <th></th>
         </tr>
     </thead>
     <tbody>
@@ -49,21 +48,11 @@
             <td>{{ market_region.region_id }}</td>
             <td>{{ market_region.region_name }}</td>
             <td>{{ market_region.trade_hub.name }}</td>
-            <td>{{ market_region.orders }}</td>
-            <td>{{ market_region.updated_at|date:"d/m/Y H:i" }}</td>
-            <td>
-                <form action="{% url 'market_region_orders_refresh' region_id=market_region.region_id %}" method="post">
-                    {% csrf_token %}
-                    <input type="hidden" name="region_id" value="{{ market_region.region_id }}" />
-                    <button type="submit">refresh orders</button>
-                </form>
-            </td>
+            <td>{{ market_region.order_count }}</td>
+            <td>{{ market_region.refreshed_at|date:"d/m/Y H:i" }}</td>
         </tr>
         {% endfor %}
     </tbody>
 </table>
-
-<br/>
-<a href="{% url 'refresh_all_data' %}">refresh all data</a>
 
 {% endblock %}

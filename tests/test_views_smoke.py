@@ -70,20 +70,6 @@ def test_market_index(auth_client, trade_hubs):
     assert all(len(row["cells"]) == 5 for row in wallet_table)
 
 
-def test_refresh_all_data_redirects(character_client, trade_hubs, monkeypatch):
-    for name in ("update_market_transactions", "refresh_all_trade_hub_orders", "get_wallet_journal"):
-        monkeypatch.setattr(market_service, name, lambda *a, **kw: None)
-    response = character_client.get(reverse("refresh_all_data"))
-    assert response.status_code == 302 and response.url == reverse("market_index")
-
-
-def test_region_orders_refresh_is_post_only(character_client, trade_hubs, monkeypatch):
-    monkeypatch.setattr(market_service, "refresh_trade_hub_orders", lambda *a, **kw: None)
-    url = reverse("market_region_orders_refresh", kwargs={"region_id": JITA_REGION})
-    assert character_client.get(url).status_code == 405
-    assert character_client.post(url).status_code == 302
-
-
 class TestShoppingList:
     def test_get_renders_empty_form(self, auth_client, trade_hubs):
         assert auth_client.get(reverse("shopping_list")).status_code == 200
@@ -262,15 +248,6 @@ class TestAjax:
         assert response.status_code == 200
         assert "html" in response.json()
 
-    def test_market_history(self, character_client, trade_hubs, monkeypatch):
-        monkeypatch.setattr(market_service, "update_market_history", lambda **kw: None)
-        response = character_client.post(
-            reverse("market_history"), {"type_id": 34, "region_id": JITA_REGION},
-            headers=self.XHR,
-        )
-        assert response.status_code == 200
-        assert "html" in response.json()
-
     def test_trade_item_add_and_del(self, character_client, trade_hubs):
         add_type(34, "Tritanium")
         response = character_client.post(
@@ -326,7 +303,6 @@ class TestAjax:
 
     def test_all_ajax_views_reject_non_xhr(self, character_client, trade_hubs):
         # Regression: these used to return None -> 500 without the XHR header.
-        assert character_client.post(reverse("market_history"), {}).status_code == 400
         assert character_client.get(reverse("transaction_history")).status_code == 400
         assert character_client.post(reverse("trade_item_add_or_del"), {}).status_code == 400
 
@@ -339,7 +315,6 @@ class TestRequireCharacter:
         ("market_transactions", {}),
         ("market_trade_hub", {"region_id": JITA_REGION}),
         ("market_ice_index", {}),
-        ("refresh_all_data", {}),
         ("transaction_history", {}),
     ])
     def test_redirects_to_character_selection(self, auth_client, trade_hubs, url_name, kwargs):

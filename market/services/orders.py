@@ -4,8 +4,9 @@ from django.db import connection
 from django.db.models import Min
 
 from evesde.models import Type
-from market.models import MarketOrder, MarketOrderUndercut, TradeHub, TradeItem
-from market.services import esi_sync
+from market.constants import GLOBAL_PLEX_MARKET_REGION_ID, PLEX_TYPE_ID, REGION_ID_FORGE
+from market.models import MarketOrderUndercut, TradeHub, TradeItem
+from marketdata.models import Order, OrdersHub
 
 def find_type_ids_by_market_groups(market_group_id, excluded_meta_ids=None):
     query = """
@@ -88,24 +89,26 @@ def _find_undercut_orders(region_id, character_id, is_buy):
        competing.competitor_order_id,
        competing.competitor_issued,
        competing.competitor_price
-    FROM market_marketorder AS my_orders
+    FROM orders_hub AS my_orders
+    JOIN market_characterorder AS mine
+        ON mine.order_id = my_orders.order_id AND mine.character_id = %s
     JOIN LATERAL (
         SELECT competitor.order_id AS competitor_order_id,
             competitor.issued AS competitor_issued,
             competitor.price AS competitor_price
-        FROM market_marketorder AS competitor
+        FROM orders_hub AS competitor
         WHERE competitor.type_id = my_orders.type_id
         AND competitor.region_id = my_orders.region_id
-        AND competitor.is_in_trade_hub_range = my_orders.is_in_trade_hub_range
+        AND competitor.is_in_trade_hub_range = TRUE
         AND competitor.is_buy_order = my_orders.is_buy_order
         AND competitor.price {price_comparison} my_orders.price
         AND competitor.issued > my_orders.issued
-        AND competitor.character_id IS NULL
+        AND NOT EXISTS (SELECT 1 FROM market_characterorder AS other
+                        WHERE other.order_id = competitor.order_id)
         ORDER BY competitor.price {closest_first}
         LIMIT 1  -- Ensure only one competitor is selected per order
     ) AS competing ON TRUE
-    WHERE my_orders.character_id = %s
-    AND my_orders.region_id = %s
+    WHERE my_orders.region_id = %s
     AND my_orders.is_in_trade_hub_range = TRUE
     AND my_orders.is_buy_order = %s
     """
@@ -134,7 +137,7 @@ def get_shopping_list_prices(item_names):
         s.name_en,
         mo.region_id,
         MIN(mo.price) AS lowest_sell_price
-    FROM market_marketorder mo
+    FROM orders_hub mo
     JOIN sde.types s ON mo.type_id = s._key
     WHERE mo.is_buy_order = FALSE
     AND mo.is_in_trade_hub_range = TRUE
@@ -149,7 +152,7 @@ def get_shopping_list_prices(item_names):
         return cursor.fetchall()
 
 def get_orders_in_hub_range(type_ids, is_buy_order=None):
-    orders = MarketOrder.objects.filter(is_in_trade_hub_range=True, type_id__in=type_ids)
+    orders = OrdersHub.objects.filter(is_in_trade_hub_range=True, type_id__in=type_ids)
     if is_buy_order is not None:
         orders = orders.filter(is_buy_order=is_buy_order)
     return orders
@@ -164,8 +167,7 @@ def get_price_ticker():
     ticker = cache.get('price_ticker')
     if ticker is None:
         ticker = {
-            # Module-attribute call so tests can stub the ESI fetch.
-            'plex': esi_sync.fetch_plex_best_ask(),
+            'plex': get_plex_best_ask(),
             'lsi': get_jita_best_ask(LARGE_SKILL_INJECTOR_TYPE_ID),
             'extractor': get_jita_best_ask(SKILL_EXTRACTOR_TYPE_ID),
         }
@@ -173,6 +175,15 @@ def get_price_ticker():
     return ticker
 
 def get_jita_best_ask(type_id):
-    return MarketOrder.objects.filter(
-        type_id=type_id, location_id=JITA_STATION_ID, is_buy_order=False
+    # The region filter prunes the order partitions; Jita 4-4 implies it.
+    return Order.objects.filter(
+        region_id=REGION_ID_FORGE, type_id=type_id,
+        location_id=JITA_STATION_ID, is_buy_order=False
+    ).aggregate(best=Min('price'))['best']
+
+
+def get_plex_best_ask():
+    return Order.objects.filter(
+        region_id=GLOBAL_PLEX_MARKET_REGION_ID, type_id=PLEX_TYPE_ID,
+        is_buy_order=False
     ).aggregate(best=Min('price'))['best']

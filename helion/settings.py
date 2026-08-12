@@ -49,6 +49,7 @@ INSTALLED_APPS = [
     'helion',
     'market.apps.MarketConfig',
     'evesde.apps.EvesdeConfig',
+    'marketdata.apps.MarketdataConfig',
     'mathfilters',
     'esi',
     'django_celery_beat',
@@ -210,7 +211,8 @@ ESI_SSO_CLIENT_ID = env.str('ESI_CLIENT_ID')
 ESI_SSO_CLIENT_SECRET = env.str('ESI_CLIENT_SECRET')
 ESI_SSO_CALLBACK_URL = env.str('ESI_CLIENT_CALLBACK_URL')
 ESI_INFO_LOGGING_ENABLED = True
-ESI_DEBUG_RESPONSE_CONTENT_LOGGING = True
+# Logs full response bodies; never enable in prod.
+ESI_DEBUG_RESPONSE_CONTENT_LOGGING = env.bool('ESI_DEBUG_RESPONSE_CONTENT_LOGGING', default=False)
 ESI_USER_CONTACT_EMAIL = env.str('ESI_USER_CONTACT_EMAIL')
 
 CELERY_BROKER_URL = replace_redis_db(REDIS_URL, 1)

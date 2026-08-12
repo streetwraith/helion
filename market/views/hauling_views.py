@@ -3,7 +3,8 @@ import logging
 from django.shortcuts import render, redirect
 from django.http import QueryDict
 from market.hauling_constants import SELL_TO_SELL_EXCLUDED_MARKET_GROUPS
-from market.models import MarketOrder, TradeHub
+from market.models import TradeHub
+from marketdata.models import OrdersHub
 from evesde.models import Type
 from market.services import market_service
 from django.db.models import Sum, Min
@@ -108,7 +109,7 @@ def market_hauling_sell_to_buy(request, from_location, to_location):
 
     valid_types = _valid_types(max_vol)
 
-    from_orders = MarketOrder.objects.filter(
+    from_orders = OrdersHub.objects.filter(
         region_id=from_loc.region_id,
         is_in_trade_hub_range=True,
         is_buy_order=False,
@@ -120,7 +121,7 @@ def market_hauling_sell_to_buy(request, from_location, to_location):
         order['price'] = float(order['price'])  # deal math runs in float
         from_orders_by_type.setdefault(order['type_id'], []).append(order)
 
-    to_orders = MarketOrder.objects.filter(
+    to_orders = OrdersHub.objects.filter(
         region_id=to_loc.region_id,
         is_in_trade_hub_range=True,
         is_buy_order=True,
@@ -216,7 +217,7 @@ def market_hauling_sell_to_sell(request, from_location, to_location):
 
     valid_types = _valid_types(max_vol, SELL_TO_SELL_EXCLUDED_MARKET_GROUPS)
 
-    from_orders = MarketOrder.objects.filter(
+    from_orders = OrdersHub.objects.filter(
         region_id=from_loc.region_id,
         is_in_trade_hub_range=True,
         is_buy_order=False,
@@ -231,7 +232,7 @@ def market_hauling_sell_to_sell(request, from_location, to_location):
         order['price'] = float(order['price'])  # deal math runs in float
         from_orders_by_type[order['type_id']] = order
 
-    to_orders = MarketOrder.objects.filter(
+    to_orders = OrdersHub.objects.filter(
         region_id=to_loc.region_id,
         is_in_trade_hub_range=True,
         is_buy_order=False,
@@ -252,7 +253,7 @@ def market_hauling_sell_to_sell(request, from_location, to_location):
 
     jita_prices = {
         order['type_id']: float(order['price'])
-        for order in MarketOrder.objects.filter(
+        for order in OrdersHub.objects.filter(
             region_id=jita_loc.region_id,
             is_in_trade_hub_range=True,
             is_buy_order=False,
@@ -323,6 +324,13 @@ def market_hauling_sell_to_sell(request, from_location, to_location):
     deals.sort(key=lambda d: d.profit, reverse=True)
 
     _attach_type_names(deals)
+
+    # History is local and complete (EVE Ref via marketmanager), so the
+    # averages render inline; the on-demand ESI refresh is gone.
+    averages_by_type = market_service.calculate_market_history_averages_bulk(
+        to_loc.region_id, [deal.type_id for deal in deals])
+    for deal in deals:
+        deal.history_averages = averages_by_type[deal.type_id]
 
     return render(request, "market/hauling/hauling_sts.html", {
         'deals': deals,

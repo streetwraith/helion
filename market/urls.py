@@ -1,14 +1,11 @@
 from django.urls import path
 
 from .views import (
-    market_history,
     transaction_history,
     market_open_in_game,
     trade_item_add_or_del,
     index,
-    refresh_all_data,
     shopping_list,
-    market_region_orders_refresh,
     market_hauling_index,
     market_hauling_sell_to_buy,
     market_hauling_sell_to_sell,
@@ -23,8 +20,6 @@ from .views import (
 urlpatterns = [
     # base
     path("", index, name="market_index"),
-    path("refresh_all_data", refresh_all_data, name="refresh_all_data"),
-    path("region_orders/<int:region_id>", market_region_orders_refresh, name="market_region_orders_refresh"),
     path("shopping_list", shopping_list, name="shopping_list"),
 
     # station trading
@@ -47,7 +42,6 @@ urlpatterns = [
     path("lp/<str:trade_type>/<str:location>/<str:corporation_name>", lp_data, name="lp_data"),
     
     # ajax
-    path("ajax/market_history", market_history, name="market_history"),
     path("ajax/market_open_in_game", market_open_in_game, name="market_open_in_game"),
     path("ajax/trade_item_add_or_del", trade_item_add_or_del, name="trade_item_add_or_del"),
     path("ajax/transaction_history", transaction_history, name="transaction_history"),

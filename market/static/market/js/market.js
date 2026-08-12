@@ -44,36 +44,6 @@ $(document).ready(function(){
             }
         });
     });
-    $('.update-history').click(function(event) {
-        event.preventDefault();
-        var type_id = $(this).closest('tr').data('type-id');
-        var to_region = $(this).closest('table').data('to-region-id')
-        var link = $(this);
-        var spinner = $(this).parent().find('.loading-spinner');
-        $.ajax({
-            url: '/market/ajax/market_history',
-            type: 'POST',
-            data: {
-                'type_id': type_id,
-                'region_id': to_region,
-            },
-            dataType: 'json',
-            beforeSend: function() {
-                link.hide();
-                spinner.show();
-            },
-            success: function(data) {
-                $('.type-'+type_id+'.history-container').html(data.html);
-            },
-            error: function() {
-                console.log('Error loading data!');
-            },
-            complete: function() {
-                link.show();
-                spinner.hide();
-            }
-        });
-    });
     $('.item-name').on('click', '.plus-icon, .minus-icon', function(event) {
         event.preventDefault();
         var type_id = $(this).closest('tr').data('type-id');

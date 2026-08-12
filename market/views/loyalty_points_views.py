@@ -1,5 +1,6 @@
 from evesde.models import Type, NpcCorporation
-from market.models import MarketOrder, TradeHub
+from market.models import TradeHub
+from marketdata.models import OrdersHub
 from django.shortcuts import render, redirect
 from market.services import market_service
 from helion.providers import esi
@@ -64,25 +65,28 @@ def lp_data(request, trade_type, location, corporation_name):
         type_id__in=offer_type_ids | required_type_ids).values_list('type_id', 'name'))
 
     if trade_type == 'buy':
-        offer_orders = MarketOrder.objects.filter(
+        offer_orders = OrdersHub.objects.filter(
             is_buy_order=True, type_id__in=offer_type_ids).order_by('type_id', '-price').distinct('type_id')
     elif trade_type == 'sell':
-        offer_orders = MarketOrder.objects.filter(
+        offer_orders = OrdersHub.objects.filter(
             is_buy_order=False, type_id__in=offer_type_ids).order_by('type_id', 'price').distinct('type_id')
     else:
-        offer_orders = MarketOrder.objects.none()
+        offer_orders = OrdersHub.objects.none()
     best_offer_orders = {order.type_id: order for order in offer_orders}
 
     best_required_orders = {
         order.type_id: order
-        for order in MarketOrder.objects.filter(
+        for order in OrdersHub.objects.filter(
             region_id__in=trade_hub_region_ids, is_in_trade_hub_range=True,
             is_buy_order=False, type_id__in=required_type_ids,
         ).order_by('type_id', 'price').distinct('type_id')
     }
 
-    history_type_ids = [value['type_id'] for value in resp if value.get('required_items')]
-    filled_histories = market_service.get_market_history_bulk(loc.region_id, history_type_ids)
+    # History is local and complete, so every offer gets averages inline;
+    # the on-demand ESI refresh is gone.
+    history_type_ids = [value['type_id'] for value in resp]
+    averages_by_type = market_service.calculate_market_history_averages_bulk(
+        loc.region_id, history_type_ids)
 
     lp_deals = []
     for value in resp:
@@ -108,8 +112,7 @@ def lp_data(request, trade_type, location, corporation_name):
                     required_item['location'] = required_item_best_order.location_id
                 required_items.append(required_item)
             lp_deal.required_items = required_items
-            lp_deal.history_averages = market_service.calculate_market_history_averages(
-                history=filled_histories[lp_deal.type_id], type_id=lp_deal.type_id, region_id=loc.region_id)
+        lp_deal.history_averages = averages_by_type[lp_deal.type_id]
 
         lp_deals.append(lp_deal)
     lp_deals.sort(key=lambda d: d.profit_per_lp()*-1)

@@ -6,12 +6,12 @@ from django.utils import timezone
 
 from evesde.models import MarketGroup, Type
 from market.models import (
-    MarketHistory,
-    MarketOrder,
+    CharacterOrder,
     MarketTransaction,
     SystemHubJumps,
 )
 from market.services import market_service
+from marketdata.models import History, Order
 
 from .conftest import CHARACTER_ID
 
@@ -29,16 +29,29 @@ def add_type(type_id, name, market_group_id=999, meta_group_id=None, volume=0.01
     )
 
 
+# Any station that is no trade hub; encodes "out of hub range" for the view.
+NON_HUB_LOCATION = 60000001
+
+
 def add_order(order_id, type_id, price, is_buy=False, region_id=JITA_REGION,
               location_id=JITA_STATION, system_id=JITA_SYSTEM, character_id=None,
               volume_remain=100, issued=None, in_range=True, duration=90):
-    return MarketOrder.objects.create(
-        order_id=order_id, duration=duration, is_buy_order=is_buy,
-        issued=issued or timezone.now(), location_id=location_id, min_volume=1,
-        price=price, range="station" if not is_buy else "region", system_id=system_id,
-        type_id=type_id, volume_remain=volume_remain, volume_total=volume_remain,
-        region_id=region_id, is_in_trade_hub_range=in_range, character_id=character_id,
+    issued = issued or timezone.now()
+    # The orders_hub view computes the hub-range flag from the order
+    # attributes, so out-of-range is encoded as a non-hub location plus a
+    # 'station' range.
+    order = Order.objects.create(
+        region_id=region_id, order_id=order_id, type_id=type_id,
+        location_id=location_id if in_range else NON_HUB_LOCATION,
+        system_id=system_id, is_buy_order=is_buy, price=price,
+        volume_remain=volume_remain, volume_total=volume_remain,
+        min_volume=1, duration=duration,
+        range=("region" if is_buy else "station") if in_range else "station",
+        issued=issued,
     )
+    if character_id is not None:
+        CharacterOrder.objects.create(order_id=order_id, character_id=character_id)
+    return order
 
 
 def add_transaction(transaction_id, type_id, quantity, unit_price, days_ago=1,
@@ -107,12 +120,12 @@ class TestGetMarketHistory:
     def test_gap_filling_and_window(self):
         latest = date(2026, 8, 1)
         for day, volume in ((latest, 5), (latest - timedelta(days=2), 7)):
-            MarketHistory.objects.create(
+            History.objects.create(
                 region_id=JITA_REGION, type_id=34, date=day, average=100.0,
                 highest=110.0, lowest=90.0, order_count=1, volume=volume,
             )
         # A record 95 days back sets nothing; it is outside the 90-day window.
-        MarketHistory.objects.create(
+        History.objects.create(
             region_id=JITA_REGION, type_id=34, date=latest - timedelta(days=95),
             average=1.0, highest=1.0, lowest=1.0, order_count=1, volume=1,
         )
@@ -169,7 +182,7 @@ class TestShoppingListPrices:
 
 
 class TestUndercutQueries:
-    def test_undercut_sell_orders(self):
+    def test_undercut_sell_orders(self, trade_hubs):
         t0 = timezone.now() - timedelta(hours=5)
         add_order(1, 34, 100.0, character_id=CHARACTER_ID, issued=t0)
         add_order(2, 34, 95.0, issued=t0 + timedelta(hours=1))  # closest undercut
@@ -180,7 +193,7 @@ class TestUndercutQueries:
         type_id, order_id, price, issued, comp_id, comp_issued, comp_price = rows[0]
         assert (type_id, order_id, price, comp_id, comp_price) == (34, 1, 100.0, 2, 95.0)
 
-    def test_undercut_buy_orders(self):
+    def test_undercut_buy_orders(self, trade_hubs):
         t0 = timezone.now() - timedelta(hours=5)
         add_order(1, 34, 100.0, is_buy=True, character_id=CHARACTER_ID, issued=t0)
         add_order(2, 34, 105.0, is_buy=True, issued=t0 + timedelta(hours=1))
@@ -188,55 +201,3 @@ class TestUndercutQueries:
         rows = market_service.find_undercut_buy_orders(JITA_REGION, CHARACTER_ID)
         assert len(rows) == 1
         assert rows[0][4] == 2 and rows[0][6] == 105.0
-
-
-class TestSaveMarketOrders:
-    def test_duplicate_order_ids_in_one_batch(self):
-        # ESI pagination can hand back the same order twice; first copy wins.
-        now = timezone.now()
-        row = {
-            "duration": 90, "is_buy_order": False, "issued": now,
-            "location_id": JITA_STATION, "min_volume": 1, "order_id": 42,
-            "price": 123.45, "range": "station", "system_id": JITA_SYSTEM,
-            "type_id": 34, "volume_remain": 10, "volume_total": 10,
-            "region_id": JITA_REGION, "is_in_trade_hub_range": True,
-            "character_id": None, "created_at": now, "updated_at": now,
-        }
-        market_service.save_market_orders([row, dict(row)])
-        assert MarketOrder.objects.filter(order_id=42).count() == 1
-
-
-class TestProcessMarketOrders:
-    def test_trade_hub_range_flags(self, trade_hubs):
-        SystemHubJumps.objects.create(system_id=30000144, jumps_to_trade_hub=2)
-        base = {"order_id": 0, "type_id": 34, "is_buy_order": False,
-                "location_id": JITA_STATION, "system_id": JITA_SYSTEM, "range": "station"}
-        cases = [
-            # (overrides, expected is_in_trade_hub_range)
-            ({}, True),  # sell at the hub station
-            ({"location_id": 1}, False),  # sell elsewhere
-            ({"is_buy_order": True, "location_id": 1, "range": "region"}, True),
-            ({"is_buy_order": True, "location_id": 1, "range": "station"}, False),
-            ({"is_buy_order": True, "location_id": 1, "range": "solarsystem",
-              "system_id": 30000999}, False),
-            ({"is_buy_order": True, "location_id": 1, "range": "solarsystem"}, True),
-            ({"is_buy_order": True, "location_id": 1, "range": "1",
-              "system_id": 30000144}, False),  # 1 jump reach < 2 jumps away
-            ({"is_buy_order": True, "location_id": 1, "range": "3",
-              "system_id": 30000144}, True),  # 3 jump reach >= 2 jumps away
-            ({"is_buy_order": True, "location_id": 1, "range": "1",
-              "system_id": 30009999}, True),  # unknown system: kept in range
-        ]
-        orders = []
-        for i, (overrides, _) in enumerate(cases):
-            order = dict(base, order_id=i)
-            order.update(overrides)
-            orders.append(order)
-
-        region_id, processed = market_service.process_market_orders(orders, JITA_REGION)
-
-        assert region_id == JITA_REGION
-        for (overrides, expected), order in zip(cases, processed):
-            assert order["is_in_trade_hub_range"] is expected, overrides
-            assert order["region_id"] == JITA_REGION
-            assert order["character_id"] is None

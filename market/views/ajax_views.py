@@ -13,20 +13,6 @@ def _rate_limited_response(exc):
     return JsonResponse(
         {'error': 'ESI rate limited', 'retry_after': int(exc.reset or 60)}, status=429)
 
-def market_history(request):
-    if request.headers.get('x-requested-with') == 'XMLHttpRequest':
-        type_id = request.POST.get('type_id')
-        region_id = request.POST.get('region_id')
-        try:
-            market_service.update_market_history(region_id=region_id, type_id=type_id)
-        except ESI_RATE_LIMIT_EXCEPTIONS as exc:
-            return _rate_limited_response(exc)
-        history = market_service.get_market_history(region_id=region_id, type_id=type_id)
-        result = market_service.calculate_market_history_averages(history=history, region_id=region_id, type_id=type_id)
-        html = render_to_string('market/hauling/_fragment_hauling_sts_history.html', {'data': result})
-        return JsonResponse({'html': html}, safe=False)
-    return JsonResponse({'error': 'bad request'}, status=400)
-
 @require_character
 def transaction_history(request):
     if request.headers.get('x-requested-with') == 'XMLHttpRequest':

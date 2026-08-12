@@ -7,7 +7,8 @@ from django.shortcuts import render
 from evesde import services as sde_service
 from helion.decorators import require_character
 from market.constants import REGION_ID_DOMAIN, REGION_ID_FORGE
-from market.models import MarketOrder, MarketOrderUndercut, MarketRegionStatus, TradeHub, TradeItem
+from market.models import CharacterOrder, MarketOrderUndercut, TradeHub, TradeItem
+from marketdata.models import Order, OrdersHub, RegionStatus
 from market.services import market_service
 
 def _fourth_significant_digit(price):
@@ -26,7 +27,7 @@ def _best_orders_by_type(orders, is_buy):
     }
 
 def market_trade_hub_mistakes(request, region_id):
-    orders = MarketOrder.objects.annotate(
+    orders = OrdersHub.objects.annotate(
         total_value=ExpressionWrapper(
             F('price') * F('volume_remain'),
             output_field=FloatField()
@@ -81,7 +82,7 @@ def market_trade_hub_mistakes(request, region_id):
         sell_rows_by_type.setdefault(row['type_id'], []).append(row)
 
     # Jita reference prices, deliberately unfiltered (any station, any duration).
-    jita_reference = MarketOrder.objects.filter(type_id__in=matching_type_ids, region_id=REGION_ID_FORGE)
+    jita_reference = Order.objects.filter(type_id__in=matching_type_ids, region_id=REGION_ID_FORGE)
     jita_sells = _best_orders_by_type(jita_reference, is_buy=False)
     jita_buys = _best_orders_by_type(jita_reference, is_buy=True)
 
@@ -178,10 +179,11 @@ def market_trade_hub(request, region_id):
     other_region_id = REGION_ID_FORGE if region_id != REGION_ID_FORGE else REGION_ID_DOMAIN
     character_id = request.session['esi_token']['character_id']
 
-    character_order_list = list(MarketOrder.objects.filter(
-        character_id=character_id,
+    character_order_list = list(OrdersHub.objects.filter(
         region_id=region_id,
-        is_in_trade_hub_range=True
+        is_in_trade_hub_range=True,
+        order_id__in=CharacterOrder.objects.filter(
+            character_id=character_id).values('order_id'),
     ))
 
     context_extras, trade_items, extra_items = _resolve_item_sets(
@@ -203,7 +205,7 @@ def market_trade_hub(request, region_id):
 
     # Everything the per-item loop needs, prefetched in bulk: the loop itself
     # runs no queries, so the page cost no longer grows with the item count.
-    market_orders = MarketOrder.objects.filter(
+    market_orders = OrdersHub.objects.filter(
         region_id__in=[hub.region_id for hub in trade_hubs],
         is_in_trade_hub_range=True,
         type_id__in=type_ids,
@@ -211,7 +213,8 @@ def market_trade_hub(request, region_id):
     global_lowest_sells = _best_orders_by_type(market_orders, is_buy=False)
     global_highest_buys = _best_orders_by_type(market_orders, is_buy=True)
 
-    competitor_orders = market_orders.filter(region_id=region_id, character_id=None)
+    competitor_orders = market_orders.filter(region_id=region_id).exclude(
+        order_id__in=CharacterOrder.objects.values('order_id'))
     station_lowest_sells = _best_orders_by_type(competitor_orders, is_buy=False)
     station_highest_buys = _best_orders_by_type(competitor_orders, is_buy=True)
 
@@ -242,7 +245,7 @@ def market_trade_hub(request, region_id):
         ).values('type_id', 'is_buy_order').annotate(recent=Count('order_id'))
     }
 
-    region_names = dict(MarketRegionStatus.objects.values_list('region_id', 'region_name'))
+    region_names = dict(RegionStatus.objects.values_list('region_id', 'region_name'))
 
     context["trade_hub_region"] = trade_hub_region
     context["trade_hub_jita"] = trade_hub_jita

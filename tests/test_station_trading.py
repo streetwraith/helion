@@ -11,7 +11,8 @@ from django.urls import reverse
 from django.utils import timezone
 
 from evesde.models import MarketGroup
-from market.models import MarketHistory, MarketOrderUndercut, TradeItem
+from market.models import MarketOrderUndercut, TradeItem
+from marketdata.models import History
 from market.services import market_service
 
 from .conftest import CHARACTER_ID
@@ -65,7 +66,7 @@ def trade_hub_context(character_client, trade_hubs, monkeypatch):
     add_transaction(2, 34, 5, 150.0, is_buy=False, location_id=AMARR_STATION)
 
     # One real history day in a 91-day window -> daily average 1.0.
-    MarketHistory.objects.create(region_id=AMARR_REGION, type_id=34, date=now.date(),
+    History.objects.create(region_id=AMARR_REGION, type_id=34, date=now.date(),
                                  average=100.0, highest=110.0, lowest=90.0,
                                  order_count=1, volume=91)
 

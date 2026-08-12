@@ -35,7 +35,6 @@
                     </tr>
                 </table>
             </th>
-            <th>api h</th>
         </tr>
     </thead>
     <tbody>
@@ -55,10 +54,6 @@
                 {% if deal.history_averages %}
                 {% include 'market/hauling/_fragment_hauling_sts_history.html' with data=deal.history_averages %}
                 {% endif %}
-            </td>
-            <td>
-                <div class="loading-spinner" style="display:none"><div class="css-spinner"></div></div>
-                <a data-type-id="{{ deal.type_id }}" class="update-history" href="#">update</a>
             </td>
         </tr>
         {% endfor %}

@@ -1,12 +1,12 @@
 import logging
-import time
 from contextlib import contextmanager
 
 from celery import shared_task
 from django.core.cache import cache
 
 from market.services import market_service
-from market.models import TradeHub
+from market.models import CharacterOrder, TradeHub
+from marketdata.models import RegionStatus
 from esi.exceptions import ESIBucketLimitException, ESIErrorLimitException
 from esi.models import Token
 
@@ -34,13 +34,13 @@ def cache_lock(lock_id, timeout):
         cache.delete(lock_id)
 
 @shared_task(bind=True)
-def update_market_orders(self):
-    with cache_lock("update_market_orders_lock", timeout=600) as acquired:
+def update_character_orders(self):
+    with cache_lock("update_character_orders_lock", timeout=300) as acquired:
         if not acquired:
             return
-        logger.info("running update_market_orders task...")
+        logger.info("running update_character_orders task...")
         try:
-            market_service.refresh_all_trade_hub_orders()
+            market_service.refresh_character_orders()
         except ESI_RATE_LIMIT_EXCEPTIONS as exc:
             retry_when_rate_limited(self, exc)
 
@@ -68,40 +68,38 @@ def update_wallet_journal(self, character_name):
         except ESI_RATE_LIMIT_EXCEPTIONS as exc:
             retry_when_rate_limited(self, exc)
 
-@shared_task(bind=True)
-def refresh_trade_hub_orders(self, trade_hub_name, character_name):
-    with cache_lock(f"refresh_trade_hub_orders_lock_{trade_hub_name}", timeout=600) as acquired:
-        if not acquired:
-            return
-        region_id = TradeHub.objects.get(name=trade_hub_name).region_id
-        character_id = Token.objects.get(character_name=character_name).character_id
-        try:
-            market_service.refresh_trade_hub_orders(region_id=region_id, character_id=character_id)
-        except ESI_RATE_LIMIT_EXCEPTIONS as exc:
-            retry_when_rate_limited(self, exc)
-        undercut_sell_orders = market_service.find_undercut_sell_orders(region_id=region_id, character_id=character_id)
-        market_service.save_market_order_undercuts(region_id=region_id, character_id=character_id, is_buy=False, market_order_undercut_data=undercut_sell_orders)
-        undercut_buy_orders = market_service.find_undercut_buy_orders(region_id=region_id, character_id=character_id)
-        market_service.save_market_order_undercuts(region_id=region_id, character_id=character_id, is_buy=True, market_order_undercut_data=undercut_buy_orders)
+UNDERCUT_MARK_KEY = "undercut_mark_{region_id}"
 
 @shared_task(bind=True)
-def update_market_history(self, trade_hub_name, market_group_id, excluded_meta_ids=None):
-    if not trade_hub_name or not market_group_id:
-        return
-    region_id = TradeHub.objects.get(name=trade_hub_name).region_id
-
-    with cache_lock(f"fetch_market_history_lock_{region_id}_{market_group_id}", timeout=7200) as acquired:
+def compute_undercuts(self):
+    """Beat task (every minute): recompute undercuts for each hub region whose
+    marketmanager snapshot is newer than the last one processed here."""
+    with cache_lock("compute_undercuts_lock", timeout=300) as acquired:
         if not acquired:
             return
-        type_ids = market_service.find_type_ids_by_market_groups(market_group_id=market_group_id, excluded_meta_ids=excluded_meta_ids)
-        for type_id in type_ids:
-            try:
-                market_service.update_market_history(region_id=region_id, type_id=type_id)
-            except ESI_RATE_LIMIT_EXCEPTIONS as exc:
-                # Must not fall through to the broad handler: swallowing a
-                # rate limit here would keep hammering ESI type after type.
-                # The retry rerun is cheap - unchanged types skip via ETag.
-                retry_when_rate_limited(self, exc)
-            except Exception:
-                logger.exception("Error updating market history for type_id %s", type_id)
-            time.sleep(1)
+        statuses = RegionStatus.objects.filter(
+            region_id__in=TradeHub.objects.values_list("region_id", flat=True))
+        character_ids = list(
+            CharacterOrder.objects.values_list("character_id", flat=True).distinct())
+        for status in statuses:
+            if status.refreshed_at is None:
+                # Never ingested yet; a NULL must not count as "new".
+                continue
+            mark_key = UNDERCUT_MARK_KEY.format(region_id=status.region_id)
+            mark = cache.get(mark_key)
+            if mark is not None and status.refreshed_at <= mark:
+                continue
+            for character_id in character_ids:
+                undercut_sell_orders = market_service.find_undercut_sell_orders(
+                    region_id=status.region_id, character_id=character_id)
+                market_service.save_market_order_undercuts(
+                    region_id=status.region_id, character_id=character_id,
+                    is_buy=False, market_order_undercut_data=undercut_sell_orders)
+                undercut_buy_orders = market_service.find_undercut_buy_orders(
+                    region_id=status.region_id, character_id=character_id)
+                market_service.save_market_order_undercuts(
+                    region_id=status.region_id, character_id=character_id,
+                    is_buy=True, market_order_undercut_data=undercut_buy_orders)
+            # Advance only after a successful compute, so a failure retries
+            # on the next beat. A lost mark costs one deduped recompute.
+            cache.set(mark_key, status.refreshed_at, timeout=None)

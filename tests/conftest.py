@@ -3,10 +3,13 @@ import os
 import environ
 import pytest
 from django.contrib.auth.models import User
+from django.core.management import call_command
 from django.db import connection
+from django.utils import timezone
 
-from market.models import MarketRegionStatus, TradeHub
-from market.services import esi_sync, orders
+from market.models import TradeHub
+from market.services import orders
+from marketdata.models import RegionStatus
 
 
 @pytest.fixture(scope="session")
@@ -52,12 +55,57 @@ CREATE TABLE IF NOT EXISTS sde.map_solar_systems (
 );
 """
 
+# The market schema (owned by marketmanager on real databases) follows the
+# same pattern: plain tables here, no partitioning - the app never notices.
+MARKET_DDL = """
+CREATE SCHEMA IF NOT EXISTS market;
+CREATE TABLE IF NOT EXISTS market.orders (
+    region_id bigint NOT NULL,
+    order_id bigint NOT NULL,
+    type_id bigint NOT NULL,
+    location_id bigint NOT NULL,
+    system_id bigint NOT NULL,
+    is_buy_order boolean NOT NULL,
+    price numeric(20,2) NOT NULL,
+    volume_remain bigint NOT NULL,
+    volume_total bigint NOT NULL,
+    min_volume integer NOT NULL,
+    duration integer NOT NULL,
+    "range" text NOT NULL,
+    issued timestamptz NOT NULL,
+    PRIMARY KEY (region_id, order_id)
+);
+CREATE TABLE IF NOT EXISTS market.history (
+    region_id bigint NOT NULL,
+    type_id bigint NOT NULL,
+    date date NOT NULL,
+    average numeric(20,2),
+    highest numeric(20,2),
+    lowest numeric(20,2),
+    volume bigint NOT NULL,
+    order_count bigint NOT NULL,
+    PRIMARY KEY (region_id, type_id, date)
+);
+CREATE TABLE IF NOT EXISTS market.region_status (
+    region_id bigint PRIMARY KEY,
+    region_name text NOT NULL,
+    refreshed_at timestamptz,
+    order_count bigint,
+    consecutive_errors integer NOT NULL DEFAULT 0,
+    last_error text,
+    last_error_at timestamptz
+);
+"""
+
 
 @pytest.fixture(scope="session")
 def django_db_setup(django_db_setup, django_db_blocker):
     with django_db_blocker.unblock():
         with connection.cursor() as cursor:
             cursor.execute(SDE_DDL)
+            cursor.execute(MARKET_DDL)
+        # The orders_hub view, from the same source deploys use.
+        call_command("sync_market_views")
 
 
 class FakeCache:
@@ -72,15 +120,22 @@ class FakeCache:
     def set(self, key, value, timeout=None):
         self._data[key] = value
 
+    def add(self, key, value, timeout=None):
+        if key in self._data:
+            return False
+        self._data[key] = value
+        return True
+
+    def delete(self, key):
+        self._data.pop(key, None)
+
 
 @pytest.fixture(autouse=True)
 def isolated_price_ticker(monkeypatch):
     # The header price ticker (context processor) runs on every authenticated
-    # page render: keep all tests off the network and off the dev Redis.
-    # Patched at the defining modules: get_price_ticker lives in orders and
-    # reaches the PLEX fetch through the esi_sync module attribute.
+    # page render: keep all tests off the shared dev Redis. The prices
+    # themselves now come from the test database (market.orders).
     monkeypatch.setattr(orders, "cache", FakeCache())
-    monkeypatch.setattr(esi_sync, "fetch_plex_best_ask", lambda: None)
 
 
 CHARACTER_ID = 900001
@@ -123,7 +178,8 @@ def trade_hubs(db):
         hubs[name] = TradeHub.objects.create(
             name=name, region_id=region_id, station_id=station_id, system_id=system_id
         )
-        MarketRegionStatus.objects.create(
-            region_id=region_id, region_name=region_name, orders=0
+        RegionStatus.objects.create(
+            region_id=region_id, region_name=region_name,
+            refreshed_at=timezone.now(), order_count=0, consecutive_errors=0,
         )
     return hubs

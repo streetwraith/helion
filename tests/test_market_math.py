@@ -6,7 +6,7 @@ from datetime import date, timedelta
 
 import pytest
 
-from market.models import MarketHistory
+from marketdata.models import History
 from market.services import market_service
 from market.views.hauling_views import MarketDeal
 from market.views.ice_views import ICE_TYPES, calculate_average_sell_price_from_yield
@@ -16,7 +16,7 @@ from market.views.station_trading_views import _fourth_significant_digit
 
 def make_history(days, average=150.0, highest=200.0, lowest=100.0, volume=10):
     return [
-        MarketHistory(
+        History(
             region_id=1,
             type_id=1,
             date=date(2026, 1, 1) + timedelta(days=i),
@@ -192,3 +192,35 @@ class TestIceYield:
                 "Heavy Water", "Liquid Ozone", "Strontium Clathrates", "Helium Isotopes",
                 "Nitrogen Isotopes", "Oxygen Isotopes", "Hydrogen Isotopes",
             }, ice_type
+
+
+class TestBulkHistoryAverages:
+    def add_history(self, type_id, day, volume, price=100.0):
+        History.objects.create(
+            region_id=10000002, type_id=type_id, date=day, average=price,
+            highest=price + 10, lowest=price - 10, order_count=1, volume=volume,
+        )
+
+    def test_matches_per_type_calculation(self, db):
+        from datetime import date, timedelta
+
+        from market.services import market_service
+
+        latest = date(2026, 8, 1)
+        self.add_history(34, latest, volume=91, price=100.0)
+        self.add_history(34, latest - timedelta(days=2), volume=182, price=200.0)
+        self.add_history(35, latest, volume=7, price=50.0)
+
+        bulk = market_service.calculate_market_history_averages_bulk(
+            10000002, [34, 35, 36])
+        for type_id in (34, 35, 36):
+            history = market_service.get_market_history(10000002, type_id)
+            single = market_service.calculate_market_history_averages(
+                history=history, region_id=10000002, type_id=type_id)
+            assert bulk[type_id] == single
+
+    def test_region_without_history_returns_none(self, db):
+        from market.services import market_service
+
+        assert market_service.calculate_market_history_averages_bulk(
+            10000030, [34]) == {34: None}

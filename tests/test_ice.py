@@ -4,7 +4,7 @@ from datetime import date, timedelta
 import pytest
 from django.urls import reverse
 
-from market.models import MarketHistory
+from marketdata.models import History
 from market.services import market_service
 
 from .test_market_service_db import JITA_REGION, add_order, add_type
@@ -106,7 +106,7 @@ def test_reprocess_yield_and_order_matching(ice_client):
 
 def test_product_price_history_windows(ice_client):
     for days_ago, highest, volume in ((3, 100.0, 10), (20, 200.0, 20), (60, 300.0, 30)):
-        MarketHistory.objects.create(
+        History.objects.create(
             region_id=JITA_REGION, type_id=LIQUID_OZONE,
             date=date.today() - timedelta(days=days_ago),
             average=highest, highest=highest, lowest=highest, order_count=1, volume=volume,
@@ -126,7 +126,7 @@ def test_chart_uses_current_hub_price_not_stale(ice_client):
     # has a Jita sell order; Liquid Ozone has history but no sell orders, so its
     # chart must append 0 -- not Heavy Water's 500.
     add_order(1, HEAVY_WATER, 500.0)
-    MarketHistory.objects.create(
+    History.objects.create(
         region_id=JITA_REGION, type_id=LIQUID_OZONE, date=date.today() - timedelta(days=3),
         average=100.0, highest=100.0, lowest=100.0, order_count=1, volume=10,
     )

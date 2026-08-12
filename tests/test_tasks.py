@@ -55,12 +55,12 @@ def test_lock_released_on_exception(lock_cache):
 
 def test_task_runs_body_only_when_lock_is_free(lock_cache, monkeypatch):
     calls = []
-    monkeypatch.setattr(market_service, "refresh_all_trade_hub_orders", lambda: calls.append(1))
-    tasks.update_market_orders.apply()
+    monkeypatch.setattr(market_service, "refresh_character_orders", lambda: calls.append(1))
+    tasks.update_character_orders.apply()
     assert calls == [1]
 
-    lock_cache.add("update_market_orders_lock", "locked")
-    tasks.update_market_orders.apply()
+    lock_cache.add("update_character_orders_lock", "locked")
+    tasks.update_character_orders.apply()
     assert calls == [1]
 
 
@@ -75,26 +75,9 @@ def test_rate_limited_task_retries_and_releases_lock(lock_cache, monkeypatch):
         calls.append(1)
         raise ESIErrorLimitException(reset=30)
 
-    monkeypatch.setattr(market_service, "refresh_all_trade_hub_orders", boom)
-    result = tasks.update_market_orders.apply()
+    monkeypatch.setattr(market_service, "refresh_character_orders", boom)
+    result = tasks.update_character_orders.apply()
     assert len(calls) == 4  # first run + max_retries=3: the retry path engaged
     assert result.status == "FAILURE"  # gives up after max retries, loudly
     assert isinstance(result.result, ESIErrorLimitException)
-    assert "update_market_orders_lock" not in lock_cache._data
-
-
-def test_history_task_backs_off_instead_of_hammering(lock_cache, monkeypatch, trade_hubs):
-    calls = []
-
-    def boom(region_id, type_id):
-        calls.append(type_id)
-        raise ESIErrorLimitException(reset=30)
-
-    monkeypatch.setattr(market_service, "find_type_ids_by_market_groups",
-                        lambda market_group_id, excluded_meta_ids=None: [1, 2])
-    monkeypatch.setattr(market_service, "update_market_history", boom)
-    monkeypatch.setattr(tasks.time, "sleep", lambda seconds: None)
-
-    result = tasks.update_market_history.apply(args=("Jita", 4))
-    assert result.status == "FAILURE"
-    assert calls == [1, 1, 1, 1]  # every attempt stopped at type 1: no hammering on
+    assert "update_character_orders_lock" not in lock_cache._data
