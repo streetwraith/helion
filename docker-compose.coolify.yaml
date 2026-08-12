@@ -34,10 +34,13 @@ x-app: &app
 services:
   web:
     <<: *app
-    # migrate at the front of the command (Coolify rejects compose-5.3 pre_start; its pre-deploy
-    # command no-ops for compose). gunicorn binds only after migrate, so the healthcheck below
-    # (HTTP GET /login/ -> 200) is also a "migrations done" signal that worker/beat gate on.
-    command: ["sh", "-c", "python manage.py migrate --noinput && exec gunicorn helion.wsgi --bind 0.0.0.0:8000 --timeout 600 --log-file -"]
+    # migrate + sync_market_views at the front of the command (Coolify rejects compose-5.3
+    # pre_start; its pre-deploy command no-ops for compose). sync_market_views recreates the
+    # orders_hub view and therefore needs the marketmanager-owned market schema: a cluster
+    # without it fails here, loudly, at startup. gunicorn binds only after both steps, so the
+    # healthcheck below (HTTP GET /login/ -> 200) is also a "migrations + view done" signal
+    # that worker/beat gate on.
+    command: ["sh", "-c", "python manage.py migrate --noinput && python manage.py sync_market_views && exec gunicorn helion.wsgi --bind 0.0.0.0:8000 --timeout 600 --log-file -"]
     # HTTP check via python (no curl/wget in slim). Host header set so Django ALLOWED_HOSTS
     # returns 200 instead of 400; urlopen raises (non-zero exit) on any non-2xx.
     healthcheck:
