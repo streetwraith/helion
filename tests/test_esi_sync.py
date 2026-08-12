@@ -1,4 +1,5 @@
-"""The ESI sync layer: payload mapping and upserts for the character-authed routes."""
+"""The ESI sync layer: payload mapping, upserts, and Expires plumbing for
+the per-character feed fetches."""
 from datetime import datetime, timedelta, timezone as dt_timezone
 from email.utils import format_datetime
 from types import SimpleNamespace
@@ -9,7 +10,6 @@ from django.utils import timezone
 from market.models import (
     CharacterOrder,
     MarketTransaction,
-    TrackedCharacter,
     WalletJournal,
 )
 from market.services import esi_sync
@@ -28,9 +28,17 @@ def esi_model(data):
     return SimpleNamespace(model_dump=lambda data=data: data, **data)
 
 
+EXPIRES = datetime(2026, 8, 12, 12, 0, tzinfo=dt_timezone.utc)
+
+
+def esi_response(expires=EXPIRES):
+    return SimpleNamespace(headers={"Expires": format_datetime(expires, usegmt=True)})
+
+
 def fake_wallet_esi(monkeypatch, endpoint, payload):
     items = [esi_model(entry) for entry in payload]
-    wallet = SimpleNamespace(**{endpoint: lambda **kw: SimpleNamespace(results=lambda **kw: items)})
+    wallet = SimpleNamespace(**{endpoint: lambda **kw: SimpleNamespace(
+        results=lambda **kw: (items, esi_response()))})
     monkeypatch.setattr(esi_sync, "esi", SimpleNamespace(client=SimpleNamespace(Wallet=wallet)))
     monkeypatch.setattr(esi_sync, "Token", FAKE_TOKEN)
 
@@ -105,37 +113,96 @@ class TestUpdateMarketTransactions:
 class TestRefreshCharacterOrders:
     ALT_ID = 900
 
-    def fake_character_orders_esi(self, monkeypatch, orders_by_character, names):
+    def fake_orders_esi(self, monkeypatch, order_ids):
         def get_orders(character_id, token):
-            items = [esi_model({"order_id": oid}) for oid in orders_by_character[character_id]]
-            return SimpleNamespace(results=lambda **kw: items)
+            items = [esi_model({"order_id": oid}) for oid in order_ids]
+            return SimpleNamespace(results=lambda **kw: (items, esi_response()))
 
         monkeypatch.setattr(esi_sync, "esi", SimpleNamespace(
             client=SimpleNamespace(Market=SimpleNamespace(
                 GetCharactersCharacterIdOrders=get_orders))))
-        monkeypatch.setattr(esi_sync, "Token", SimpleNamespace(
-            objects=SimpleNamespace(get=lambda character_name: SimpleNamespace(
-                character_id=names[character_name])),
-            get_token=FAKE_TOKEN.get_token))
+        monkeypatch.setattr(esi_sync, "Token", FAKE_TOKEN)
 
-    def test_rewrites_wholesale_for_tracked_characters(self, monkeypatch):
-        TrackedCharacter.objects.create(character_name="Trader")
-        TrackedCharacter.objects.create(character_name="Alt", tracks="orders, transactions")
+    def test_rewrites_only_this_characters_rows(self, monkeypatch):
         CharacterOrder.objects.create(order_id=111, character_id=CHARACTER_ID)  # stale
-        self.fake_character_orders_esi(
-            monkeypatch,
-            {CHARACTER_ID: [1, 2], self.ALT_ID: [3]},
-            {"Trader": CHARACTER_ID, "Alt": self.ALT_ID})
+        CharacterOrder.objects.create(order_id=222, character_id=self.ALT_ID)  # other char
+        self.fake_orders_esi(monkeypatch, [1, 2])
 
-        esi_sync.refresh_character_orders()
+        expires = esi_sync.refresh_character_orders(CHARACTER_ID)
 
         rows = dict(CharacterOrder.objects.values_list("order_id", "character_id"))
-        assert rows == {1: CHARACTER_ID, 2: CHARACTER_ID, 3: self.ALT_ID}
+        assert rows == {1: CHARACTER_ID, 2: CHARACTER_ID, 222: self.ALT_ID}
+        assert expires == EXPIRES
 
-    def test_skips_characters_not_tracking_orders(self, monkeypatch):
-        TrackedCharacter.objects.create(character_name="Trader", tracks="transactions")
-        self.fake_character_orders_esi(monkeypatch, {}, {})
+    def test_304_keeps_rows_and_returns_expires(self, monkeypatch):
+        from esi.exceptions import HTTPNotModified
 
-        esi_sync.refresh_character_orders()
+        CharacterOrder.objects.create(order_id=111, character_id=CHARACTER_ID)
 
-        assert CharacterOrder.objects.count() == 0
+        def raise_304(character_id, token):
+            raise HTTPNotModified(
+                status_code=304,
+                headers={"Expires": format_datetime(EXPIRES, usegmt=True)})
+
+        monkeypatch.setattr(esi_sync, "esi", SimpleNamespace(
+            client=SimpleNamespace(Market=SimpleNamespace(
+                GetCharactersCharacterIdOrders=raise_304))))
+        monkeypatch.setattr(esi_sync, "Token", FAKE_TOKEN)
+
+        expires = esi_sync.refresh_character_orders(CHARACTER_ID)
+
+        assert CharacterOrder.objects.count() == 1
+        assert expires == EXPIRES
+
+
+class TestRefreshCharacterAssets:
+    def fake_assets_esi(self, monkeypatch, payload):
+        items = [esi_model(entry) for entry in payload]
+        monkeypatch.setattr(esi_sync, "esi", SimpleNamespace(
+            client=SimpleNamespace(Assets=SimpleNamespace(
+                GetCharactersCharacterIdAssets=lambda **kw: SimpleNamespace(
+                    results=lambda **kw: (items, esi_response()))))))
+        monkeypatch.setattr(esi_sync, "Token", FAKE_TOKEN)
+
+    def test_stores_full_payload_and_rewrites(self, monkeypatch):
+        from market.models import CharacterAsset
+
+        CharacterAsset.objects.create(
+            item_id=999, character_id=CHARACTER_ID, type_id=1, quantity=1,
+            location_id=1, location_type="station", location_flag="Hangar",
+            is_singleton=False)
+        self.fake_assets_esi(monkeypatch, [
+            {"item_id": 1, "type_id": 34, "quantity": 7, "location_id": 60003760,
+             "location_type": "station", "location_flag": "Hangar",
+             "is_singleton": False, "is_blueprint_copy": None},
+            {"item_id": 2, "type_id": 587, "quantity": 1, "location_id": 30000142,
+             "location_type": "solar_system", "location_flag": "AutoFit",
+             "is_singleton": True, "is_blueprint_copy": True},
+        ])
+
+        expires = esi_sync.refresh_character_assets(CHARACTER_ID)
+
+        assert expires == EXPIRES
+        assert set(CharacterAsset.objects.values_list("item_id", flat=True)) == {1, 2}
+        ship = CharacterAsset.objects.get(item_id=2)
+        assert (ship.location_type, ship.is_singleton, ship.is_blueprint_copy) == (
+            "solar_system", True, True)
+
+
+class TestRefreshCharacterWallet:
+    def test_returns_latest_expires_of_both_routes(self, monkeypatch):
+        calls = []
+
+        def fake_transactions(character_id):
+            calls.append("transactions")
+            return EXPIRES
+
+        def fake_journal(character_id):
+            calls.append("journal")
+            return EXPIRES + timedelta(minutes=1)
+
+        monkeypatch.setattr(esi_sync, "update_market_transactions", fake_transactions)
+        monkeypatch.setattr(esi_sync, "get_wallet_journal", fake_journal)
+
+        assert esi_sync.refresh_character_wallet(CHARACTER_ID) == EXPIRES + timedelta(minutes=1)
+        assert calls == ["transactions", "journal"]

@@ -7,6 +7,7 @@ from django.core.management import call_command
 from django.db import connection
 from django.utils import timezone
 
+from market import context_processors
 from market.models import TradeHub
 from market.services import orders
 from marketdata.models import RegionStatus
@@ -131,11 +132,12 @@ class FakeCache:
 
 
 @pytest.fixture(autouse=True)
-def isolated_price_ticker(monkeypatch):
-    # The header price ticker (context processor) runs on every authenticated
-    # page render: keep all tests off the shared dev Redis. The prices
-    # themselves now come from the test database (market.orders).
+def isolated_shared_caches(monkeypatch):
+    # The price ticker and the fetch-warning bar (context processor) run on
+    # every authenticated page render: keep all tests off the shared dev
+    # Redis. The values themselves come from the test database.
     monkeypatch.setattr(orders, "cache", FakeCache())
+    monkeypatch.setattr(context_processors, "cache", FakeCache())
 
 
 CHARACTER_ID = 900001

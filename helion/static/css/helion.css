@@ -3,6 +3,13 @@
     padding: 0;
 }
 
+#fetch-warning-bar {
+    background: #b03030;
+    color: #fff;
+    font-size: 0.8em;
+    padding: 2px 8px;
+}
+
 #user-panel {
     border-bottom: 1px solid #ccc;
     text-align: right;

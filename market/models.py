@@ -150,6 +150,42 @@ class CharacterOrder(models.Model):
     order_id = models.BigIntegerField(primary_key=True)
     character_id = models.BigIntegerField(db_index=True)
 
+class CharacterAsset(models.Model):
+    # The assets route payload as ESI sends it, rewritten wholesale per
+    # character by the assets feed. Views read only station rows today; the
+    # rest is stored for future use.
+    item_id = models.BigIntegerField(primary_key=True)
+    character_id = models.BigIntegerField(db_index=True)
+    type_id = models.BigIntegerField()
+    quantity = models.BigIntegerField()
+    location_id = models.BigIntegerField()
+    location_type = models.CharField(max_length=32)
+    location_flag = models.CharField(max_length=64)
+    is_singleton = models.BooleanField()
+    is_blueprint_copy = models.BooleanField(null=True, blank=True)
+
+class EsiFetchState(models.Model):
+    # One row per (character, feed): the ESI fetch scheduler's pacing and
+    # error state. Clearing next_due forces a fetch on the next watchdog
+    # tick; the re-enable admin action clears disabled_at and the counters.
+    character_name = models.CharField(max_length=128)
+    feed = models.CharField(max_length=16)
+    next_due = models.DateTimeField(null=True, blank=True)
+    last_success = models.DateTimeField(null=True, blank=True)
+    consecutive_errors = models.IntegerField(default=0)
+    last_error = models.TextField(null=True, blank=True)
+    last_error_at = models.DateTimeField(null=True, blank=True)
+    disabled_at = models.DateTimeField(null=True, blank=True)
+    disabled_reason = models.TextField(null=True, blank=True)
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(fields=['character_name', 'feed'], name='uc_fetch_state')
+        ]
+
+    def __str__(self):
+        return self.character_name + ' ' + self.feed
+
 class SystemHubJumps(models.Model):
     # Jumps from a solar system to its region's trade hub. Non-CCP, ESI-derived;
     # rebuilt by `manage.py recompute_hub_jumps`. Lives here rather than on the sde

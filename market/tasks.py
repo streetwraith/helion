@@ -4,22 +4,11 @@ from contextlib import contextmanager
 from celery import shared_task
 from django.core.cache import cache
 
-from market.services import market_service
+from market.services import esi_scheduler, market_service
 from market.models import CharacterOrder, TradeHub
 from marketdata.models import RegionStatus
-from esi.exceptions import ESIBucketLimitException, ESIErrorLimitException
-from esi.models import Token
 
 logger = logging.getLogger(__name__)
-
-ESI_RATE_LIMIT_EXCEPTIONS = (ESIErrorLimitException, ESIBucketLimitException)
-RATE_LIMIT_RETRY_SLACK_SECONDS = 5
-
-def retry_when_rate_limited(task, exc):
-    """Push the task back until the ESI rate-limit window resets."""
-    countdown = int(exc.reset or 60) + RATE_LIMIT_RETRY_SLACK_SECONDS
-    logger.warning("ESI rate limited, retrying %s in %s seconds", task.name, countdown)
-    raise task.retry(exc=exc, countdown=countdown)
 
 @contextmanager
 def cache_lock(lock_id, timeout):
@@ -33,40 +22,33 @@ def cache_lock(lock_id, timeout):
     finally:
         cache.delete(lock_id)
 
-@shared_task(bind=True)
-def update_character_orders(self):
-    with cache_lock("update_character_orders_lock", timeout=300) as acquired:
-        if not acquired:
-            return
-        logger.info("running update_character_orders task...")
-        try:
-            market_service.refresh_character_orders()
-        except ESI_RATE_LIMIT_EXCEPTIONS as exc:
-            retry_when_rate_limited(self, exc)
+# The feed tasks deliberately have no celery retries: the EsiFetchState row
+# is the only retry mechanism, so one row can never produce more than one
+# request per backoff window (the error limit is per IP and shared with
+# marketmanager).
+
+@shared_task
+def esi_fetch_orders(character_name):
+    esi_scheduler.run_feed("orders", character_name)
+
+@shared_task
+def esi_fetch_wallet(character_name):
+    esi_scheduler.run_feed("wallet", character_name)
+
+@shared_task
+def esi_fetch_assets(character_name):
+    esi_scheduler.run_feed("assets", character_name)
+
+FEED_TASKS = {"orders": esi_fetch_orders, "wallet": esi_fetch_wallet, "assets": esi_fetch_assets}
 
 @shared_task(bind=True)
-def update_wallet_transactions(self, character_name):
-    with cache_lock("update_wallet_transactions_lock", timeout=300) as acquired:
+def esi_fetch_scheduler(self):
+    """Watchdog beat task (every minute): enqueue every due (feed, character)."""
+    with cache_lock("esi_fetch_scheduler_lock", timeout=300) as acquired:
         if not acquired:
             return
-        character_id = Token.objects.get(character_name=character_name).character_id
-        logger.info("running update_wallet_transactions task...")
-        try:
-            market_service.update_market_transactions(character_id=character_id)
-        except ESI_RATE_LIMIT_EXCEPTIONS as exc:
-            retry_when_rate_limited(self, exc)
-
-@shared_task(bind=True)
-def update_wallet_journal(self, character_name):
-    with cache_lock("update_wallet_journal_lock", timeout=300) as acquired:
-        if not acquired:
-            return
-        character_id = Token.objects.get(character_name=character_name).character_id
-        logger.info("running update_wallet_journal task...")
-        try:
-            market_service.get_wallet_journal(character_id=character_id)
-        except ESI_RATE_LIMIT_EXCEPTIONS as exc:
-            retry_when_rate_limited(self, exc)
+        esi_scheduler.schedule_due_fetches(
+            lambda feed, character_name: FEED_TASKS[feed].delay(character_name))
 
 UNDERCUT_MARK_KEY = "undercut_mark_{region_id}"
 

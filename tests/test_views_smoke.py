@@ -13,7 +13,7 @@ from django.urls import reverse
 from django.utils import timezone
 
 from evesde.models import NpcCorporation, Type
-from market.models import MarketTransaction, TradeItem
+from market.models import EsiFetchState, MarketTransaction, TradeItem
 from market.services import market_service
 
 from .conftest import CHARACTER_ID
@@ -378,3 +378,25 @@ class TestMalformedParams:
         params = dict(ICE_PAGE_PARAMS, rig_modifier="abc")
         response = character_client.get(reverse("market_ice_index"), params)
         assert response.status_code == 400
+
+
+class TestFetchWarningBar:
+    def test_unhealthy_feed_shows_on_every_page(self, auth_client, trade_hubs):
+        EsiFetchState.objects.create(
+            character_name="Trader", feed="wallet",
+            disabled_at=timezone.now(), disabled_reason="3 consecutive client/token errors")
+        EsiFetchState.objects.create(
+            character_name="Alt", feed="orders", consecutive_errors=2)
+
+        content = auth_client.get("/").content.decode()
+
+        assert "ESI fetch problems" in content
+        assert "Trader/wallet DISABLED" in content
+        assert "Alt/orders (2 errors)" in content
+
+    def test_healthy_state_renders_no_bar(self, auth_client, trade_hubs):
+        EsiFetchState.objects.create(character_name="Trader", feed="wallet")
+
+        content = auth_client.get("/").content.decode()
+
+        assert "ESI fetch problems" not in content

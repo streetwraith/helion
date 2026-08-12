@@ -1,6 +1,6 @@
 # Helion
 
-Helion is a Django web app of market tools for [EVE Online](https://www.eveonline.com/). It pulls character, wallet and market data from CCP's ESI API and turns it into practical ISK-making views: station-trading spreads across the major trade hubs, hauling profitability between regions, ice reprocessing margins, loyalty-point store payouts, shopping lists, and a history of your own transactions and profits. Static EVE reference data (item types, market groups, solar systems) is read from a shared, read-only `sde` schema maintained by a separate service, so Helion only stores what it collects itself.
+Helion is a Django web app of market tools for [EVE Online](https://www.eveonline.com/). It turns market and character data into practical ISK-making views: station-trading spreads across the major trade hubs, hauling profitability between regions, ice reprocessing margins, loyalty-point store payouts, shopping lists, and a history of your own transactions and profits. Two shared, read-only schemas come from separate services: `sde` for static EVE reference data (item types, market groups, solar systems) and `market` for order snapshots and daily price history. Helion itself fetches only character-authed data from CCP's ESI API — your orders, wallet and assets — through a self-pacing scheduler that follows the ESI cache expiry and backs off on errors.
 
 ## Running
 
@@ -10,10 +10,11 @@ Helion is a Django web app of market tools for [EVE Online](https://www.eveonlin
 uv venv .venv
 uv pip install -r requirements.txt
 uv run manage.py migrate
+uv run manage.py sync_market_views
 uv run manage.py runserver
 ```
 
-Market scans and history updates run as Celery tasks against the same Redis broker (`celery -A helion worker` / `beat`).
+`sync_market_views` creates the `orders_hub` view over the shared `market` schema; rerun it whenever that schema changes. The character-data fetches and the undercut computation run as Celery tasks against the same Redis broker (`celery -A helion worker` / `beat`) from two beat entries: `market.tasks.esi_fetch_scheduler` and `market.tasks.compute_undercuts`, each every minute. Which characters get fetched is configured at runtime in the `TrackedCharacter` admin table.
 
 ## Tests
 

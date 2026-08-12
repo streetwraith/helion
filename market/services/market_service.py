@@ -7,11 +7,8 @@ from market.constants import (
     GLOBAL_PLEX_MARKET_REGION_ID,
     PLEX_TYPE_ID,
 )
-from market.services.esi_sync import (
+from market.services.assets import (
     get_character_assets,
-    get_wallet_journal,
-    refresh_character_orders,
-    update_market_transactions,
 )
 from market.services.fees import (
     SALE_PROCEEDS_PERCENT,

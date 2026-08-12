@@ -22,6 +22,12 @@
     {% endblock %}
 </head>
 <body>
+    {% if esi_fetch_warnings %}
+    <div id="fetch-warning-bar">
+        ESI fetch problems:
+        {% for warning in esi_fetch_warnings %}<span>{{ warning.character_name }}/{{ warning.feed }}{% if warning.disabled %} DISABLED{% else %} ({{ warning.errors }} errors){% endif %}</span>{% if not forloop.last %}, {% endif %}{% endfor %}
+    </div>
+    {% endif %}
     <header>
         <div id="user-panel">
             {% if user.is_authenticated %}

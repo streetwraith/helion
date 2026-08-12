@@ -6,6 +6,7 @@ from django.utils import timezone
 
 from evesde.models import MarketGroup, Type
 from market.models import (
+    CharacterAsset,
     CharacterOrder,
     MarketTransaction,
     SystemHubJumps,
@@ -201,3 +202,35 @@ class TestUndercutQueries:
         rows = market_service.find_undercut_buy_orders(JITA_REGION, CHARACTER_ID)
         assert len(rows) == 1
         assert rows[0][4] == 2 and rows[0][6] == 105.0
+
+
+class TestCharacterAssetReads:
+    def add_asset(self, item_id, type_id, quantity, location_id=JITA_STATION,
+                  location_type="station", character_id=CHARACTER_ID):
+        CharacterAsset.objects.create(
+            item_id=item_id, character_id=character_id, type_id=type_id,
+            quantity=quantity, location_id=location_id, location_type=location_type,
+            location_flag="Hangar", is_singleton=False,
+        )
+
+    def test_aggregated_totals_for_single_location(self):
+        self.add_asset(1, 34, 5)
+        self.add_asset(2, 34, 2)  # second stack, same station
+        self.add_asset(3, 34, 9, location_id=60008494)  # other station
+        self.add_asset(4, 34, 9, location_type="solar_system")  # in space
+        self.add_asset(5, 35, 1)  # not a trade item
+        self.add_asset(6, 34, 9, character_id=42)  # other character
+
+        got = market_service.get_character_assets(
+            CHARACTER_ID, location_ids=JITA_STATION, trade_items=[34])
+
+        assert got == {34: 7}
+
+    def test_by_location_shape_for_location_list(self):
+        self.add_asset(1, 34, 5)
+        self.add_asset(2, 34, 9, location_id=60008494)
+
+        got = market_service.get_character_assets(
+            CHARACTER_ID, location_ids=[JITA_STATION, 60008494], trade_items=[34])
+
+        assert got == {JITA_STATION: {34: 5}, 60008494: {34: 9}}

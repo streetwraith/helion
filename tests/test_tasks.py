@@ -1,10 +1,7 @@
-"""The cache_lock mutex that serializes the Celery tasks, and rate-limit backoff."""
+"""The cache_lock mutex that serializes the Celery tasks."""
 import pytest
 
-from esi.exceptions import ESIErrorLimitException
-
 from market import tasks
-from market.services import market_service
 
 
 class FakeLockCache:
@@ -55,29 +52,10 @@ def test_lock_released_on_exception(lock_cache):
 
 def test_task_runs_body_only_when_lock_is_free(lock_cache, monkeypatch):
     calls = []
-    monkeypatch.setattr(market_service, "refresh_character_orders", lambda: calls.append(1))
-    tasks.update_character_orders.apply()
+    monkeypatch.setattr(tasks.esi_scheduler, "schedule_due_fetches", lambda enqueue: calls.append(1))
+    tasks.esi_fetch_scheduler.apply()
     assert calls == [1]
 
-    lock_cache.add("update_character_orders_lock", "locked")
-    tasks.update_character_orders.apply()
+    lock_cache.add("esi_fetch_scheduler_lock", "locked")
+    tasks.esi_fetch_scheduler.apply()
     assert calls == [1]
-
-
-# In eager mode (.apply()) celery re-executes retries immediately and, after
-# max_retries, surfaces the original exception as a FAILURE. A real worker
-# instead re-schedules with the countdown ("Retry in Ns" in the task log).
-
-def test_rate_limited_task_retries_and_releases_lock(lock_cache, monkeypatch):
-    calls = []
-
-    def boom():
-        calls.append(1)
-        raise ESIErrorLimitException(reset=30)
-
-    monkeypatch.setattr(market_service, "refresh_character_orders", boom)
-    result = tasks.update_character_orders.apply()
-    assert len(calls) == 4  # first run + max_retries=3: the retry path engaged
-    assert result.status == "FAILURE"  # gives up after max retries, loudly
-    assert isinstance(result.result, ESIErrorLimitException)
-    assert "update_character_orders_lock" not in lock_cache._data
