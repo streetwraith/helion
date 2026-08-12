@@ -132,17 +132,6 @@ class MarketOrderUndercut(models.Model):
             models.UniqueConstraint(fields=['order_id', 'order_issued'], name='uc_order_modification')
         ]
 
-class A4EMarketHistoryVolume(models.Model):
-    region_id = models.BigIntegerField()
-    type_id = models.BigIntegerField()
-    date = models.DateField()
-    order_count = models.IntegerField()
-    volume = models.BigIntegerField()
-
-    class Meta:
-        db_table = 'a4e_market_history_volume'  # Adjust if the actual table name differs
-        managed = False  # Prevents Django from managing the table
-
 class SystemHubJumps(models.Model):
     # Jumps from a solar system to its region's trade hub. Non-CCP, ESI-derived;
     # rebuilt by `manage.py recompute_hub_jumps`. Lives here rather than on the sde

@@ -6,7 +6,6 @@ from django.utils import timezone
 
 from evesde.models import MarketGroup, Type
 from market.models import (
-    A4EMarketHistoryVolume,
     MarketHistory,
     MarketOrder,
     MarketTransaction,
@@ -128,20 +127,6 @@ class TestGetMarketHistory:
 
     def test_no_history_returns_empty_list(self):
         assert market_service.get_market_history(JITA_REGION, 34) == []
-
-
-class TestA4EVolume:
-    def test_average_over_91_day_window(self):
-        end = date(2026, 8, 1)
-        A4EMarketHistoryVolume.objects.create(
-            region_id=JITA_REGION, type_id=34, date=end, order_count=1, volume=182,
-        )
-        A4EMarketHistoryVolume.objects.create(
-            region_id=JITA_REGION, type_id=35, date=end, order_count=1, volume=91,
-        )
-        lookup = market_service.get_a4e_market_history_volume([34, 35])
-        assert lookup[34] == pytest.approx(182 / 91)
-        assert lookup[35] == pytest.approx(91 / 91)
 
 
 class TestFindTypeIdsByMarketGroups:

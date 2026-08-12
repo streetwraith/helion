@@ -3,7 +3,7 @@
 External I/O (ESI) is stubbed at the market_service / view-module seam; the
 database paths run for real against fixtures.
 """
-from datetime import date, timedelta
+from datetime import timedelta
 from types import SimpleNamespace
 
 import pytest
@@ -13,7 +13,7 @@ from django.urls import reverse
 from django.utils import timezone
 
 from evesde.models import NpcCorporation, Type
-from market.models import A4EMarketHistoryVolume, MarketTransaction, TradeItem
+from market.models import MarketTransaction, TradeItem
 from market.services import market_service
 
 from .conftest import CHARACTER_ID
@@ -29,12 +29,6 @@ pytestmark = pytest.mark.django_db
 @pytest.fixture
 def no_esi_assets(monkeypatch):
     monkeypatch.setattr(market_service, "get_character_assets", lambda *a, **kw: {})
-
-
-def add_a4e_volume(type_id, volume=91):
-    A4EMarketHistoryVolume.objects.create(
-        region_id=JITA_REGION, type_id=type_id, date=date.today(), order_count=1, volume=volume
-    )
 
 
 def test_anonymous_user_is_redirected_to_login(client, db, trade_hubs):
@@ -149,7 +143,6 @@ class TestHauling:
                   region_id=AMARR_REGION, location_id=AMARR_STATION, system_id=AMARR_SYSTEM)
         add_order(3, 34, 120_000_000.0, volume_remain=1,  # Amarr sell
                   region_id=AMARR_REGION, location_id=AMARR_STATION, system_id=AMARR_SYSTEM)
-        add_a4e_volume(34)
 
     def test_sell_to_buy_finds_profitable_deal(self, auth_client, deal_data):
         response = auth_client.get(
@@ -182,14 +175,12 @@ class TestStationTrading:
         TradeItem.objects.create(type_id=34, name="Tritanium", group_id=18, market_group_id=999)
         add_order(1, 34, 4.0)
         add_order(2, 34, 3.0, is_buy=True)
-        add_a4e_volume(34)
         response = character_client.get(
             reverse("market_trade_hub", kwargs={"region_id": AMARR_REGION})
         )
         assert response.status_code == 200
         item_data = response.context["item_data"]
         assert 34 in item_data
-        assert item_data[34]["regions"][JITA_REGION]["a4e_market_history_volume"] == pytest.approx(1.0)
         assert response.context["trade_hub_region"].name == "Amarr"
 
     def test_mistakes_page(self, auth_client, trade_hubs):

@@ -22,7 +22,7 @@ from .test_market_service_db import (
     add_transaction,
     add_type,
 )
-from .test_views_smoke import AMARR_REGION, AMARR_STATION, AMARR_SYSTEM, add_a4e_volume
+from .test_views_smoke import AMARR_REGION, AMARR_STATION, AMARR_SYSTEM
 
 pytestmark = pytest.mark.django_db
 
@@ -38,7 +38,6 @@ def trade_hub_context(character_client, trade_hubs, monkeypatch):
     monkeypatch.setattr(market_service, "get_character_assets", lambda *a, **kw: {34: 7})
     add_type(34, "Tritanium")
     TradeItem.objects.create(type_id=34, name="Tritanium", group_id=18, market_group_id=999)
-    add_a4e_volume(34, volume=91)
 
     now = timezone.now()
     sell_issued = now - timedelta(days=2)
@@ -126,7 +125,6 @@ class TestTradeHubMetrics:
         jita = trade_hub_context["item_data"][34]["regions"][JITA_REGION]
         assert jita["station_lowest_sell_order"].price == 95.0
         assert jita["station_highest_buy_order"].price == 70.0
-        assert jita["a4e_market_history_volume"] == pytest.approx(1.0)
 
     def test_global_best_orders_include_own(self, trade_hub_context):
         item = trade_hub_context["item_data"][34]
@@ -140,7 +138,6 @@ class TestTradeHubItemSelection:
         add_type(34, "Tritanium")
         add_type(35, "Pyerite")
         TradeItem.objects.create(type_id=34, name="Tritanium", group_id=18, market_group_id=999)
-        add_a4e_volume(34)
         # An active order for an item that is not on the trade list.
         amarr_order(20, 35, 10.0, character_id=CHARACTER_ID)
 
@@ -160,7 +157,6 @@ class TestTradeHubItemSelection:
         add_type(1001, "Listed", market_group_id=100)
         add_type(1002, "Unlisted", market_group_id=100)
         TradeItem.objects.create(type_id=1001, name="Listed", group_id=18, market_group_id=100)
-        add_a4e_volume(1001)
 
         response = character_client.post(
             reverse("market_trade_hub", kwargs={"region_id": AMARR_REGION}),

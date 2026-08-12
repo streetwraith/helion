@@ -41,7 +41,6 @@
     {% endwith %}
     <td>{{ item_data_hub|get_by_key:'history_daily_volume_avg'|floatformat:0 }}</td>
     <td>{{ item_data_other_hub|get_by_key:'history_daily_volume_avg'|floatformat:0 }}</td>
-    <td>{{ item_data_jita|get_by_key:'a4e_market_history_volume'|floatformat:0 }}</td>
 </tr>
 {% endwith %}
 {% endfor %}

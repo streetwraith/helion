@@ -20,8 +20,8 @@ def django_db_modify_db_settings(django_db_modify_db_settings):
 
         settings.DATABASES["default"].update(environ.Env.db_url_config(url))
 
-# The sde schema (owned by sdemanager on real databases) and the externally
-# loaded a4e table are unmanaged models, so migrations never create them.
+# The sde tables (owned by sdemanager on real databases) are unmanaged models,
+# so migrations never create them.
 # Tests need real tables behind them; only the columns the app touches exist.
 SDE_DDL = """
 CREATE SCHEMA IF NOT EXISTS sde;
@@ -49,14 +49,6 @@ CREATE TABLE IF NOT EXISTS sde.map_solar_systems (
     _key bigint PRIMARY KEY,
     region_id bigint,
     name_en varchar(256)
-);
-CREATE TABLE IF NOT EXISTS a4e_market_history_volume (
-    id bigserial PRIMARY KEY,
-    region_id bigint,
-    type_id bigint,
-    date date,
-    order_count integer,
-    volume bigint
 );
 """
 

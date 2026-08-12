@@ -58,7 +58,6 @@ class MarketDeal():
         self.price_jita = price_jita
         self.total_vol_to = 0
         self.history_averages = None
-        self.a4e_market_history_volume = None
 
     def total_vol(self):
         if self.type_id_vol:
@@ -320,13 +319,6 @@ def market_hauling_sell_to_sell(request, from_location, to_location):
         deal.total_vol_to = to_data['total_volume']
         deal.price_jita = jita_price
         deals.append(deal)
-
-    type_ids = [deal.type_id for deal in deals]
-
-    volume_lookup = market_service.get_a4e_market_history_volume(type_ids=type_ids)
-
-    for deal in deals:
-        deal.a4e_market_history_volume = volume_lookup.get(deal.type_id)
 
     deals.sort(key=lambda d: d.profit, reverse=True)
 

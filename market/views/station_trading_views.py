@@ -350,11 +350,6 @@ def market_trade_hub(request, region_id):
 
         context['item_data'][type_id] = item_data
 
-    volume_lookup = market_service.get_a4e_market_history_volume(type_ids=type_ids)
-
-    for type_id in context['item_data'].keys():
-        context['item_data'][type_id]['regions'][REGION_ID_FORGE]['a4e_market_history_volume'] = volume_lookup.get(type_id)
-
     context['isk_in_escrow'] = isk_in_escrow
     context['isk_in_sell_orders'] = isk_in_sell_orders
 

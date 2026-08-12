@@ -4,7 +4,7 @@ from datetime import timedelta
 
 from django.db.models import Max, Sum
 
-from market.models import A4EMarketHistoryVolume, MarketHistory
+from market.models import MarketHistory
 
 def get_market_history(region_id, type_id, days_back=90):
     return get_market_history_bulk(region_id, [type_id], days_back=days_back)[type_id]
@@ -115,25 +115,3 @@ def get_average_daily_volume_bulk(region_id, type_ids, days_back=90):
         ).values('type_id').annotate(total=Sum('volume')).values_list('type_id', 'total')
     )
     return {type_id: totals.get(type_id, 0) / window_days for type_id in type_ids}
-
-def get_a4e_market_history_volume(type_ids):
-    end_date = A4EMarketHistoryVolume.objects.filter(type_id__in=type_ids).aggregate(Max('date'))['date__max']
-    start_date = end_date - timedelta(days=90)
-
-    history_volumes = A4EMarketHistoryVolume.objects.filter(
-        type_id__in=type_ids,
-        date__gte=start_date,
-        date__lte=end_date
-    ).values('type_id', 'date', 'volume')
-
-    # Group in one pass; a duplicate (type, date) row overwrites, as before.
-    volumes_by_type = {}
-    for item in history_volumes:
-        volumes_by_type.setdefault(item['type_id'], {})[item['date']] = item['volume']
-
-    # Days without a row count as zero, so the divisor is the full window.
-    window_days = (end_date - start_date).days + 1
-    return {
-        type_id: sum(volumes_by_type.get(type_id, {}).values()) / window_days
-        for type_id in type_ids
-    }

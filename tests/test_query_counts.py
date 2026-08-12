@@ -13,7 +13,7 @@ from market.services import market_service
 
 from .conftest import CHARACTER_ID
 from .test_market_service_db import add_order, add_transaction, add_type
-from .test_views_smoke import AMARR_REGION, AMARR_STATION, AMARR_SYSTEM, add_a4e_volume
+from .test_views_smoke import AMARR_REGION, AMARR_STATION, AMARR_SYSTEM
 
 pytestmark = pytest.mark.django_db
 
@@ -39,7 +39,6 @@ def add_trade_hub_item(index, type_id):
     add_type(type_id, f"Type {type_id}")
     TradeItem.objects.create(type_id=type_id, name=f"Type {type_id}", group_id=18,
                              market_group_id=999)
-    add_a4e_volume(type_id)
     add_order(base + 1, type_id, 90.0, character_id=CHARACTER_ID,
               region_id=AMARR_REGION, location_id=AMARR_STATION, system_id=AMARR_SYSTEM)
     add_order(base + 2, type_id, 100.0,

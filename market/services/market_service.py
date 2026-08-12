@@ -27,7 +27,6 @@ from market.services.history import (
     _price_distance,
     calculate_market_history_average_volume,
     calculate_market_history_averages,
-    get_a4e_market_history_volume,
     get_average_daily_volume_bulk,
     get_market_history,
     get_market_history_bulk,
