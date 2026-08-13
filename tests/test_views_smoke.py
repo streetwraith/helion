@@ -79,14 +79,73 @@ class TestShoppingList:
         add_order(1, 34, 4.0)
         response = auth_client.post(reverse("shopping_list"), {"items": "Tritanium x2\n\nBogus Item"})
         assert response.status_code == 200
-        assert response.context["table_data"] == {"Tritanium": {JITA_REGION: 4.0}}
-        assert response.context["region_totals"][JITA_REGION] == 4.0
+        rows = response.context["rows"]
+        assert [(row["type_id"], row["name"], row["quantity"]) for row in rows] == [
+            (34, "Tritanium", 2), (None, "Bogus Item", 1)]
+        assert rows[0]["prices"] == {JITA_REGION: 4.0, AMARR_REGION: None,
+                                     10000030: None, 10000032: None, 10000042: None}
+        assert rows[0]["min_price"] == 4.0
+        # An unmatched name keeps its row, without prices.
+        assert rows[1]["prices"] == {region_id: None for region_id in response.context["regions"]}
+        assert response.context["region_totals"][JITA_REGION] == 8.0
+
+    @pytest.mark.parametrize("items, quantity", [
+        ("Tritanium x2", 2),
+        ("Tritanium X2", 2),
+        ("Tritanium x 2", 2),
+        ("2x Tritanium", 2),
+        ("2 x Tritanium", 2),
+        ("Tritanium", 1),
+        ("Tritanium x0", 1),  # no quantity: the whole line stays a name
+        ("  tritanium x3  ", 3),
+        ("2x Tritanium\ntritanium x3", 5),  # the duplicates add up
+    ])
+    def test_quantity_formats(self, auth_client, trade_hubs, items, quantity):
+        add_type(34, "Tritanium")
+        add_order(1, 34, 4.0)
+        response = auth_client.post(reverse("shopping_list"), {"items": items})
+        rows = response.context["rows"]
+        assert len(rows) == 1
+        assert rows[0]["quantity"] == quantity
+        # "Tritanium x0" matches no item, so it has no price and no total.
+        matched = rows[0]["type_id"] is not None
+        assert rows[0]["prices"][JITA_REGION] == (4.0 if matched else None)
+        assert response.context["region_totals"][JITA_REGION] == (4.0 * quantity if matched else 0)
+
+    def test_cheapest_region_is_the_total_of_the_quantities(self, auth_client, trade_hubs):
+        add_type(34, "Tritanium")
+        add_order(1, 34, 4.0)
+        add_order(2, 34, 3.0, region_id=AMARR_REGION, location_id=AMARR_STATION,
+                  system_id=AMARR_SYSTEM)
+        response = auth_client.post(reverse("shopping_list"), {"items": "3x Tritanium"})
+        assert response.context["region_totals"][JITA_REGION] == 12.0
+        assert response.context["region_totals"][AMARR_REGION] == 9.0
+        # Only Jita and Amarr carry the item, so the empty regions cannot win
+        # the cheapest total with their 0.
+        assert response.context["min_region_total"] == 9.0
+        # The row prices stay per one unit.
+        assert response.context["rows"][0]["min_price"] == 3.0
+
+    def test_item_name_links(self, auth_client, trade_hubs):
+        add_type(34, "Tritanium")
+        add_order(1, 34, 4.0)
+        response = auth_client.post(reverse("shopping_list"), {"items": "Tritanium"})
+        content = response.content.decode()
+        # The name itself opens the in-game market window.
+        assert '<a class="item-name-link" data-type-id="34" href="#">Tritanium</a>' in content
+        assert "https://evetycoon.com/market/34/history" in content
+        assert "(34)" not in content  # the type id never shows
+        assert "plus-icon" not in content  # no add/del on this page
+
+    def test_no_cheapest_region_without_a_match(self, auth_client, trade_hubs):
+        response = auth_client.post(reverse("shopping_list"), {"items": "Bogus Item"})
+        assert response.context["min_region_total"] is None
 
     def test_post_empty_list_renders(self, auth_client, trade_hubs):
         # Regression: an all-blank submission used to 500 on invalid SQL.
         response = auth_client.post(reverse("shopping_list"), {"items": "\n  \n"})
         assert response.status_code == 200
-        assert response.context["table_data"] == {}
+        assert response.context["rows"] == []
 
 
 class TestTransactions:
@@ -263,6 +322,9 @@ class TestAjax:
         )
         assert response.status_code == 200
         assert not TradeItem.objects.filter(type_id=34).exists()
+        # The replacement cell keeps the add/del icon, or the user cannot add
+        # the item back.
+        assert "plus-icon" in response.json()["html"]
 
     def test_market_open_in_game(self, character_client, trade_hubs, monkeypatch):
         fake_esi = SimpleNamespace(client=SimpleNamespace(User_Interface=SimpleNamespace(

@@ -124,6 +124,10 @@ def find_undercut_buy_orders(region_id, character_id):
     return _find_undercut_orders(region_id, character_id, is_buy=True)
 
 def get_shopping_list_prices(item_names):
+    """The lowest sell price per region for each name. The names must be lower case.
+
+    Returns (type_id, name, region_id, price) rows.
+    """
     # An empty name list would render an invalid `IN ()` clause.
     if not item_names:
         return []
@@ -134,6 +138,7 @@ def get_shopping_list_prices(item_names):
 
     query = f"""
     SELECT
+        s._key AS type_id,
         s.name_en,
         mo.region_id,
         MIN(mo.price) AS lowest_sell_price
@@ -143,7 +148,7 @@ def get_shopping_list_prices(item_names):
     AND mo.is_in_trade_hub_range = TRUE
     AND mo.region_id IN ({region_placeholders})
     AND lower(s.name_en) in ({item_placeholders})
-    GROUP BY s.name_en, mo.region_id
+    GROUP BY s._key, s.name_en, mo.region_id
     ORDER BY s.name_en, mo.region_id;
     """
     params = region_ids + item_names

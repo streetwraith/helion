@@ -1,6 +1,6 @@
 {% extends "market_base.html" %}
 
-{% load static mathfilters custom_filters %}
+{% load static mathfilters custom_filters item_tags %}
 
 {% block title %}shopping | Helion{% endblock %}
 
@@ -18,33 +18,36 @@
 </form>
 
 <br>
-    {% if table_data %}
+    {% if rows %}
         <table>
             <thead>
                 <tr>
                     <th>Item Name</th>
+                    <th>Qty</th>
                     {% for name in regions.values %}
                         <th>{{ name }}</th>
                     {% endfor %}
                 </tr>
             </thead>
             <tbody>
-                {% for name, prices in table_data.items %}
-                  <tr>
-                      <td>{{ name }}</td>
-                      {% with lowest=min_prices|get_by_key:name %}
+                {% for row in rows %}
+                  <tr {% if row.type_id %}data-type-id="{{ row.type_id }}"{% endif %}>
+                      <td class="item-name">
+                        {% if row.type_id %}{% item_name row.type_id row.name %}{% else %}{{ row.name }}{% endif %}
+                      </td>
+                      <td>{{ row.quantity }}</td>
                       {% for region_id in regions %}
-                          {% with price=prices|get_by_key:region_id %}
-                          <td {% if price and lowest and price == lowest %} class="green" {% endif %}>{{ price|isk_value }}</td>
+                          {% with price=row.prices|get_by_key:region_id %}
+                          <td {% if price and row.min_price and price == row.min_price %} class="green" {% endif %}>{% if price %}{{ price|isk_value }}{% else %}-{% endif %}</td>
                           {% endwith %}
                       {% endfor %}
-                      {% endwith %}
-                  </tr>                    
+                  </tr>
                 {% endfor %}
             </tbody>
             <tfoot>
               <tr>
                   <td><strong>Total</strong></td>
+                  <td></td>
                   {% for region_id in regions %}
                     {% with total=region_totals|get_by_key:region_id %}
                     <td {% if total is not None and total == min_region_total %} class="green" {% endif %}><strong>{{ total|isk_value }}</strong></td>

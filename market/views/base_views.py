@@ -45,50 +45,94 @@ def index(request):
         market_region.trade_hub = hubs_by_region[market_region.region_id]
     return render(request, "market/index.html", context)
 
-def shopping_list(request):
-    if request.method == 'POST':
-        query = request.POST.get('items')
-        item_names = []
-        pattern = re.compile(r"^(.*?)(?:\s+x(\d+))?\s*$", re.IGNORECASE)
-        # Captures: item name (.*?) and optional " x<number>"
+# "Rifter x2" and "2x Rifter". A count of zero is not a quantity, so such a line
+# stays one plain name and finds no item.
+QUANTITY_PATTERNS = [
+    re.compile(r"^(?P<name>.+?)\s+x\s*(?P<quantity>[1-9]\d*)$", re.IGNORECASE),
+    re.compile(r"^(?P<quantity>[1-9]\d*)\s*x\s+(?P<name>.+)$", re.IGNORECASE),
+]
 
-        for line in query.splitlines():
-            line = line.strip().lower()
-            if not line:
-                continue
+def _parse_shopping_items(text):
+    """Map the pasted lines to {lower case name: {'name', 'quantity'}}.
 
+    The lines keep their order and the duplicate names add up their quantities.
+    The name keeps the case of the paste, because a name that matches no item
+    must read back as the user typed it.
+    """
+    items = {}
+    for line in text.splitlines():
+        line = line.strip()
+        if not line:
+            continue
+        name, quantity = line, 1
+        for pattern in QUANTITY_PATTERNS:
             match = pattern.match(line)
             if match:
-                item_name = match.group(1).strip()
-                quantity = int(match.group(2)) if match.group(2) else 1
+                name = match.group('name').strip()
+                quantity = int(match.group('quantity'))
+                break
+        item = items.setdefault(name.lower(), {'name': name, 'quantity': 0})
+        item['quantity'] += quantity
+    return items
 
-                item_names.append(item_name)
-        regions = dict(TradeHub.objects.all().values_list('region_id', 'name'))
-        results = market_service.get_shopping_list_prices(item_names)
+def _price_rows(items, regions, prices):
+    """One table row per pasted item, with the lowest sell price per region.
 
-        table_data = {}
-        region_totals = {region_id: 0 for region_id in regions}
-        min_prices = {}
-        
-        for name, region_id, price in results:
-            if name not in table_data:
-                table_data[name] = {}
-            table_data[name][region_id] = price
+    A row keeps its pasted name and empty prices when the name matches no item.
+    The prices are the price of one unit.
+    """
+    rows = {
+        key: {'type_id': None, 'name': item['name'], 'quantity': item['quantity'],
+              'prices': {region_id: None for region_id in regions}, 'min_price': None}
+        for key, item in items.items()
+    }
+    for type_id, name, region_id, price in prices:
+        row = rows[name.lower()]
+        if row['type_id'] is None:
+            row['type_id'] = type_id
+            row['name'] = name
+        # A few names belong to two type ids (SKINs, crates). Keep the cheaper
+        # one, so the item counts once in the total of the region.
+        current = row['prices'][region_id]
+        if current is None or price < current:
+            row['prices'][region_id] = price
+    for row in rows.values():
+        row['min_price'] = min(
+            (price for price in row['prices'].values() if price is not None), default=None)
+    return list(rows.values())
+
+def _region_totals(rows, regions):
+    """The cost of the full list per region, and the total of the cheapest region.
+
+    A region that sells no item of the list buys less than the list. Such a
+    total is smaller, but it is not the cheaper one, so it cannot win.
+    """
+    totals = {region_id: 0 for region_id in regions}
+    for row in rows:
+        for region_id, price in row['prices'].items():
             if price is not None:
-                region_totals[region_id] += price
-            if name not in min_prices or (price is not None and price < min_prices[name]):
-                min_prices[name] = price
+                totals[region_id] += price * row['quantity']
+    matched_rows = [row for row in rows if row['type_id'] is not None]
+    comparable = [
+        totals[region_id] for region_id in regions
+        if matched_rows and all(row['prices'][region_id] is not None for row in matched_rows)
+    ]
+    return totals, min(comparable, default=None)
 
-        min_region_total = min(region_totals.values()) if region_totals else None
-        
-        return render(request, "market/shopping.html", {
-            'table_data': table_data,
-            'regions': regions,
-            'region_totals': region_totals,
-            'min_prices': min_prices,
-            'min_region_total': min_region_total,
-            'items': query,
-        })
-    else:
+def shopping_list(request):
+    if request.method != 'POST':
         return render(request, "market/shopping.html")
+
+    query = request.POST.get('items', '')
+    items = _parse_shopping_items(query)
+    regions = dict(TradeHub.objects.all().values_list('region_id', 'name'))
+    rows = _price_rows(items, regions, market_service.get_shopping_list_prices(list(items)))
+    region_totals, min_region_total = _region_totals(rows, regions)
+    return render(request, "market/shopping.html", {
+        'rows': rows,
+        'regions': regions,
+        'region_totals': region_totals,
+        'min_region_total': min_region_total,
+        'items': query,
+    })
 

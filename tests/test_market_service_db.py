@@ -173,8 +173,8 @@ class TestShoppingListPrices:
         add_order(4, 34, 3.0, is_buy=True)  # buy orders never count
         add_order(5, 34, 1.0, in_range=False)  # out-of-range never counts
         results = market_service.get_shopping_list_prices(["tritanium"])
-        assert ("Tritanium", JITA_REGION, 4.0) in results
-        assert ("Tritanium", 10000043, 6.0) in results
+        assert (34, "Tritanium", JITA_REGION, 4.0) in results
+        assert (34, "Tritanium", 10000043, 6.0) in results
 
     def test_empty_name_list_returns_no_rows(self, trade_hubs):
         # Regression: used to render an invalid SQL `IN ()` clause.
