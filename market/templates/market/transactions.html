@@ -1,6 +1,6 @@
 {% extends "market_base.html" %}
 
-{% load static mathfilters custom_filters %}
+{% load static mathfilters custom_filters item_tags %}
 
 {% block title %}transactions | Helion{% endblock %}
 
@@ -55,7 +55,7 @@
         {% with trade_hub=trade_hubs|get_object_by_attr:location_id_filter %}
         <tr data-type-id="{{ transaction.type_id }}">
             <td>{{ transaction.date|date:"d/m/Y H:i:s" }}</td>
-            <td class="item-name">{% include 'market/_fragment_item_name.html' with item_name=type_names_dict|get_by_key:transaction.type_id type_id=transaction.type_id is_trade_item=trade_items|get_by_key:transaction.type_id show_add_del=True %}</td>
+            <td class="item-name">{% item_name transaction.type_id type_names_dict|get_by_key:transaction.type_id show_add_del=True is_trade_item=trade_items|get_by_key:transaction.type_id %}</td>
             <td class="{% if transaction.is_buy %}red{% else %}green{% endif %}">{{ transaction.unit_price|mul:transaction.quantity|isk_value }}</td>
             <td class="{% if transaction.is_buy %}red{% else %}green{% endif %}">{{ transaction.quantity }}</td>
             <td class="{% if transaction.is_buy %}red{% else %}green{% endif %}">{{ transaction.unit_price|isk_value }}</td>

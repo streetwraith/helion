@@ -15,19 +15,13 @@ $(document).ajaxSend(function(event, xhr, settings) {
 $(document).ready(function(){
     $(".market").tablesorter();
 
-    $('.item-name').on('click', '.trade-item-id', function(event) {
+    $('.item-name').on('click', '.item-name-link', function(event) {
         event.preventDefault();
+        // The link carries the type id, because the item name also renders
+        // outside a row (a table caption), where there is no row to read it from.
+        var type_id = $(this).data('type-id');
         $(this).closest('table').find('tr').removeClass('selected');
-        var parent_tr = $(this).closest('tr');
-        var type_id = '';
-        if(parent_tr.length > 0) {
-            parent_tr.addClass('selected');
-            type_id = parent_tr.data('type-id');
-        } else {
-            type_id = $(this).text().trim();
-        }
-
-        console.log(type_id);
+        $(this).closest('tr').addClass('selected');
 
         $.ajax({
             url: '/market/ajax/market_open_in_game',

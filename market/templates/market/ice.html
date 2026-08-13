@@ -6,7 +6,7 @@
 <script src="{% static 'js/jquery.peity.min.js' %}"></script>
 {% endblock %}
 
-{% load custom_filters %}
+{% load custom_filters item_tags %}
 
 {% block title %}ice | Helion{% endblock %}
 
@@ -172,7 +172,7 @@
     {% with ice_product_type_id=ice_product_types|get_by_key:ice_product_type %}
     {% with ice_product=ice_product_data|get_by_key:ice_product_type|get_by_key:'Jita' %}
     <tr data-type-id="{{ice_product_type_id}}">
-        <th class="item-name">{% include 'market/_fragment_item_name.html' with item_name=ice_product_type type_id=ice_product_type_id show_add_del=False %}</th>
+        <th class="item-name">{% item_name ice_product_type_id ice_product_type %}</th>
         <td style="font-size:50%; height: 32px;">
             <sup>{{ice_product|get_by_key:'chart_data'|get_by_key:'max'}}</sup>
             <br>
@@ -254,7 +254,7 @@
 {% for ice_type in ice_types %}
 {% with ice_type_id=ice_types|get_by_key:ice_type|get_by_key:'type_id' %}
 <table class="ice">
-    <caption class="item-name">{% include 'market/_fragment_item_name.html' with item_name=ice_type type_id=ice_type_id show_add_del=False %}</caption>
+    <caption class="item-name">{% item_name ice_type_id ice_type %}</caption>
     <tbody>
         <tr class="headers-rotated">
             <th></th>

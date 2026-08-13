@@ -202,6 +202,25 @@ per-region mark and recomputes undercuts only when a new snapshot was published 
 minute of added lag on top of the ingestion cadence. Losing the marks costs one redundant
 recompute; results dedupe on a unique constraint. No webhooks, no pub/sub.
 
+## The item name component
+
+Every item name in the UI renders through one inclusion tag, `{% item_name type_id name %}`
+(`market/templatetags/item_tags.py`). Before, each template built the name, the type id and the
+links again, and the views disagreed on which links to show.
+
+Three points of the design are load-bearing:
+
+- The **name itself** is the link that opens the in-game market window. The type id no longer
+  shows.
+- The **link carries `data-type-id`**. The name also renders outside a table row, in a table
+  caption, where the click handler finds no row to read the id from.
+- The **options select the links per render** (`show_evetycoon`, `show_add_del`, `is_trade_item`).
+  An inclusion tag, not an `{% include %}`, because an include resolves a flag that the caller
+  forgets against the surrounding context, while the tag applies its own default.
+
+The click handler delegates from the enclosing `item-name` class, so a new call site must keep
+that class on the cell.
+
 ## Testing
 
 External schemas are faked minimally: the test setup creates the `sde` and `market` tables with

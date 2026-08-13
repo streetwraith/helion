@@ -1,6 +1,6 @@
 {% extends "market_base.html" %}
 
-{% load static custom_filters %}
+{% load static custom_filters item_tags %}
 
 {% block title %}mistakes | {{ trade_hub_region.name }} | Helion{% endblock %}
 
@@ -23,7 +23,7 @@
     <tbody>
         {% for result in matching_type_ids %}
         <tr data-type-id="{{result.type_id}}">
-            <td class="item-name">{% include 'market/_fragment_item_name.html' with item_name=result.name type_id=result.type_id is_trade_item=False show_add_del=False %}</td>
+            <td class="item-name">{% item_name result.type_id result.name %}</td>
             <td>{{ result.highest_buy_price|isk_value }}</td>
             <td>{{ result.lowest_sell_price|isk_value }}</td>
             <td>{{ result.lowest_sell_price_volume }}</td>
