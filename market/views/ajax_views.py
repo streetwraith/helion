@@ -1,4 +1,5 @@
 from market.services import market_service
+from evesde import services as sde_service
 from django.template.loader import render_to_string
 from django.http import JsonResponse
 from helion.decorators import require_character
@@ -40,6 +41,13 @@ def trade_item_add_or_del(request):
         elif operation == 'del':
             trade_item_name = market_service.trade_item_del(type_id)
             return JsonResponse({'html': _item_name_html(type_id, trade_item_name, False)}, safe=False)
+    return JsonResponse({'error': 'bad request'}, status=400)
+
+def type_search(request):
+    """Item name matches for the search box of the history chart."""
+    if request.headers.get('x-requested-with') == 'XMLHttpRequest':
+        matches = sde_service.search_market_type_names(request.GET.get('q', ''))
+        return JsonResponse(matches, safe=False)
     return JsonResponse({'error': 'bad request'}, status=400)
 
 @require_character

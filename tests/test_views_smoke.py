@@ -15,8 +15,10 @@ from django.utils import timezone
 from evesde.models import NpcCorporation, Type
 from market.models import EsiFetchState, MarketTransaction, TradeItem
 from market.services import market_service
+from marketdata.models import RegionStatus
 
 from .conftest import CHARACTER_ID
+from .test_market_history_chart import LATEST, add_history
 from .test_market_service_db import JITA_REGION, JITA_STATION, add_order, add_transaction, add_type
 
 AMARR_REGION = 10000043
@@ -133,7 +135,9 @@ class TestShoppingList:
         content = response.content.decode()
         # The name itself opens the in-game market window.
         assert '<a class="item-name-link" data-type-id="34" href="#">Tritanium</a>' in content
-        assert "https://evetycoon.com/market/34/history" in content
+        # The shopping list prices five regions per row, so it names none of them
+        # and the history link falls back to The Forge.
+        assert 'href="/market/history?type_id=34&amp;region_id=10000002"' in content
         assert "(34)" not in content  # the type id never shows
         assert "plus-icon" not in content  # no add/del on this page
 
@@ -462,3 +466,144 @@ class TestFetchWarningBar:
         content = auth_client.get("/").content.decode()
 
         assert "ESI fetch problems" not in content
+
+
+class TestMarketHistoryChart:
+    URL = "/market/history"
+
+    def add_item_with_history(self, type_id=34, name="Tritanium"):
+        add_type(type_id, name)
+        add_history(type_id, LATEST, average=100)
+
+    def test_empty_page_without_parameters(self, auth_client, trade_hubs):
+        response = auth_client.get(self.URL)
+        assert response.status_code == 200
+        assert response.context["chart"] is None
+        assert response.context["type_id"] is None
+        assert response.context["notices"] == []
+        assert 'id="chart-data"' not in response.content.decode()
+
+    def test_dropdown_files_the_article_at_the_end_and_sorts_on_that(self, auth_client, trade_hubs):
+        response = auth_client.get(self.URL)
+        labels = [label for _, label in response.context["region_options"]]
+        assert labels == ["Domain", "Forge, The", "Heimatar", "Metropolis", "Sinq Laison"]
+        # The heading and the notices keep the natural name.
+        assert response.context["region_name"] == "The Forge"
+
+    def test_dropdown_ignores_case_when_sorting(self, auth_client, trade_hubs):
+        # Sorting on raw codepoints files every capital first, which would put
+        # the PLEX pseudo-region ahead of Genesis.
+        RegionStatus.objects.create(region_id=10000067, region_name="Genesis",
+                                    consecutive_errors=0)
+        RegionStatus.objects.create(region_id=19000001, region_name="GPMR-01",
+                                    consecutive_errors=0)
+        response = auth_client.get(self.URL)
+        labels = [label for _, label in response.context["region_options"]]
+        assert labels.index("Genesis") < labels.index("GPMR-01")
+
+    def test_region_alone_selects_it_without_a_chart(self, auth_client, trade_hubs):
+        response = auth_client.get(self.URL, {"region_id": AMARR_REGION})
+        assert response.context["region_id"] == AMARR_REGION
+        assert response.context["chart"] is None
+        assert response.context["notices"] == []
+
+    def test_item_alone_defaults_to_the_forge(self, auth_client, trade_hubs):
+        self.add_item_with_history()
+        response = auth_client.get(self.URL, {"type_id": 34})
+        assert response.context["region_id"] == JITA_REGION
+        assert response.context["region_name"] == "The Forge"
+        assert len(response.context["chart"]) == 7
+
+    def test_draws_the_chart_for_both_parameters(self, auth_client, trade_hubs):
+        self.add_item_with_history()
+        response = auth_client.get(self.URL, {"type_id": 34, "region_id": JITA_REGION})
+        assert response.status_code == 200
+        assert response.context["notices"] == []
+        content = response.content.decode()
+        assert 'id="chart-data"' in content
+        assert "uPlot.iife.min.js" in content
+        assert "history_chart.js" in content
+        # The heading keeps the in-game market link but drops the chart link:
+        # this page is what that link leads to.
+        assert 'data-type-id="34"' in content
+        assert "/market/history?type_id=" not in content
+
+    @pytest.mark.parametrize("days, expected", [
+        ("90", 90),
+        ("365", 365),
+        ("730", 730),
+        ("7", 365),  # a window the page does not offer
+        ("nonsense", 365),
+        ("", 365),
+    ])
+    def test_window_falls_back_without_a_notice(self, auth_client, trade_hubs, days, expected):
+        # The window is a display preference, so a wrong value needs no notice.
+        response = auth_client.get(self.URL, {"days": days})
+        assert response.context["days"] == expected
+        assert response.context["notices"] == []
+
+    def test_empty_parameters_are_not_an_unknown_item(self, auth_client, trade_hubs):
+        # The window links carry every parameter, so they render an empty
+        # type_id while no item is chosen. That is not a bad item id.
+        response = auth_client.get(self.URL, {"type_id": "", "region_id": "", "days": "90"})
+        assert response.context["notices"] == []
+        assert response.context["type_id"] is None
+        assert response.context["region_id"] == JITA_REGION
+        assert response.context["days"] == 90
+
+    def test_unknown_item_says_so(self, auth_client, trade_hubs):
+        response = auth_client.get(self.URL, {"type_id": 999})
+        assert response.status_code == 200
+        assert response.context["type_id"] is None
+        assert response.context["chart"] is None
+        assert response.context["notices"] == ["no such item: 999"]
+
+    def test_item_id_that_is_not_a_number_says_so(self, auth_client, trade_hubs):
+        response = auth_client.get(self.URL, {"type_id": "abc"})
+        assert response.context["notices"] == ["no such item: abc"]
+
+    def test_region_outside_the_ingested_set_falls_back_and_says_so(self, auth_client, trade_hubs):
+        response = auth_client.get(self.URL, {"region_id": 12345})
+        assert response.context["region_id"] == JITA_REGION
+        assert response.context["notices"] == ["no ingested region 12345, showing The Forge"]
+
+    def test_no_character_means_no_own_fills(self, auth_client, trade_hubs):
+        self.add_item_with_history()
+        response = auth_client.get(self.URL, {"type_id": 34})
+        assert response.context["show_transactions"] is False
+        assert len(response.context["chart"]) == 7
+        assert 'data-transactions="0"' in response.content.decode()
+
+    def test_a_selected_character_adds_the_own_fill_rows(self, character_client, trade_hubs):
+        self.add_item_with_history()
+        response = character_client.get(self.URL, {"type_id": 34})
+        assert response.context["show_transactions"] is True
+        assert len(response.context["chart"]) == 11
+        assert 'data-transactions="1"' in response.content.decode()
+
+    def test_item_without_history_in_the_region(self, auth_client, trade_hubs):
+        self.add_item_with_history()  # The Forge only
+        response = auth_client.get(self.URL, {"type_id": 34, "region_id": AMARR_REGION})
+        assert response.context["chart"] is None
+        assert "No history for this item in Domain." in response.content.decode()
+
+
+class TestTypeSearchEndpoint:
+    URL = "/market/ajax/type_search"
+    AJAX = {"x-requested-with": "XMLHttpRequest"}
+
+    def test_a_plain_request_is_rejected(self, auth_client, trade_hubs):
+        assert auth_client.get(self.URL, {"q": "tritanium"}).status_code == 400
+
+    def test_returns_the_matches(self, auth_client, trade_hubs):
+        add_type(34, "Tritanium")
+        response = auth_client.get(self.URL, {"q": "tritan"}, headers=self.AJAX)
+        assert response.status_code == 200
+        assert response.json() == [{"type_id": 34, "name": "Tritanium"}]
+
+    def test_a_short_query_returns_nothing(self, auth_client, trade_hubs):
+        add_type(34, "Tritanium")
+        assert auth_client.get(self.URL, {"q": "tr"}, headers=self.AJAX).json() == []
+
+    def test_a_missing_query_returns_nothing(self, auth_client, trade_hubs):
+        assert auth_client.get(self.URL, headers=self.AJAX).json() == []

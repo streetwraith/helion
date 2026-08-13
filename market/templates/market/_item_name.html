@@ -1,6 +1,6 @@
 <a class="item-name-link" data-type-id="{{ type_id }}" href="#">{{ item_name }}</a>
-{% if show_evetycoon %}
- <a target="_blank" href="https://evetycoon.com/market/{{ type_id }}/history"><i class="bi bi-bar-chart-line"></i></a>
+{% if show_history %}
+ <a href="{{ history_url }}"><i class="bi bi-bar-chart-line"></i></a>
 {% endif %}
 {% if show_add_del %}
  {% if is_trade_item %}

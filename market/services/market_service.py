@@ -16,6 +16,8 @@ from market.services.fees import (
     get_sales_tax,
 )
 from market.services.history import (
+    CHART_LEAD_IN_DAYS,
+    MOVING_AVERAGE_DAYS,
     _price_distance,
     calculate_market_history_average_volume,
     calculate_market_history_averages,
@@ -23,7 +25,9 @@ from market.services.history import (
     get_average_daily_volume_bulk,
     get_market_history,
     get_market_history_bulk,
+    get_market_history_chart,
     get_market_history_for_types,
+    trailing_average,
 )
 from market.services.orders import (
     JITA_STATION_ID,
@@ -46,6 +50,7 @@ from market.services.wallet import (
     WalletStatistics,
     get_average_transaction_price,
     get_average_transaction_price_bulk,
+    get_daily_transaction_prices,
     get_market_transactions,
     get_trade_history,
     get_trade_history_bulk,

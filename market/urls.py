@@ -15,6 +15,8 @@ from .views import (
     market_transactions,
     market_trade_hub_mistakes,
     market_ice_index,
+    market_history,
+    type_search,
 )
 
 urlpatterns = [
@@ -28,6 +30,9 @@ urlpatterns = [
     
     # transactions
     path("transactions", market_transactions, name="market_transactions"),
+
+    # history chart
+    path("history", market_history, name="market_history"),
 
     # hauling
     path("hauling", market_hauling_index, name="market_hauling_index"),
@@ -45,4 +50,5 @@ urlpatterns = [
     path("ajax/market_open_in_game", market_open_in_game, name="market_open_in_game"),
     path("ajax/trade_item_add_or_del", trade_item_add_or_del, name="trade_item_add_or_del"),
     path("ajax/transaction_history", transaction_history, name="transaction_history"),
+    path("ajax/type_search", type_search, name="type_search"),
 ]

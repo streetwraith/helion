@@ -31,7 +31,7 @@
     <tbody>
         {% for deal in deals %}
         <tr data-type-id="{{deal.type_id}}">
-            <td class="item-name">{% item_name deal.type_id deal.name %}</td>
+            <td class="item-name">{% item_name deal.type_id deal.name region_id=region %}</td>
             <td>{{ deal.quantity }}</td>
             <td>{{ deal.ak_cost }}</td>
             <td>{{ deal.isk_cost|isk_value }}</td>
@@ -40,7 +40,7 @@
                 <table style="width: 100%;">
                     {% for required_item in deal.required_items %}
                         <tr data-type-id="{{required_item.type_id}}">
-                            <td class="item-name">{% item_name required_item.type_id required_item.name %}</td>
+                            <td class="item-name">{% item_name required_item.type_id required_item.name region_id=region %}</td>
                             <td>{{ required_item.quantity }}</td>
                             <td>{{ required_item.price|isk_value }}</td>
                             <td>

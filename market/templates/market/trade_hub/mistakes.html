@@ -23,7 +23,7 @@
     <tbody>
         {% for result in matching_type_ids %}
         <tr data-type-id="{{result.type_id}}">
-            <td class="item-name">{% item_name result.type_id result.name %}</td>
+            <td class="item-name">{% item_name result.type_id result.name region_id=trade_hub_region.region_id %}</td>
             <td>{{ result.highest_buy_price|isk_value }}</td>
             <td>{{ result.lowest_sell_price|isk_value }}</td>
             <td>{{ result.lowest_sell_price_volume }}</td>

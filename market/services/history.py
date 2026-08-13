@@ -1,9 +1,10 @@
 """Market history queries and the statistics computed over them."""
 import statistics
-from datetime import timedelta
+from datetime import datetime, timedelta, timezone
 
 from django.db.models import Max, Sum
 
+from market.services import wallet
 from marketdata.models import History
 
 def get_market_history(region_id, type_id, days_back=90):
@@ -131,6 +132,91 @@ def calculate_market_history_averages_bulk(region_id, type_ids, days_back=90):
             avg_daily_volume=volume_total / window_days,
             volume_total=volume_total)
     return results
+
+MOVING_AVERAGE_DAYS = (5, 30)
+# Days of history queried before the first shown day, so the longest moving
+# average is already complete there.
+CHART_LEAD_IN_DAYS = max(MOVING_AVERAGE_DAYS) - 1
+
+
+def trailing_average(values, window):
+    """Trailing mean over `window` positions, ignoring the missing values.
+
+    The caller passes one gap-filled value per calendar day, so a window of N
+    positions is a window of N calendar days. A position is None only when every
+    day of its own window is empty.
+    """
+    assert window > 0
+    averages = []
+    for index in range(len(values)):
+        present = [value for value in values[max(0, index - window + 1):index + 1]
+                   if value is not None]
+        averages.append(sum(present) / len(present) if present else None)
+    return averages
+
+
+def _epoch_utc(day):
+    # EVE's market day is a UTC day. Neither the server timezone nor the
+    # viewer's may shift these labels, so the conversion pins UTC.
+    return int(datetime(day.year, day.month, day.day, tzinfo=timezone.utc).timestamp())
+
+
+def _as_float(value):
+    return float(value) if value is not None else None
+
+
+# The four transaction rows, in the order the chart draws them.
+TRANSACTION_BUCKETS = ((True, True), (True, False), (False, True), (False, False))
+
+
+def _transaction_rows(type_id, days, local_station_ids):
+    """Our own fills as four rows aligned to `days`: buy and sell, each split into
+    this region and the others. A day without a fill carries None."""
+    prices = wallet.get_daily_transaction_prices(
+        type_id, days[0], days[-1], local_station_ids)
+    return [[prices.get((day, is_buy, is_local)) for day in days]
+            for is_buy, is_local in TRANSACTION_BUCKETS]
+
+
+def get_market_history_chart(region_id, type_id, days, local_station_ids=None):
+    """The uPlot series for one item in one region, or None without history.
+
+    The rows are ordered x, volume, lowest, highest, average, then one row per
+    entry of MOVING_AVERAGE_DAYS. The volume comes first because uPlot draws the
+    series in order, and the bars belong behind the price marks.
+
+    The query reaches CHART_LEAD_IN_DAYS further back than the shown window, so
+    the longest moving average is already complete on the first shown day. Those
+    extra days feed the averages and then drop out.
+
+    `local_station_ids` switches our own fills on and appends four more rows. None
+    leaves them out entirely; an empty set means the region has no trade hub, so
+    every fill counts as another region's.
+    """
+    assert days > 0
+    history = get_market_history(region_id, type_id, days_back=days + CHART_LEAD_IN_DAYS)
+    shown = history[CHART_LEAD_IN_DAYS:]
+    # Gap-filled days carry no price, so a window of nothing but gaps is "no
+    # history" and not a chart of one empty line.
+    if not any(record.average is not None for record in shown):
+        return None
+
+    averages = [record.average for record in history]
+    moving = [trailing_average(averages, window)[CHART_LEAD_IN_DAYS:]
+              for window in MOVING_AVERAGE_DAYS]
+    rows = [
+        [_epoch_utc(record.date) for record in shown],
+        [record.volume for record in shown],
+        [_as_float(record.lowest) for record in shown],
+        [_as_float(record.highest) for record in shown],
+        [_as_float(record.average) for record in shown],
+        *[[_as_float(value) for value in series] for series in moving],
+    ]
+    if local_station_ids is not None:
+        rows.extend(_transaction_rows(
+            type_id, [record.date for record in shown], local_station_ids))
+    return rows
+
 
 def calculate_market_history_average_volume(history):
     if not history:

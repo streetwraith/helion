@@ -214,12 +214,70 @@ Three points of the design are load-bearing:
   shows.
 - The **link carries `data-type-id`**. The name also renders outside a table row, in a table
   caption, where the click handler finds no row to read the id from.
-- The **options select the links per render** (`show_evetycoon`, `show_add_del`, `is_trade_item`).
-  An inclusion tag, not an `{% include %}`, because an include resolves a flag that the caller
-  forgets against the surrounding context, while the tag applies its own default.
+- The **options select the links per render** (`show_history`, `show_add_del`, `is_trade_item`,
+  `region_id`). An inclusion tag, not an `{% include %}`, because an include resolves a flag that
+  the caller forgets against the surrounding context, while the tag applies its own default.
 
 The click handler delegates from the enclosing `item-name` class, so a new call site must keep
 that class on the cell.
+
+The chart icon links to the history page. `region_id` aims it at the region the caller already
+shows and defaults to The Forge. It is an explicit argument rather than something read off the
+surrounding context, for the same reason the component is a tag and not an include: a caller that
+inherits a region silently will eventually inherit the wrong one. Callers with no single region to
+name leave it out — the shopping list prices five regions per row, and a hauling deal spans two.
+
+## The history chart
+
+`/market/history?type_id=&region_id=&days=90|365|730` draws one item's daily history in one
+region: the low-to-high range as a band, the average price, the volume, and a 5-day and 30-day
+moving average. It carries no menu link — every item name links to it. The chart library is uPlot,
+vendored and pinned under `market/static/market/vendor/`.
+
+- **The URL is the only state.** Changing the region or picking an item navigates instead of
+  updating in place, so there is no JSON chart endpoint and no second rendering path: the series
+  reach the browser once, through `json_script`. Every view of the chart is a shareable link.
+- **The data is `market.history`** read through `marketdata.History`, gap-filled and anchored on
+  `max(date)` for the region like every other history window.
+- **The x values are epoch seconds at UTC midnight.** EVE's market day is a UTC day; the server
+  runs UTC+8 and the viewer's timezone is unknown, so neither may enter that conversion.
+- **A moving average is a trailing *calendar* window over the values that exist.** Skipping the
+  gaps instead would make a "5-day" average reach back two months on an illiquid item, and
+  counting them as zero would fake a price collapse. A window of nothing but gaps yields no chart
+  at all, rather than one empty line.
+- **The query reaches 29 days further back than the window** (`CHART_LEAD_IN_DAYS`) and drops them
+  from the display, so the 30-day average is complete at the left edge instead of averaging one
+  day while claiming to average thirty.
+- **Bad parameters fall back and say so.** An unresolvable `type_id` or `region_id` renders with a
+  notice, because a silent fallback would show one item's history under another item's name.
+  `days` falls back quietly: it is a display preference, not data.
+
+The region list comes from `marketdata.RegionStatus`, never from `TradeHub` — that table names
+region 10000002 "Jita", while the region is "The Forge".
+
+The item search (`/market/ajax/type_search`) reads `sde.types` where `market_group_id IS NOT NULL`,
+needs three characters and returns at most 20 rows. `icontains` compiles to `ILIKE '%x%'`, which no
+index serves, and `sde` belongs to another writer so helion cannot add one — the scan covers ~53k
+rows and measures a few milliseconds.
+
+### Our own fills
+
+With a character selected the payload carries four more rows: buy and sell, each split into this
+region and the others.
+
+- **The selected character is the switch, not the filter.** Every transaction the database holds
+  counts, whoever made it. A per-character filter can come later.
+- **One dot per day per side, volume-weighted** (`sum(price x quantity) / sum(quantity)`), so the
+  dot is the price actually paid rather than the mean of the tickets.
+- **The bucket is the UTC date**, for the same reason the x axis is.
+- **Corporation transactions count.** `get_market_transactions` hardcodes `is_personal = True` and
+  this path deliberately does not: excluding corporation rows belongs to the profit statistics,
+  not to a price chart.
+- **Locality comes from `TradeHub`.** There is no station-to-region table in `sde`, and
+  `market.orders` cannot supply one cheaply — it has no index leading with `location_id`, and the
+  PLEX pseudo-region carries orders at stations across the whole universe, so a station there maps
+  to two regions. The five hub stations cover 97.5% of the transactions exactly; everything else
+  reads as another region, which is the conservative error.
 
 ## Testing
 

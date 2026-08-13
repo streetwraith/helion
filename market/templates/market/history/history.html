@@ -1,0 +1,57 @@
+{% extends "market_base.html" %}
+
+{% load static item_tags %}
+
+{% block title %}history | Helion{% endblock %}
+
+{% block css %}
+<link rel="stylesheet" href="{% static 'market/vendor/uPlot.min.css' %}">
+<link rel="stylesheet" href="{% static 'market/css/history.css' %}">
+{% endblock %}
+
+{% block js %}
+<script src="{% static 'market/vendor/uPlot.iife.min.js' %}"></script>
+<script src="{% static 'market/js/history_chart.js' %}"></script>
+{% endblock %}
+
+{% block content %}
+<form id="history-controls" action="{% url 'market_history' %}" method="GET">
+  <label for="region_id">Region</label>
+  <select id="region_id" name="region_id">
+    {% for id, name in region_options %}
+    <option value="{{ id }}" {% if id == region_id %}selected{% endif %}>{{ name }}</option>
+    {% endfor %}
+  </select>
+
+  <label for="type_search">Item</label>
+  <span id="type-search-box">
+    <input type="text" id="type_search" autocomplete="off" placeholder="item name"
+           value="{{ type_name|default_if_none:'' }}">
+    <ul id="type-search-results"></ul>
+  </span>
+  <input type="hidden" id="type_id" name="type_id" value="{{ type_id|default_if_none:'' }}">
+  <input type="hidden" id="days" name="days" value="{{ days }}">
+
+  <span id="history-windows">
+    {% for window in window_days %}
+    <a href="?type_id={{ type_id|default_if_none:'' }}&region_id={{ region_id }}&days={{ window }}"
+       class="{% if window == days %}selected{% endif %}">{{ window }}d</a>
+    {% endfor %}
+  </span>
+</form>
+
+{% for notice in notices %}
+<p class="history-notice">{{ notice }}</p>
+{% endfor %}
+
+{% if chart %}
+<h1 id="history-title" class="item-name">
+  {# No history link: this page is the chart that link leads to. #}
+  {% item_name type_id type_name show_history=False %} &mdash; {{ region_name }} &mdash; {{ days }} days
+</h1>
+<div id="history-chart" data-transactions="{{ show_transactions|yesno:'1,0' }}"></div>
+{{ chart|json_script:"chart-data" }}
+{% elif type_id %}
+<p class="history-notice">No history for this item in {{ region_name }}.</p>
+{% endif %}
+{% endblock %}

@@ -1,5 +1,5 @@
 """Queries over the character's own transactions (the wallet side of trading)."""
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, time, timedelta, timezone
 from functools import wraps
 
 from django.db.models import F, Sum
@@ -34,6 +34,39 @@ def get_market_transactions(*character_ids, type_id=None, type_name=None, locati
         market_transactions = market_transactions[:int(limit)]
 
     return market_transactions
+
+def get_daily_transaction_prices(type_id, first_day, last_day, local_station_ids):
+    """Volume-weighted average price per day, keyed by (day, is_buy, is_local).
+
+    The day is the UTC date, because the market history days these line up with
+    are UTC days. The server timezone is UTC+8, so bucketing on local dates would
+    push every evening fill onto the next day.
+
+    Locality comes from the station: `local_station_ids` holds the trade hub
+    stations of the charted region. A station in that region that is not its hub
+    therefore reads as another region. The error is conservative - it dims a local
+    fill rather than passing a foreign price off as local.
+
+    Corporation transactions count here. A corporation-wallet fill is a real fill
+    at a real price; keeping corporation rows out belongs to the profit
+    statistics, not to a price chart.
+    """
+    assert first_day <= last_day
+    rows = MarketTransaction.objects.filter(
+        type_id=type_id,
+        date__gte=datetime.combine(first_day, time.min, tzinfo=timezone.utc),
+        date__lte=datetime.combine(last_day, time.max, tzinfo=timezone.utc),
+    ).values('date', 'is_buy', 'location_id', 'quantity', 'unit_price')
+
+    totals = {}
+    for row in rows:
+        key = (row['date'].astimezone(timezone.utc).date(),
+               row['is_buy'],
+               row['location_id'] in local_station_ids)
+        value, quantity = totals.get(key, (0, 0))
+        totals[key] = (value + row['unit_price'] * row['quantity'], quantity + row['quantity'])
+    return {key: float(value / quantity)
+            for key, (value, quantity) in totals.items() if quantity > 0}
 
 def get_trade_history(type_id, location_id=None, is_buy=False):
     return get_trade_history_bulk([type_id], location_id=location_id, is_buy=is_buy)[type_id]
