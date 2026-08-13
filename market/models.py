@@ -1,37 +1,5 @@
 from django.db import models
 
-class MarketRegionStatus(models.Model):
-    region_id = models.BigIntegerField(primary_key=True)
-    region_name = models.CharField(max_length=128)
-    orders = models.BigIntegerField()
-    updated_at = models.DateTimeField(auto_now=True)
-    def __str__(self):
-        return 'region_id: ' + str(self.region_id) + ', region_name: '+self.region_name+', orders: ' + str(self.orders) + ', updated_at: '+str(self.updated_at)
-
-class MarketOrder(models.Model):
-    order_id = models.BigIntegerField(primary_key=True)
-    duration = models.IntegerField()
-    is_buy_order = models.BooleanField(default=False)
-    issued = models.DateTimeField()
-    location_id = models.BigIntegerField(db_index=True)
-    min_volume = models.IntegerField()
-    # ISK is stored as numeric(20,2) everywhere: ESI sends at most two
-    # decimals, and float sums accumulate drift.
-    price = models.DecimalField(max_digits=20, decimal_places=2, db_index=True)
-    range = models.CharField(max_length=128)
-    system_id = models.BigIntegerField()
-    type_id = models.BigIntegerField(db_index=True)
-    # Order volumes can exceed 32 bits (Tritanium-class items).
-    volume_remain = models.BigIntegerField()
-    volume_total = models.BigIntegerField()
-    region_id = models.BigIntegerField()
-    created_at = models.DateTimeField(auto_now_add=True)
-    updated_at = models.DateTimeField(auto_now=True)
-    is_in_trade_hub_range = models.BooleanField(default=True)
-    character_id = models.BigIntegerField(db_index=True, blank=True, null=True)
-    def __str__(self):
-        return str(self.order_id) + ' ' + str(self.type_id)
-    
 class MarketTransaction(models.Model):
     transaction_id = models.BigIntegerField(primary_key=True)
     character_id = models.BigIntegerField(db_index=True)
@@ -50,28 +18,6 @@ class MarketTransaction(models.Model):
         ]
     def __str__(self):
         return str(self.date) + ' ' + ('buy' if self.is_buy else 'sell') + ' ' + str(self.quantity) + 'x ' + str(self.type_id) + ' for ' + str(self.unit_price) + '/ea' + ' in ' + str(self.location_id)
-    
-class MarketHistory(models.Model):
-    type_id = models.BigIntegerField()
-    region_id = models.BigIntegerField()
-    date = models.DateField(db_index=True)
-    average = models.DecimalField(max_digits=20, decimal_places=2)
-    highest = models.DecimalField(max_digits=20, decimal_places=2)
-    lowest = models.DecimalField(max_digits=20, decimal_places=2)
-    order_count = models.BigIntegerField()
-    volume = models.BigIntegerField()
-    class Meta:
-        indexes = [
-            models.Index(fields=['type_id', 'region_id']),
-        ]
-        constraints = [
-            # The delete+insert sync maintained this only in practice; the
-            # Sum-based bulk averages assume it.
-            models.UniqueConstraint(fields=['region_id', 'type_id', 'date'],
-                                    name='uq_markethistory_region_type_date'),
-        ]
-    def __str__(self):
-        return str(self.type_id) + ' ' + str(self.date)
     
 class TradeHub(models.Model):
     name = models.CharField(max_length=128)
@@ -106,14 +52,6 @@ class WalletJournal(models.Model):
     context_id_type = models.CharField(max_length=128, blank=True, null=True)
     tax = models.DecimalField(max_digits=20, decimal_places=4, blank=True, null=True)
     tax_receiver_id = models.BigIntegerField(blank=True, null=True)
-
-class MarketNotification(models.Model):
-    order_id = models.BigIntegerField(db_index=True)
-    character_id = models.BigIntegerField(db_index=True)
-    event_type = models.CharField(max_length=32)
-    notification_data = models.JSONField()
-    created_at = models.DateTimeField(auto_now_add=True)
-    sent_at = models.DateTimeField(null=True, blank=True, db_index=True)
 
 class MarketOrderUndercut(models.Model):
     type_id = models.BigIntegerField(db_index=True)

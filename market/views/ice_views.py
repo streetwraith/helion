@@ -69,7 +69,7 @@ def _walk_order_book(orders, target_volume):
 
 @require_character
 def market_ice_index(request):
-    # MarketHistory.date rows are UTC days (ESI convention); compare date-to-date.
+    # History.date rows are UTC days (ESI convention); compare date-to-date.
     today = timezone.now().date()
     context = {}
     try:

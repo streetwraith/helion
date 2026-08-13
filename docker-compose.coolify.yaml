@@ -27,8 +27,6 @@ x-app: &app
     ESI_CLIENT_CALLBACK_URL: ${ESI_CLIENT_CALLBACK_URL}
     ESI_CLIENT_USER_AGENT: ${ESI_CLIENT_USER_AGENT}
     ESI_USER_CONTACT_EMAIL: ${ESI_USER_CONTACT_EMAIL}
-    ESI_CONNECTION_POOL_MAXSIZE: ${ESI_CONNECTION_POOL_MAXSIZE}
-    MARKET_FETCH_THREADS: ${MARKET_FETCH_THREADS}
     CELERY_BEAT_SCHEDULER: ${CELERY_BEAT_SCHEDULER}
 
 services:
@@ -36,7 +34,7 @@ services:
     <<: *app
     # migrate + sync_market_views at the front of the command (Coolify rejects compose-5.3
     # pre_start; its pre-deploy command no-ops for compose). sync_market_views recreates the
-    # orders_hub view and therefore needs the marketmanager-owned market schema: a cluster
+    # orders_hub view and therefore needs the externally-owned market schema: a cluster
     # without it fails here, loudly, at startup. gunicorn binds only after both steps, so the
     # healthcheck below (HTTP GET /login/ -> 200) is also a "migrations + view done" signal
     # that worker/beat gate on.

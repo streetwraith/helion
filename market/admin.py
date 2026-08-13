@@ -1,12 +1,9 @@
 from django.contrib import admin
 from .models import (
-    EsiFetchState, MarketOrder, MarketTransaction, MarketRegionStatus, TradeItem, TradeHub,
-    TrackedCharacter,
+    EsiFetchState, MarketTransaction, TradeItem, TradeHub, TrackedCharacter,
 )
 
-admin.site.register(MarketOrder)
 admin.site.register(MarketTransaction)
-admin.site.register(MarketRegionStatus)
 admin.site.register(TradeItem)
 admin.site.register(TradeHub)
 admin.site.register(TrackedCharacter)
