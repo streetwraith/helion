@@ -48,7 +48,18 @@ through the parent, so new partitions need no new grants.
 
 `market.orders` deliberately carries no timestamps of its own; the snapshot clock is
 `region_status.refreshed_at`. `refreshed_at` is NULL until a region's first successful refresh and
-does not advance on failure — it means "last successful refresh", never liveness.
+does not advance on failure — it means "last successful refresh", never liveness. `region_status`
+is a column contract: additions are safe (the unmanaged models select explicit columns), renames
+or removals break helion and need coordination with the schema owner.
+
+Market history has inherent gaps — ESI reports only days a type actually traded — so the history
+consumers gap-fill missing days (`volume = 0`, `None` prices) instead of expecting dense series.
+History also publishes on EVE's daily rhythm: the route refreshes once per day right after the
+daily downtime (it "expires daily at 11:05"), and the newest row it carries is for the *previous*
+day. The newest available row is therefore one to two days old at any given moment, depending on
+the time of day — identical whether the data comes from ESI directly or from the EVE Ref
+dataset. Every history window anchors on `max(date)` rather than today, so the publication
+rhythm shifts windows instead of emptying them.
 
 ## The orders_hub view
 
@@ -88,7 +99,9 @@ Three deliberate choices in it:
   `location_id = station_id` — hot sell-side queries can use that direct, indexable form.
 
 An unmanaged model (`marketdata.OrdersHub`) sits on the view, so ORM call sites filter on
-`is_in_trade_hub_range` as if the column still existed.
+`is_in_trade_hub_range` as if the column still existed. The index set on `market.orders` belongs
+to the ingestion service — when a helion query wants a different index shape, that is a request
+to the schema owner, not a helion migration.
 
 **The view is created by `manage.py sync_market_views`, not by a migration.** In the test
 database, migrations run before the test setup creates the fake `market` tables, so a
@@ -113,6 +126,10 @@ time:
 Per-character rewrites make an HTTP 304 a correct no-op: unchanged upstream data means the rows
 are already right. This assumes the ETag cache and the database move together — restoring one
 without the other leaves stale 304s until the upstream data changes.
+
+One inherent window: a just-placed own order reaches the order snapshots before the next
+`CharacterOrder` refresh sees it, so it can look like a competitor for up to the route's cache
+TTL (20 minutes). Undercut rows dedupe rather than retract, which keeps that noise bounded.
 
 ## The ESI fetch scheduler
 
@@ -148,6 +165,36 @@ and shared with every other consumer on the host**:
 Thresholds are env vars (`ESI_FETCH_DISABLE_AFTER`, `ESI_FETCH_BACKOFF_BASE_SECONDS`,
 `ESI_FETCH_BACKOFF_CAP_SECONDS`) with working defaults.
 
+The feeds and their routes:
+
+| Feed | Route | Server TTL | Rate bucket |
+|---|---|---|---|
+| orders | `/characters/{id}/orders` | 1200 s | none |
+| wallet | `/characters/{id}/wallet/transactions` + `/wallet/journal` | 3600 s | char-wallet, 150/15 min |
+| assets | `/characters/{id}/assets` | 3600 s | char-asset, 1800/15 min |
+
+A full hourly cycle for a handful of characters spends under 2% of any bucket; the failure
+policy, not the budget, is the binding constraint.
+
+## The trade-hub jump table
+
+`SystemHubJumps` holds stargate distances from every system in a hub region to that region's hub
+(625 rows for the five hubs). It exists because the numeric buy-order ranges need it and the
+`sde` schema carries no stargate graph — gate ids exist but nothing resolves them to destination
+systems — so the distances come from ESI's `/route`, rebuilt by `manage.py recompute_hub_jumps`.
+That route sits in its own rate bucket, so a rebuild cannot contend with market ingestion. It is
+static reference data: run the command after a `TradeHub` change or an SDE map update, never on a
+schedule. The command warns when a hub region has systems without a jump row, because the view
+treats missing coverage as out of range.
+
+## The PLEX ticker
+
+PLEX trades on a universe-wide pseudo-region (`19000001`, `GPMR-01` in the SDE) that the
+ingestion covers like any other region. The header ticker reads `min(price)` over its sell
+orders straight from `market.orders` — the raw table, not the hub view: the region has no trade
+hub and its orders sit in stations across the whole universe, so a hub-range filter would be
+wrong.
+
 ## Undercut detection
 
 A one-minute beat task compares each hub region's `region_status.refreshed_at` against a cached
@@ -160,7 +207,9 @@ recompute; results dedupe on a unique constraint. No webhooks, no pub/sub.
 External schemas are faked minimally: the test setup creates the `sde` and `market` tables with
 only the columns the app touches, then creates the view through the same `sync_market_views`
 command deploys use. Tests write through the unmanaged models as if the tables were real. ESI is
-stubbed at module seams; no test touches the network.
+stubbed at module seams; no test touches the network. Stubbing convention: service-to-service
+calls are patched at the defining module (they resolve module attributes there), view-level
+stubs patch the `market_service` facade, which views resolve at call time.
 
 The suite needs a role that can create the throwaway test database — if the app's role cannot,
 set `TEST_DATABASE_URL` to one that can (see `README.md`).

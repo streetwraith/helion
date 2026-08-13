@@ -15,7 +15,7 @@ run it.
 
 ## Running
 
-`requirements.txt` is the single source of truth for dependencies — it drives both the local venv and the production image. Configuration comes from a `.env` file at the repo root (`SECRET_KEY`, `DATABASE_URL`, `REDIS_URL`, `ESI_CLIENT_*`, `ESI_USER_CONTACT_EMAIL`, `CELERY_BEAT_SCHEDULER`; optional `ESI_FETCH_*` tunables are described in `PROJECT.md`).
+`requirements.txt` is the single source of truth for dependencies — it drives both the local venv and the production image. Configuration comes from a `.env` file at the repo root (`SECRET_KEY`, `DATABASE_URL`, `REDIS_URL`, `ALLOWED_HOSTS` — falls back to `*` when unset, so set it in production — `ESI_CLIENT_*`, `ESI_USER_CONTACT_EMAIL`, `CELERY_BEAT_SCHEDULER`; optional `ESI_FETCH_*` tunables are described in `PROJECT.md`).
 
 ```sh
 uv venv .venv
