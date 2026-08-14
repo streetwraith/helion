@@ -1,125 +1,21 @@
-import math
 from datetime import datetime, timedelta, timezone
 
-from django.db.models import Count, ExpressionWrapper, F, FloatField, Max, Min, Q
+from django.db.models import Count
 from django.shortcuts import render
 
 from evesde import services as sde_service
 from helion.decorators import require_character
 from market.constants import REGION_ID_DOMAIN, REGION_ID_FORGE
 from market.models import CharacterOrder, MarketOrderUndercut, TradeHub, TradeItem
-from marketdata.models import Order, OrdersHub, RegionStatus
+from marketdata.models import OrdersHub, RegionStatus
 from market.services import market_service
 
-def _fourth_significant_digit(price):
-    if price == 0:
-        return 0
-    exponent = math.floor(math.log10(abs(price)))
-    fourth_digit_place = exponent - 3
-    return 10 ** fourth_digit_place
-
-def _best_orders_by_type(orders, is_buy):
-    """Cheapest sell (or highest buy) order per type, one DISTINCT ON query."""
-    direction = '-price' if is_buy else 'price'
-    return {
-        order.type_id: order
-        for order in orders.filter(is_buy_order=is_buy).order_by('type_id', direction).distinct('type_id')
-    }
-
 def market_trade_hub_mistakes(request, region_id):
-    orders = OrdersHub.objects.annotate(
-        total_value=ExpressionWrapper(
-            F('price') * F('volume_remain'),
-            output_field=FloatField()
-        )
-    ).filter(
-        region_id=region_id,
-        is_in_trade_hub_range=True,
-        duration__lte=90,
-    )
-
-    best_prices = (
-        orders
-        .values('type_id')
-        .annotate(
-            highest_buy_price=Max('price', filter=Q(is_buy_order=True)),
-            lowest_sell_price=Min(
-                'price',
-                filter=Q(
-                    is_buy_order=False,
-                    total_value__gte=1_000_000
-                )
-            ),
-        )
-        .filter(
-            highest_buy_price__isnull=False,
-            lowest_sell_price__isnull=False,
-        )
-    )
-
-    matches = []
-    for item in best_prices.iterator():
-        item['highest_buy_price'] = float(item['highest_buy_price'])
-        item['lowest_sell_price'] = float(item['lowest_sell_price'])
-        min_increase = _fourth_significant_digit(item['highest_buy_price'])
-        if item['lowest_sell_price'] <= item['highest_buy_price'] + min_increase:
-            item['min_increase'] = min_increase
-            matches.append(item)
-
-    matching_type_ids = [item['type_id'] for item in matches]
-
-    # All sell rows for the matching types in one query; the per-type walks
-    # (second-best price, volume at the lowest price) happen in memory.
-    sell_rows_by_type = {}
-    sell_rows = orders.filter(
-        type_id__in=matching_type_ids, is_buy_order=False
-    ).values('type_id', 'price', 'volume_remain', 'total_value')
-    for row in sell_rows:
-        # Float on both sides, so the lowest-price equality tests below keep
-        # comparing like with like.
-        row['price'] = float(row['price'])
-        row['total_value'] = float(row['total_value'])
-        sell_rows_by_type.setdefault(row['type_id'], []).append(row)
-
-    # Jita reference prices, deliberately unfiltered (any station, any duration).
-    jita_reference = Order.objects.filter(type_id__in=matching_type_ids, region_id=REGION_ID_FORGE)
-    jita_sells = _best_orders_by_type(jita_reference, is_buy=False)
-    jita_buys = _best_orders_by_type(jita_reference, is_buy=True)
-
-    matching_results = []
-    for item in matches:
-        type_id = item['type_id']
-        rows = sell_rows_by_type.get(type_id, [])
-        other_prices = [row['price'] for row in rows if row['price'] != item['lowest_sell_price']]
-        second_best_sell_price = min(other_prices) if other_prices else None
-        lowest_sell_price_volume = sum(
-            row['volume_remain'] for row in rows
-            if row['price'] == item['lowest_sell_price'] and row['total_value'] >= 1_000_000
-        )
-        jita_sell_price = jita_sells.get(type_id)
-        jita_buy_price = jita_buys.get(type_id)
-
-        matching_results.append({
-            'type_id': type_id,
-            'highest_buy_price': item['highest_buy_price'],
-            'lowest_sell_price': item['lowest_sell_price'],
-            'lowest_sell_price_volume': lowest_sell_price_volume,
-            'second_best_sell_price': second_best_sell_price,
-            'percent_diff': (second_best_sell_price - item['lowest_sell_price'])/item['lowest_sell_price']*100 if second_best_sell_price else None,
-            'profit': (second_best_sell_price - item['lowest_sell_price'])*lowest_sell_price_volume if second_best_sell_price else 0,
-            'jita_sell_price': jita_sell_price.price if jita_sell_price else None,
-            'jita_buy_price': jita_buy_price.price if jita_buy_price else None,
-            'min_increase': item['min_increase'],
-        })
-
-    type_names_dict = sde_service.get_type_names([item['type_id'] for item in matching_results])
-    for item in matching_results:
-        item['name'] = type_names_dict.get(item['type_id'], 'None')
-
-    matching_results = sorted(matching_results, key=lambda x: x['profit'], reverse=True)
+    refreshed_at, matching_results = market_service.get_mistakes(region_id)
 
     return render(request, "market/trade_hub/mistakes.html", {
         'matching_type_ids': matching_results,
+        'refreshed_at': refreshed_at.isoformat() if refreshed_at else '',
         'trade_hub_region': TradeHub.objects.get(region_id=region_id)
     })
 
@@ -210,18 +106,18 @@ def market_trade_hub(request, region_id):
         is_in_trade_hub_range=True,
         type_id__in=type_ids,
     )
-    global_lowest_sells = _best_orders_by_type(market_orders, is_buy=False)
-    global_highest_buys = _best_orders_by_type(market_orders, is_buy=True)
+    global_lowest_sells = market_service.best_orders_by_type(market_orders, is_buy=False)
+    global_highest_buys = market_service.best_orders_by_type(market_orders, is_buy=True)
 
     competitor_orders = market_orders.filter(region_id=region_id).exclude(
         order_id__in=CharacterOrder.objects.values('order_id'))
-    station_lowest_sells = _best_orders_by_type(competitor_orders, is_buy=False)
-    station_highest_buys = _best_orders_by_type(competitor_orders, is_buy=True)
+    station_lowest_sells = market_service.best_orders_by_type(competitor_orders, is_buy=False)
+    station_highest_buys = market_service.best_orders_by_type(competitor_orders, is_buy=True)
 
     # The comparison-hub columns include own orders.
     other_hub_orders = market_orders.filter(region_id=other_region_id)
-    other_lowest_sells = _best_orders_by_type(other_hub_orders, is_buy=False)
-    other_highest_buys = _best_orders_by_type(other_hub_orders, is_buy=True)
+    other_lowest_sells = market_service.best_orders_by_type(other_hub_orders, is_buy=False)
+    other_highest_buys = market_service.best_orders_by_type(other_hub_orders, is_buy=True)
 
     my_orders_by_type = {}
     for order in character_order_list:
@@ -254,6 +150,9 @@ def market_trade_hub(request, region_id):
     context["item_data"] = {}
     context["item_dict"] = item_dict
     context["item_dict_extra"] = item_dict_extra
+    # The notification poller's start cursor, so a reload never reports
+    # undercuts that happened while the page was closed.
+    context["max_undercut_id"] = market_service.latest_undercut_id(region_id, character_id)
 
     isk_in_escrow = 0
     isk_in_sell_orders = 0

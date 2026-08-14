@@ -16,21 +16,25 @@
     padding: 2px 8px;
 }
 
-#tx-notify {
+.notify-panel {
     font-size: 0.8em;
     margin: 4px 0;
 }
 
-#tx-notify * {
+.notify-panel * {
     display: inline;
 }
 
-#tx-notify-status {
+.notify-panel .notify-threshold {
+    width: 4em;
+}
+
+.notify-status {
     color: #b03030;
     margin-left: 8px;
 }
 
-#tx-notify-banner {
+.notify-banner {
     background: #2e7d32;
     color: #fff;
     font-size: 0.9em;
@@ -38,8 +42,16 @@
     padding: 2px 8px;
 }
 
-#tx-notify-banner a {
+.notify-banner a {
     color: #fff;
+}
+
+/* Marks a row a poller just told you about. The outline sits on the name cell
+   only: the data cells carry their own backgrounds, and a row background would
+   fight the spread gradients and the red and green price cells. */
+tr.notify-new td.item-name {
+    outline: 2px solid #2e7d32;
+    outline-offset: -2px;
 }
 
 #user-panel {

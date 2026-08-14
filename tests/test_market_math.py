@@ -11,7 +11,7 @@ from market.services import market_service
 from market.views.hauling_views import MarketDeal
 from market.views.ice_views import ICE_TYPES, calculate_average_sell_price_from_yield
 from market.views.loyalty_points_views import LpDeal
-from market.views.station_trading_views import _fourth_significant_digit
+from market.services.mistakes import _fourth_significant_digit
 
 
 def make_history(days, average=150.0, highest=200.0, lowest=100.0, volume=10):

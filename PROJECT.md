@@ -254,6 +254,86 @@ alive while the toggle still reads "on" is the silent failure worth avoiding.
 HTTP the toggle still runs the poller and the banner and reports that the OS card needs HTTPS. That
 keeps the whole mechanism except the card testable off a non-HTTPS dev host.
 
+**The machinery above is shared.** `notify_poller.js` owns the toggle, the `localStorage` restore,
+the permission rules, the three-failure stop and the banner. Each page supplies only its endpoint,
+its cursor and its wording. The rules in this section therefore apply to the two market-data
+pollers below as well, and are stated once.
+
+## Market-data notifications
+
+Two more pages can raise a browser notification: the mistakes page, for a new underpriced sell
+order, and the trade-hub page, for an own order that lost the top of the book. Both follow the
+transaction poller's shape — one toggle, default off, remembered per page, no polling while off.
+
+**The pacing problem is the opposite of the wallet feed's.** Helion owns the wallet schedule and can
+read the next due time out of `EsiFetchState`. Marketmanager owns the market schedule and publishes
+only `region_status.refreshed_at`, its *last success*. There is no next-due to ride on. So the
+browser polls on a flat 15 s timer and the server answers a probe: unchanged regions cost one row
+read from a 25-row table, about 5 ms measured. Guessing marketmanager's cadence was rejected — it
+would copy a constant this app does not control, and a drift there would show up as a quiet market.
+
+**A poller only ever watches the hub whose page is open.** Both endpoints take the region from the
+URL. Watching two hubs means two tabs.
+
+**A stalled region is deliberately silent.** If ingestion breaks, `refreshed_at` stops moving, both
+pollers go quiet, and that is indistinguishable from a calm market. The market index page prints
+`refreshed_at` per region and remains the place to check. This is a known and accepted gap.
+
+### Mistakes
+
+**The match list is cached under the snapshot that produced it.** The aggregate scans every order
+row in the region: 3 to 12 s for Jita depending on the database buffer state. The key is
+`mistakes:{region_id}:{refreshed_at}`, so it self-invalidates on the next refresh and needs no
+cleanup and no beat task. The page render reads the same cache, which also cut a warm Jita page from
+3.4 s to 0.05 s. The first caller after each refresh still pays the aggregate, and that caller is a
+background poll rather than a person.
+
+**A mistake is identified by an order id, not by an item.** A mispriced order can sit unbought for
+hours, which at a 15 s poll would notify dozens of times. The identity is the cheapest qualifying
+sell order; when several sellers share the lowest price it is the smallest of their ids, so the
+identity does not move when the database returns that set in another order. Partial buyouts keep the
+id and stay quiet. A relist or a second, deeper mistake gets a new id and notifies.
+
+**The seen set records every observed order id, not only the notified ones.** Lowering the threshold
+box therefore never fires a backlog for mistakes already on screen. The set is seeded from the
+rendered rows, so a reload and a fresh toggle both mean "tell me what happens next".
+
+**The threshold is a client-side filter and never reaches the server.** It is stored per region,
+because the hubs differ by more than two orders of magnitude: measured top profits run 320M in Jita
+against 0.8M in Rens, so one number cannot suit them all. An empty box means no floor. A match with
+no second-best sell price has no exit in that station, so its profit is zero and it never notifies
+at any threshold.
+
+**The rows are returned as rendered HTML and the table body is swapped whole.** One template,
+`_fragment_mistakes_rows.html`, renders the page and every poll, so the seed the page hands the
+poller cannot drift from the rows the poller swaps in. The swap happens on every refresh, not only
+when a card fires, because mistakes clear as well as appear. The `data-order-id`, `data-profit` and
+`data-item-name` attributes on each row are the poller's whole input.
+
+### Undercuts and outbids
+
+A sell order is **undercut**; a buy order is **outbid**. The two words carry one meaning each.
+
+**The rows already exist, so there is no new state.** The poller reads `MarketOrderUndercut` with a
+cursor on `id`, seeded from the newest row rendered into the page. The unique constraint on
+`(order_id, order_issued)` gives free deduplication and sets the semantics: you hear once per order
+per repricing cycle. A second, deeper competitor writes no row and stays silent, and so does a new
+competitor after the first one cancels. The rationale is that you were already told to act.
+
+**The notifications are scoped to the session character; the page's undercut columns are not.**
+`market_trade_hub` filters `MarketOrderUndercut` by `type_id` and `region_id` only, so its
+undercut-time columns mix in any tracked character's rows. That is a pre-existing defect, recorded
+here and deliberately left alone.
+
+**The page's item filter deliberately does not reach the poller**, for the reason `transactions_since`
+gives: a filtered table is browsing state, and a missed undercut costs more than a card about a
+hidden row.
+
+**The page is never re-rendered.** Building the Amarr trade-hub view costs 24 s, so the poller marks
+the affected rows through `data-type-id` and leaves every cell as rendered. The card and the banner
+carry the fresh prices; the table stays honest as one snapshot. A poll returns at most 50 rows, and
+the cursor advances to the last of them, so a longer burst drains over the following polls.
+
 ## The item name component
 
 Every item name in the UI renders through one inclusion tag, `{% item_name type_id name %}`
@@ -375,3 +455,20 @@ stubs patch the `market_service` facade, which views resolve at call time.
 
 The suite needs a role that can create the throwaway test database — if the app's role cannot,
 set `TEST_DATABASE_URL` to one that can (see `README.md`).
+
+### The notification pollers have no automated browser cover
+
+The endpoints are tested; the JavaScript is not. `notify_poller.js` holds the toggle, the permission
+rules and the failure policy for all three pages, so an edit to it can break a page silently — a
+poller that stops notifying looks exactly like a quiet market. Walk this checklist by hand after
+touching any of the four notification files:
+
+1. **Transactions.** Open the page, turn the toggle on, grant permission. Reload: the toggle stays
+   on and no card fires for transactions already listed.
+2. **Mistakes.** Open a hub, set the profit box, reload: the box keeps its value. Open a second hub
+   and confirm its box is independent. Wait one refresh cycle and confirm the table body swaps.
+3. **Trade hub.** Open a hub, turn the toggle on, and confirm a new undercut marks the matching row
+   and leaves the other cells unchanged.
+4. **All three.** Turn a toggle off and confirm the banner clears and polling stops.
+
+Over plain HTTP the OS card never appears by design, so the banner is the observable part in dev.

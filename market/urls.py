@@ -18,6 +18,8 @@ from .views import (
     market_history,
     type_search,
     transactions_since,
+    mistakes_since,
+    undercuts_since,
 )
 
 urlpatterns = [
@@ -53,4 +55,6 @@ urlpatterns = [
     path("ajax/transaction_history", transaction_history, name="transaction_history"),
     path("ajax/type_search", type_search, name="type_search"),
     path("ajax/transactions_since", transactions_since, name="transactions_since"),
+    path("ajax/mistakes_since/<int:region_id>", mistakes_since, name="mistakes_since"),
+    path("ajax/undercuts_since/<int:region_id>", undercuts_since, name="undercuts_since"),
 ]

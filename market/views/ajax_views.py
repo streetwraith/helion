@@ -1,5 +1,6 @@
 from market.services import market_service
 from evesde import services as sde_service
+from django.shortcuts import get_object_or_404
 from django.template.loader import render_to_string
 from django.http import JsonResponse
 from helion.decorators import require_character
@@ -10,6 +11,12 @@ from esi.exceptions import ESIBucketLimitException, ESIErrorLimitException
 from esi.models import Token
 
 ESI_RATE_LIMIT_EXCEPTIONS = (ESIErrorLimitException, ESIBucketLimitException)
+
+# How long a market-data poller waits before it looks again. Marketmanager owns
+# the refresh schedule and publishes only its last success, so there is nothing
+# to predict: the probe is a single indexed row read, and a short fixed wait
+# beats copying a cadence this app does not control.
+MARKET_POLL_SECONDS = 15
 
 def _rate_limited_response(exc):
     return JsonResponse(
@@ -60,6 +67,52 @@ def transactions_since(request):
     summary['latest'] = (_latest_transaction_detail(character_id, after)
                          if summary['count'] == 1 else None)
     summary['next_poll_seconds'] = market_service.seconds_until_next_wallet_fetch()
+    return JsonResponse(summary)
+
+def mistakes_since(request, region_id):
+    """The region's mistakes, but only when its market snapshot moved on.
+
+    The browser sends back the snapshot stamp it last saw. An unchanged region
+    answers from one indexed row read and never runs the aggregate, which takes
+    about 12 seconds for Jita. The rows come back as rendered HTML rather than
+    as data: the page swaps them in whole, and one template then produces the
+    table on page load and on every poll.
+    """
+    if request.headers.get('x-requested-with') != 'XMLHttpRequest':
+        return JsonResponse({'error': 'bad request'}, status=400)
+    trade_hub = get_object_or_404(TradeHub, region_id=region_id)
+    # The probe answers from this one row. Only a snapshot the browser has not
+    # seen is worth the aggregate below it.
+    seen = market_service.current_snapshot(region_id)
+    if request.GET.get('seen', '') == (seen.isoformat() if seen else ''):
+        return JsonResponse({'changed': False, 'next_poll_seconds': MARKET_POLL_SECONDS})
+    refreshed_at, matches = market_service.get_mistakes(region_id)
+    stamp = refreshed_at.isoformat() if refreshed_at else ''
+    html = render_to_string('market/trade_hub/_fragment_mistakes_rows.html',
+                            {'matching_type_ids': matches, 'trade_hub_region': trade_hub})
+    return JsonResponse({'changed': True, 'refreshed_at': stamp, 'html': html,
+                         'next_poll_seconds': MARKET_POLL_SECONDS})
+
+@require_character
+def undercuts_since(request, region_id):
+    """Own orders newly undercut or outbid in this region, after a cursor.
+
+    The page's item filter deliberately does not apply, for the reason
+    transactions_since gives: a filtered table is browsing state, and a missed
+    undercut costs more than a card about a row the filter hides.
+    """
+    if request.headers.get('x-requested-with') != 'XMLHttpRequest':
+        return JsonResponse({'error': 'bad request'}, status=400)
+    try:
+        after = int(request.GET.get('after', ''))
+    except ValueError:
+        return JsonResponse({'error': 'invalid after'}, status=400)
+    if after < 0:
+        return JsonResponse({'error': 'invalid after'}, status=400)
+    get_object_or_404(TradeHub, region_id=region_id)
+    character_id = request.session['esi_token']['character_id']
+    summary = market_service.get_undercuts_since(region_id, character_id, after=after)
+    summary['next_poll_seconds'] = MARKET_POLL_SECONDS
     return JsonResponse(summary)
 
 def _item_name_html(type_id, name, is_trade_item):

@@ -1,12 +1,22 @@
 """Order-book and trade-item queries against the local database."""
 from django.core.cache import cache
 from django.db import connection
-from django.db.models import Min
+from django.db.models import Max, Min
 
+from evesde import services as sde_service
 from evesde.models import Type
 from market.constants import GLOBAL_PLEX_MARKET_REGION_ID, PLEX_TYPE_ID, REGION_ID_FORGE
 from market.models import MarketOrderUndercut, TradeHub, TradeItem
 from marketdata.models import Order, OrdersHub
+
+
+def best_orders_by_type(orders, is_buy):
+    """Cheapest sell (or highest buy) order per type, one DISTINCT ON query."""
+    direction = '-price' if is_buy else 'price'
+    return {
+        order.type_id: order
+        for order in orders.filter(is_buy_order=is_buy).order_by('type_id', direction).distinct('type_id')
+    }
 
 def find_type_ids_by_market_groups(market_group_id, excluded_meta_ids=None):
     query = """
@@ -122,6 +132,54 @@ def find_undercut_sell_orders(region_id, character_id):
 
 def find_undercut_buy_orders(region_id, character_id):
     return _find_undercut_orders(region_id, character_id, is_buy=True)
+
+# One poll never carries more than this. The cursor advances to the last row
+# returned, so a longer burst drains over the following polls instead of
+# arriving as one unbounded payload.
+UNDERCUT_POLL_LIMIT = 50
+
+def latest_undercut_id(region_id, character_id):
+    """The newest undercut row id, as a browser poller's start cursor."""
+    newest = MarketOrderUndercut.objects.filter(
+        region_id=region_id, character_id=character_id
+    ).aggregate(newest=Max('id'))['newest']
+    return newest or 0
+
+def get_undercuts_since(region_id, character_id, after):
+    """Own orders newly undercut or outbid in the region, after a cursor.
+
+    A sell order is undercut and a buy order is outbid. One MarketOrderUndercut
+    row exists per order and repricing, so a deeper competitor on an order the
+    caller already knows about adds no row: the caller hears once, and hears
+    again only after repricing that order.
+    """
+    assert after >= 0, "the cursor is a MarketOrderUndercut id"
+    rows = list(MarketOrderUndercut.objects.filter(
+        region_id=region_id, character_id=character_id, id__gt=after
+    ).order_by('id').values(
+        'id', 'type_id', 'is_buy_order', 'order_price', 'competitor_price'
+    )[:UNDERCUT_POLL_LIMIT])
+
+    summary = {'count': 0, 'undercut': 0, 'outbid': 0, 'max_id': after, 'items': []}
+    if not rows:
+        return summary
+
+    names = sde_service.get_type_names([row['type_id'] for row in rows])
+    for row in rows:
+        summary['count'] += 1
+        if row['is_buy_order']:
+            summary['outbid'] += 1
+        else:
+            summary['undercut'] += 1
+        summary['max_id'] = max(summary['max_id'], row['id'])
+        summary['items'].append({
+            'type_id': row['type_id'],
+            'name': names.get(row['type_id'], str(row['type_id'])),
+            'is_buy': row['is_buy_order'],
+            'my_price': float(row['order_price']),
+            'their_price': float(row['competitor_price']),
+        })
+    return summary
 
 def get_shopping_list_prices(item_names):
     """The lowest sell price per region for each name. The names must be lower case.

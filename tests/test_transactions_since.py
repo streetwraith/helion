@@ -202,7 +202,8 @@ class TestPageWiring:
         assert 'data-cursor="10"' in html
         assert 'data-endpoint="%s"' % URL in html
         assert 'data-unfiltered-url="%s"' % reverse("market_transactions") in html
-        assert 'id="tx-notify-toggle"' in html
+        # The shared poller in notify_poller.js finds the toggle by class.
+        assert 'class="notify-toggle"' in html
         assert 'id="tx-notify-banner"' in html
 
     def test_an_empty_scope_renders_a_zero_cursor(self, character_client, trade_hubs):

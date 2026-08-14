@@ -6,10 +6,21 @@
 
 {% block js %}
 <script src="{% static 'market/js/history_dialog.js' %}"></script>
+<script src="{% static 'js/notify_poller.js' %}"></script>
+<script src="{% static 'market/js/undercut_notifications.js' %}"></script>
 {% endblock %}
 
 {% block content %}
 <h1>Station trading: {{ trade_hub_region.name }}</h1>
+
+<div id="undercut-notify" class="notify-panel"
+     data-endpoint="{% url 'undercuts_since' region_id=trade_hub_region.region_id %}"
+     data-region-id="{{ trade_hub_region.region_id }}"
+     data-cursor="{{ max_undercut_id|default:0 }}">
+  <label><input type="checkbox" class="notify-toggle"> notify me about new undercuts</label>
+  <span class="notify-status"></span>
+</div>
+<div id="undercut-notify-banner" class="notify-banner" hidden></div>
 
 <form action="{% url 'market_trade_hub' region_id=trade_hub_region.region_id %}" method="POST">
     {% csrf_token %}

@@ -1,12 +1,28 @@
 {% extends "market_base.html" %}
 
-{% load static custom_filters item_tags %}
+{% load static %}
 
 {% block title %}mistakes | {{ trade_hub_region.name }} | Helion{% endblock %}
 
+{% block js %}
+<script src="{% static 'js/notify_poller.js' %}"></script>
+<script src="{% static 'market/js/mistake_notifications.js' %}"></script>
+{% endblock %}
+
 {% block content %}
 <h1>Station trading: {{ trade_hub_region.name }} mistakes</h1>
-<table class="market" style="width: auto;">
+
+<div id="mistake-notify" class="notify-panel"
+     data-endpoint="{% url 'mistakes_since' region_id=trade_hub_region.region_id %}"
+     data-region-id="{{ trade_hub_region.region_id }}"
+     data-refreshed-at="{{ refreshed_at }}">
+  <label><input type="checkbox" class="notify-toggle"> notify me about new mistakes</label>
+  <label>min profit <input type="number" class="notify-threshold" min="0" step="1"> M</label>
+  <span class="notify-status"></span>
+</div>
+<div id="mistake-notify-banner" class="notify-banner" hidden></div>
+
+<table id="mistakes-table" class="market" style="width: auto;">
     <thead>
         <tr>
             <th>item</th>
@@ -21,22 +37,9 @@
         </tr>
     </thead>
     <tbody>
-        {% for result in matching_type_ids %}
-        <tr data-type-id="{{result.type_id}}">
-            <td class="item-name">{% item_name result.type_id result.name region_id=trade_hub_region.region_id %}</td>
-            <td>{{ result.highest_buy_price|isk_value }}</td>
-            <td>{{ result.lowest_sell_price|isk_value }}</td>
-            <td>{{ result.lowest_sell_price_volume }}</td>
-            <td>{{ result.second_best_sell_price|isk_value }}</td>
-            <td>{{ result.percent_diff|floatformat:0 }}</td>
-            <td>{{ result.profit|isk_value }}</td>
-            <td>{{ result.jita_sell_price|isk_value }}</td>
-            <td class="{% if result.lowest_sell_price <= result.jita_buy_price %}green{% else %}{% endif %}">{{ result.jita_buy_price|isk_value }}</td>
-        </tr>
-        {% endfor %}
+        {% include 'market/trade_hub/_fragment_mistakes_rows.html' %}
     </tbody>
 
 </table>
 
 {% endblock %}
-

@@ -9,7 +9,7 @@ from django.utils import timezone
 
 from market import context_processors
 from market.models import TradeHub
-from market.services import orders
+from market.services import mistakes, orders
 from marketdata.models import RegionStatus
 
 
@@ -133,11 +133,12 @@ class FakeCache:
 
 @pytest.fixture(autouse=True)
 def isolated_shared_caches(monkeypatch):
-    # The price ticker and the fetch-warning bar (context processor) run on
-    # every authenticated page render: keep all tests off the shared dev
-    # Redis. The values themselves come from the test database.
+    # The price ticker, the fetch-warning bar (context processor) and the
+    # mistakes match list all cache: keep all tests off the shared dev Redis.
+    # The values themselves come from the test database.
     monkeypatch.setattr(orders, "cache", FakeCache())
     monkeypatch.setattr(context_processors, "cache", FakeCache())
+    monkeypatch.setattr(mistakes, "cache", FakeCache())
 
 
 CHARACTER_ID = 900001
