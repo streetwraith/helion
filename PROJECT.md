@@ -279,6 +279,44 @@ region and the others.
   to two regions. The five hub stations cover 97.5% of the transactions exactly; everything else
   reads as another region, which is the conservative error.
 
+## The blueprint chart
+
+`/market/industry` answers one question about one blueprint: was converting the materials into the
+product worth it, day by day. It is a stack of the nine material costs with the product value drawn
+over it, and the margin percent in a panel below. It takes no parameters — the recipe, the material
+efficiency and the region are fixed, and uPlot drag-zoom covers reading a sub-period.
+
+The point of the page is that a manufacturer holds materials, and materials swing. Over two years
+in Domain the conversion clears about 0.06% on average and pays on roughly half the days, while the
+material cost itself swings from 653k to 1.67M ISK per run. Selling the materials into a spike
+often beats building.
+
+- **Both sides read the daily `average`.** Materials and product then face the same bid-ask spread
+  and it cancels, so the chart measures the conversion rather than the trader's execution. The
+  same cancellation is why the product line carries no sales tax or broker fee: selling the
+  materials instead pays those too. `highest`/`lowest` would be a tempting execution proxy but
+  they are single-trade extremes, and no historical order book exists to do better.
+- **Nothing is smoothed.** The margin's day-over-day standard deviation (6.4 points) exceeds the
+  standard deviation of its level (5.8), so the raw series is noisy — but a one-day price spike is
+  the event the page exists to catch, and a 7-day mean would flatten it to a seventh of its size.
+- **The recipe lives in `market/industry_constants.py`.** The `sde` schema has no blueprint table,
+  so the base quantities are hardcoded, like the reprocessing yields in `ice_constants.py`. They
+  stay *base* quantities and the ME rule applies at read time, so they match the blueprint in game.
+- **`material_quantity` keeps EVE's `round(x, 2)` before the `ceil`.** It is not cosmetic: without
+  it `350 * 0.9` is `315.00000000000006` and the job consumes a whole extra unit. The `max(runs, …)`
+  floor is EVE's too — every run consumes at least one unit of every material.
+- **The material rows are a running sum**, so uPlot draws each material as the band between its own
+  row and the row below. The total repeats as its own row because a band edge carries no stroke and
+  the stack top is also a line. The ISK scale is pinned to zero: a clipped baseline would make the
+  bands lie about their share of the cost.
+- **A day on which a material never traded carries the last price forward.** Real history has one
+  such day in two years. A day *before* a material's first trade carries None through the total and
+  the margin instead, so the chart breaks rather than claim a total that is short one material;
+  leading days of that kind are trimmed off.
+
+The page reads no character data, so it needs no selected character. Its dark-mode rules are
+duplicated from `history.css`; the app has no shared dark-mode stylesheet yet.
+
 ## Testing
 
 External schemas are faked minimally: the test setup creates the `sde` and `market` tables with

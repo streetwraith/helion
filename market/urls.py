@@ -15,6 +15,7 @@ from .views import (
     market_transactions,
     market_trade_hub_mistakes,
     market_ice_index,
+    market_industry_index,
     market_history,
     type_search,
 )
@@ -41,6 +42,9 @@ urlpatterns = [
 
     # ice
     path("ice", market_ice_index, name="market_ice_index"),
+
+    # industry
+    path("industry", market_industry_index, name="market_industry_index"),
 
     # loyalty points
     path("lp", lp_index, name="lp_index"),

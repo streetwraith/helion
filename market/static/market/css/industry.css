@@ -1,0 +1,86 @@
+#industry-title {
+    font-size: 1.1em;
+    font-weight: normal;
+    padding: 2px 0;
+}
+
+.industry-notice {
+    color: #b03030;
+    padding: 2px 0;
+}
+
+#industry-chart,
+#industry-margin {
+    width: 100%;
+}
+
+/* uPlot's legend is a <table>, so helion.css lands its data-table styling on it:
+   a 1px border on every th and td, and a light blue row hover. The legend is not
+   a data table, so the borders go. The hover stays - it is the affordance for the
+   click that toggles a series. */
+.u-legend th,
+.u-legend td {
+    border: none;
+}
+
+/* The swatch carries no border of its own either (legend.markers.width is 0), so
+   it shows one only on hover. box-sizing is border-box for everything inside
+   .uplot, so the swatch does not change size when the border appears. */
+.u-legend .u-series:hover .u-marker {
+    border: 2px solid #2a78d6;
+}
+
+/* Dark mode covers this page only, the same way history.css does it for the
+   history page. This stylesheet loads on the industry page alone, so the plain
+   selectors below reach nothing else in the app. The chart canvases are not
+   stylable: industry_chart.js carries the matching axis, grid and series colours
+   and rebuilds both charts on a theme switch. */
+@media (prefers-color-scheme: dark) {
+    body {
+        background: #1a1a19;
+        color: #c3c2b7;
+    }
+
+    a {
+        color: #86b6ef;
+    }
+
+    a:visited {
+        color: #b7a3e9;
+    }
+
+    #user-panel,
+    header nav {
+        border-bottom-color: #383835;
+    }
+
+    .industry-notice {
+        color: #e66767;
+    }
+
+    /* uPlot hardcodes these two: a dark wash for the drag-zoom selection and a
+       crosshair that reads on the dark surface. */
+    .u-select {
+        background: rgba(255, 255, 255, 0.10);
+    }
+
+    .u-hz .u-cursor-x,
+    .u-vt .u-cursor-y {
+        border-right-color: #898781;
+    }
+
+    .u-hz .u-cursor-y,
+    .u-vt .u-cursor-x {
+        border-bottom-color: #898781;
+    }
+
+    .u-legend .u-series:hover .u-marker {
+        border-color: #3987e5;
+    }
+
+    /* The row hover keeps helion.css's light blue, which is a light surface, so
+       the text on it needs dark ink instead of the dark theme's pale ink. */
+    .u-legend .u-series:hover {
+        color: #0b0b0b;
+    }
+}

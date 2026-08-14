@@ -1,0 +1,31 @@
+{% extends "market_base.html" %}
+
+{% load static %}
+
+{% block title %}industry | Helion{% endblock %}
+
+{% block css %}
+<link rel="stylesheet" href="{% static 'market/vendor/uPlot.min.css' %}">
+<link rel="stylesheet" href="{% static 'market/css/industry.css' %}">
+{% endblock %}
+
+{% block js %}
+<script src="{% static 'market/vendor/uPlot.iife.min.js' %}"></script>
+<script src="{% static 'market/js/industry_chart.js' %}"></script>
+{% endblock %}
+
+{% block content %}
+<h1 id="industry-title">
+  {{ product_name }} x{{ output_quantity }} per run &mdash;
+  ME {{ material_efficiency }} &mdash; {{ region_name }}
+</h1>
+
+{% if chart %}
+<div id="industry-chart"></div>
+<div id="industry-margin"></div>
+{{ chart|json_script:"industry-chart-data" }}
+{{ series_labels|json_script:"industry-series-labels" }}
+{% else %}
+<p class="industry-notice">No history for this blueprint in {{ region_name }}.</p>
+{% endif %}
+{% endblock %}

@@ -29,6 +29,11 @@ from market.services.history import (
     get_market_history_for_types,
     trailing_average,
 )
+from market.services.industry import (
+    get_blueprint_chart,
+    material_quantity,
+    recipe_quantities,
+)
 from market.services.orders import (
     JITA_STATION_ID,
     LARGE_SKILL_INJECTOR_TYPE_ID,
