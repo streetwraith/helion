@@ -331,6 +331,33 @@ region and the others.
   to two regions. The five hub stations cover 97.5% of the transactions exactly; everything else
   reads as another region, which is the conservative error.
 
+## Dark mode
+
+The theme follows `prefers-color-scheme`. There is no toggle, so no state to store and no flash of
+the wrong theme on the first paint. `helion.css` carries the site-wide dark block; `dialog.css` and
+`history.css` each carry only what is specific to them. `:root` declares `color-scheme: light dark`,
+which is what themes the scrollbars and the native form controls — no rule can reach those.
+
+The dark palette is derived from the light one rather than invented. Each colour keeps its hue and
+inverts only its lightness, so a cell means the same thing in both themes. The tables colour cells
+by category (`.jita`, `.red`, `.warning`) and by a 21-step heat scale (`.gradient_0` to
+`.gradient_100`), and all of those are light backgrounds built for black ink. They therefore become
+dark backgrounds under the pale body ink, not light chips with dark ink on them.
+
+Two constraints hold the values in place. Change either one and something breaks quietly:
+
+- **Every cell colour carries the body ink at 4.5:1 or better.** The lightest chips need more than
+  a plain lightness inversion to reach it, so they are darkened until they do.
+- **The chart's buy and sell colours hold a 12 L\* gap.** That gap, not the hue, is what separates
+  them for red-green deficiency. The green looks dim enough to invite a fix; raising it closes the
+  gap to under 1 L\*. It stays, because a mark answers to a 3:1 floor rather than a text one.
+
+The chart canvas is the one surface CSS cannot reach. `history_chart.js` holds both palettes and
+rebuilds the chart on a theme switch. The ice page has the same problem for a different reason:
+peity takes the stroke as an option, so `ice_views` sends the colour. Its two strokes read on
+either background, but the empty case must be `transparent` — white hides the line on the light
+page only.
+
 ## Testing
 
 External schemas are faked minimally: the test setup creates the `sde` and `market` tables with

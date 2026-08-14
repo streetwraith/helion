@@ -75,49 +75,23 @@
     border: 2px solid #2a78d6;
 }
 
-/* Dark mode covers this page only. This stylesheet loads on the history page
-   alone, so the plain selectors below reach nothing else in the app. The chart
-   canvas is not stylable: history_chart.js carries the matching axis, grid and
-   series colours and rebuilds on a theme switch. */
+/* Only what is specific to this page. helion.css carries the site-wide dark
+   theme, including the body, the links and the form controls. The chart canvas
+   is not stylable: history_chart.js carries the matching axis, grid and series
+   colours and rebuilds on a theme switch. */
 @media (prefers-color-scheme: dark) {
-    body {
-        background: #1a1a19;
-        color: #c3c2b7;
-    }
-
-    a {
-        color: #86b6ef;
-    }
-
-    a:visited {
-        color: #b7a3e9;
-    }
-
-    #user-panel,
-    header nav {
-        border-bottom-color: #383835;
-    }
-
-    select,
-    input[type="text"],
-    button {
-        background: #232322;
-        color: #c3c2b7;
-        border: 1px solid #383835;
-    }
-
     #type-search-results {
-        background: #232322;
-        border-color: #383835;
+        background: #1e2325;
+        border-color: #333d42;
     }
 
     #type-search-results li.active,
     #type-search-results li:hover {
-        background: #2c2c2a;
+        background: #2f3639;
     }
 
     .history-notice {
-        color: #e66767;
+        color: #d15656;
     }
 
     /* uPlot hardcodes these two: a dark wash for the drag-zoom selection and a
@@ -128,21 +102,15 @@
 
     .u-hz .u-cursor-x,
     .u-vt .u-cursor-y {
-        border-right-color: #898781;
+        border-right-color: #8b8f91;
     }
 
     .u-hz .u-cursor-y,
     .u-vt .u-cursor-x {
-        border-bottom-color: #898781;
+        border-bottom-color: #8b8f91;
     }
 
     .u-legend .u-series:hover .u-marker {
-        border-color: #3987e5;
-    }
-
-    /* The row hover keeps helion.css's light blue, which is a light surface, so
-       the text on it needs dark ink instead of the dark theme's pale ink. */
-    .u-legend .u-series:hover {
-        color: #0b0b0b;
+        border-color: #3788f7;
     }
 }

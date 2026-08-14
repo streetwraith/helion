@@ -1,3 +1,9 @@
+/* Lets the browser theme the scrollbars and the native form controls, which no
+   stylesheet rule below can reach. */
+:root {
+    color-scheme: light dark;
+}
+
 * {
     margin: 0;
     padding: 0;
@@ -261,4 +267,125 @@ table tr.headers-rotated th span {
 
     /* transform: rotate(-90deg); */
     /* transform-origin: top left; */
+}
+
+/* Dark mode follows the system setting, so there is no toggle to read anywhere.
+   Each cell colour keeps the hue of its light counterpart and inverts only the
+   lightness, so a colour means the same thing in both themes. Every cell colour
+   below carries the body ink at 4.5:1 or better - the ink is the reason these
+   are dark surfaces and not the light chips with dark ink on them. */
+@media (prefers-color-scheme: dark) {
+    body {
+        background: #121516;
+        color: #e4e2df;
+    }
+
+    a {
+        color: #3788f7;
+    }
+
+    a:visited {
+        color: #a25de1;
+    }
+
+    /* color-scheme themes the controls, but not to this palette, so the three we
+       use take the panel surface explicitly. */
+    select,
+    input[type="text"],
+    input[type="number"],
+    button {
+        background: #1e2325;
+        color: #e4e2df;
+        border: 1px solid #333d42;
+    }
+
+    /* #fetch-warning-bar and .notify-banner keep their light-mode colours: both
+       are already dark surfaces under white ink, and both still separate from
+       this background. tr.notify-new keeps its outline for the same reason. */
+    .notify-status {
+        color: #d15656;
+    }
+
+    #user-panel,
+    header nav {
+        border-bottom-color: #333d42;
+    }
+
+    ul.pagination li.active {
+        border-color: #333d42;
+    }
+
+    .css-spinner {
+        border-color: #333d42;
+        border-top-color: #3498db;
+    }
+
+    /* The minus icon keeps its red, which already reads on this background. */
+    .plus-icon::before,
+    .plus-icon::after {
+        background-color: #009400;
+    }
+
+    td, th {
+        border-color: #333d42;
+    }
+
+    tr:hover {
+        background-color: #22434e;
+    }
+
+    tr.selected {
+        background-color: #007070;
+    }
+
+    .red {
+        background-color: #691b1b;
+    }
+
+    .green {
+        background-color: #1c601c;
+    }
+
+    .orange {
+        background-color: #865d13;
+    }
+
+    .jita {
+        background-color: #134767;
+    }
+
+    .warning {
+        background-color: #3c3c09;
+    }
+
+    .gradient_0    {background: #396e54;}
+    .gradient_5    {background: #3f6f51;}
+    .gradient_10   {background: #416b47;}
+    .gradient_15   {background: #44663f;}
+    .gradient_20   {background: #4f693d;}
+    .gradient_25   {background: #5a6b3c;}
+    .gradient_30   {background: #61693a;}
+    .gradient_35   {background: #676835;}
+    .gradient_40   {background: #6c652d;}
+    .gradient_45   {background: #746425;}
+    .gradient_50   {background: #796019;}
+    .gradient_55   {background: #795a1a;}
+    .gradient_60   {background: #785921;}
+    .gradient_65   {background: #785423;}
+    .gradient_70   {background: #764c1f;}
+    .gradient_75   {background: #754721;}
+    .gradient_80   {background: #744222;}
+    .gradient_85   {background: #733d24;}
+    .gradient_90   {background: #723826;}
+    .gradient_95   {background: #713427;}
+    .gradient_100  {background: #702f29;}
+
+    .item-added {
+        border-color: #009400;
+    }
+
+    /* The sticky header must stay opaque, so it tracks the page background. */
+    :where(table.sticky-head thead th) {
+        background-color: #121516;
+    }
 }

@@ -137,6 +137,19 @@ def test_chart_uses_current_hub_price_not_stale(ice_client):
     assert chart["color"] == "lightcoral"
 
 
+def test_chart_stroke_is_transparent_without_recent_history(ice_client):
+    # History outside the 30-day window leaves the chart with no points. The stroke
+    # must then be transparent, which hides the line under either theme: white hid
+    # it on the light page only.
+    History.objects.create(
+        region_id=JITA_REGION, type_id=LIQUID_OZONE, date=date.today() - timedelta(days=60),
+        average=100.0, highest=100.0, lowest=100.0, order_count=1, volume=10,
+    )
+    context = get_ice(ice_client)
+    chart = context["ice_product_data"]["Liquid Ozone"]["Jita"]["chart_data"]
+    assert chart["color"] == "transparent"
+
+
 def test_reprocessing_offered_only_for_the_four_haul_hubs(ice_client):
     context = get_ice(ice_client)
     icicle = context["ice_data"]["Compressed Clear Icicle"]

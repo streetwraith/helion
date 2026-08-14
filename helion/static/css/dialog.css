@@ -12,3 +12,13 @@
     display: block;
     margin-top: 5px;
 }
+
+@media (prefers-color-scheme: dark) {
+    /* The box sits on the page background, so it needs a lighter surface and a
+       heavier shadow to still read as a panel above it. */
+    .dialog-box {
+        background: #1e2325;
+        border-color: #333d42;
+        box-shadow: 2px 2px 10px rgba(0, 0, 0, 0.55);
+    }
+}
