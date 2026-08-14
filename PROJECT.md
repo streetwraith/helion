@@ -456,6 +456,11 @@ stubs patch the `market_service` facade, which views resolve at call time.
 The suite needs a role that can create the throwaway test database — if the app's role cannot,
 set `TEST_DATABASE_URL` to one that can (see `README.md`).
 
+Tests hash passwords with MD5. Production keeps the Django default, PBKDF2 at 1,000,000 iterations,
+where the cost is the point. In tests it is pure waste: `auth_client` creates a user per test, 229
+of them do, and the setting alone was 70% of the runtime (156 s against 48 s). No test verifies a
+password — they all authenticate through `force_login` — so nothing is being weakened.
+
 ### The notification pollers have no automated browser cover
 
 The endpoints are tested; the JavaScript is not. `notify_poller.js` holds the toggle, the permission

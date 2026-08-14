@@ -141,6 +141,15 @@ def isolated_shared_caches(monkeypatch):
     monkeypatch.setattr(mistakes, "cache", FakeCache())
 
 
+@pytest.fixture(autouse=True)
+def fast_password_hashing(settings):
+    # The production default is PBKDF2 at 1,000,000 iterations, which costs
+    # about half a second per created user. auth_client creates one per test,
+    # so this setting alone was 70% of the suite runtime. Nothing here tests
+    # password verification: every test authenticates through force_login.
+    settings.PASSWORD_HASHERS = ["django.contrib.auth.hashers.MD5PasswordHasher"]
+
+
 CHARACTER_ID = 900001
 
 
