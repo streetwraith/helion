@@ -1,8 +1,10 @@
 {% load custom_filters item_tags %}
 
-{# Rendered on page load and again on every poll, so the swapped rows carry the
-   same markup. The data attributes are what the poller reads: the order id
-   names the mistake, and the profit decides whether it clears the threshold. #}
+{% comment %}
+Rendered on page load and again on every poll, so the swapped rows carry the
+same markup. The data attributes are what the poller reads: the order id names
+the mistake, and the profit decides whether it clears the threshold.
+{% endcomment %}
 {% for result in matching_type_ids %}
 <tr data-type-id="{{ result.type_id }}"
     data-order-id="{{ result.order_id }}"

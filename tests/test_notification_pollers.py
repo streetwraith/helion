@@ -74,6 +74,15 @@ class TestMistakesSince:
         assert 'data-order-id="342"' in body["html"]
         assert 'data-profit="400000.000000"' in body["html"]
 
+    def test_the_swapped_html_holds_nothing_but_rows(self, auth_client, trade_hubs):
+        # The poller assigns this straight to tbody.innerHTML, so anything
+        # outside a row lands loose in the table. A multi-line {# #} did exactly
+        # that: Django treats those as comments only on a single line.
+        add_mistake(34, "Tritanium")
+        html = auth_client.get(mistakes_url(), **AJAX).json()["html"].strip()
+        assert html.startswith("<tr")
+        assert html.endswith("</tr>")
+
     def test_a_first_visit_sends_no_stamp_and_gets_the_rows(self, auth_client, trade_hubs):
         add_mistake(34, "Tritanium")
         assert auth_client.get(mistakes_url(), **AJAX).json()["changed"] is True
