@@ -1,6 +1,7 @@
 from django.http import HttpResponseBadRequest
 from django.shortcuts import render
 from django.core.paginator import Paginator
+from django.db.models import Max
 from helion.decorators import require_character
 from market.models import TradeItem
 from market.services import market_service
@@ -41,8 +42,15 @@ def market_transactions(request):
     unique_type_ids = page_obj.object_list.values_list('type_id', flat=True)
     type_names_dict = sde_service.get_type_names(unique_type_ids)
     
+    # The notification cursor spans the whole scope, not the filtered page: the
+    # poller ignores the display filters, so a filtered max would refire rows.
+    max_transaction_id = market_service.get_market_transactions(
+        request.session['esi_token']['character_id']
+    ).aggregate(newest=Max('transaction_id'))['newest']
+
     context = {
         'page_obj': page_obj,
+        'max_transaction_id': max_transaction_id,
         'history_buy': history_buy,
         'history_sell': history_sell,
         'filters': filters,

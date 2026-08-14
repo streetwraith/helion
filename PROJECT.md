@@ -202,6 +202,58 @@ per-region mark and recomputes undercuts only when a new snapshot was published 
 minute of added lag on top of the ingestion cadence. Losing the marks costs one redundant
 recompute; results dedupe on a unique constraint. No webhooks, no pub/sub.
 
+## Transaction notifications
+
+The transactions page can raise a browser notification when a new own transaction appears. One
+toggle on the page controls it, default off, remembered in `localStorage`. Off means no polling, no
+banner and no notification, so a page nobody asked costs nothing.
+
+**The signal is the wallet feed, and it is slow.** The route caches for 3600 s, so a fill becomes
+visible up to an hour after it happens. A faster signal exists — our own orders sit in the
+`market.orders` snapshots, which refresh every ~5 minutes — but reading a fill out of it needs a
+stored previous `volume_remain`, and a vanished order cannot be told apart from a cancel. The wallet
+route needs neither, so the first version accepts the hour.
+
+**There is no event log.** `MarketTransaction` carries no insert timestamp, and the fetch writes
+through `bulk_create(update_conflicts=True)`, which reports nothing per row. So the browser holds a
+cursor and the server answers "what is newer than this". The cursor is `transaction_id`: it is the
+primary key, so the range scan is index-backed, and the ids rise with the date — verified over
+11,632 rows and four characters, with no inversions. The price of that choice is that a row which
+lands with an id *below* the cursor, a late backfill after an outage, never notifies.
+
+**The cursor is rendered into the page and stays in memory.** A reload therefore starts from "now",
+and transactions that arrived while the page was closed stay silent. The rendered value is
+`max(transaction_id)` over the whole scope, never over the filtered page — a filtered maximum would
+refire every hidden row.
+
+**The display filters deliberately do not reach the poller.** A filter is browsing state, and a
+missed fill costs more than a notification about a row the current filter hides. That is also why
+the banner links to the unfiltered list rather than reloading in place: the rows it counted are then
+provably on page one.
+
+**The poll rides on the scheduler instead of a fixed interval.** The response carries
+`next_poll_seconds`, derived from the earliest `next_due` of the wallet rows in `EsiFetchState` and
+clamped to 60-900 s. New transactions can only appear when a wallet feed runs, so this is about two
+requests an hour where a 60 s interval would spend sixty. A null `next_due` means "fetch on the next
+tick" and outranks any timestamp, which is why the minimum runs in Python and not in SQL. Disabled
+rows are **not** excluded: `_record_failure` freezes their `next_due` in the past, so they land on
+the floor, and the browser picks a re-enabled feed up on its own within a minute. The 900 s cap
+exists so that clearing `next_due` in the admin does not wait out a full hour.
+
+**The count is cumulative since page load and the notification tag is fixed.** A replacement card
+therefore always states the fuller truth, and two open tabs collapse into one notification instead
+of two. A single new transaction is named ("Sold 500x Nitrogen Isotopes"); a burst is counted, with
+two unsigned figures rather than a signed net — a restock of 800M and a payday of 8.4M must not be
+able to look like each other.
+
+**Three consecutive poll failures stop the loop and say so on the page.** An expired session
+redirects the endpoint to HTML, which fails the json parse, and a poller that keeps a dead loop
+alive while the toggle still reads "on" is the silent failure worth avoiding.
+
+**The Notification API needs a secure context.** Only HTTPS and `localhost` qualify, so over plain
+HTTP the toggle still runs the poller and the banner and reports that the OS card needs HTTPS. That
+keeps the whole mechanism except the card testable off a non-HTTPS dev host.
+
 ## The item name component
 
 Every item name in the UI renders through one inclusion tag, `{% item_name type_id name %}`

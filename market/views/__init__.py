@@ -1,4 +1,4 @@
-from .ajax_views import transaction_history, market_open_in_game, trade_item_add_or_del, type_search
+from .ajax_views import transaction_history, market_open_in_game, trade_item_add_or_del, type_search, transactions_since
 from .base_views import index, shopping_list
 from .history_views import market_history
 from .hauling_views import market_hauling_index, market_hauling_sell_to_buy, market_hauling_sell_to_sell
@@ -11,6 +11,7 @@ __all__ = [
     'market_open_in_game',
     'trade_item_add_or_del',
     'type_search',
+    'transactions_since',
     'index',
     'shopping_list',
     'market_history',

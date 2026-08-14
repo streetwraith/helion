@@ -6,10 +6,20 @@
 
 {% block js %}
 <script src="{% static 'market/js/history_dialog.js' %}"></script>
+<script src="{% static 'market/js/transaction_notifications.js' %}"></script>
 {% endblock %}
 
 {% block content %}
 <h1>Market transactions</h1>
+
+<div id="tx-notify"
+     data-endpoint="{% url 'transactions_since' %}"
+     data-unfiltered-url="{% url 'market_transactions' %}"
+     data-cursor="{{ max_transaction_id|default:0 }}">
+  <label><input type="checkbox" id="tx-notify-toggle"> notify me about new transactions</label>
+  <span id="tx-notify-status"></span>
+</div>
+<div id="tx-notify-banner" hidden></div>
 
 <form action="{% url 'market_transactions' %}" method="GET">
   <input type="hidden" name="page" value="1">

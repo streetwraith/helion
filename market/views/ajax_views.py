@@ -25,6 +25,43 @@ def transaction_history(request):
         return JsonResponse({'html': html}, safe=False)
     return JsonResponse({'error': 'bad request'}, status=400)
 
+def _latest_transaction_detail(character_id, after):
+    """The one new transaction, named the way the table names it."""
+    transaction = market_service.get_market_transactions(
+        character_id).filter(transaction_id__gt=after).first()
+    hub = TradeHub.objects.filter(station_id=transaction.location_id).first()
+    type_names = sde_service.get_type_names([transaction.type_id])
+    return {
+        'is_buy': transaction.is_buy,
+        'quantity': transaction.quantity,
+        'isk': float(transaction.unit_price * transaction.quantity),
+        'type_name': type_names.get(transaction.type_id, str(transaction.type_id)),
+        'location': hub.name if hub else str(transaction.location_id),
+    }
+
+@require_character
+def transactions_since(request):
+    """New own transactions after a cursor, for the notification poller.
+
+    The page's display filters deliberately do not apply: a filtered list is
+    browsing state, and a missed fill costs more than a notification about a row
+    the current filter hides.
+    """
+    if request.headers.get('x-requested-with') != 'XMLHttpRequest':
+        return JsonResponse({'error': 'bad request'}, status=400)
+    try:
+        after = int(request.GET.get('after', ''))
+    except ValueError:
+        return JsonResponse({'error': 'invalid after'}, status=400)
+    if after < 0:
+        return JsonResponse({'error': 'invalid after'}, status=400)
+    character_id = request.session['esi_token']['character_id']
+    summary = market_service.get_transactions_since(character_id, after=after)
+    summary['latest'] = (_latest_transaction_detail(character_id, after)
+                         if summary['count'] == 1 else None)
+    summary['next_poll_seconds'] = market_service.seconds_until_next_wallet_fetch()
+    return JsonResponse(summary)
+
 def _item_name_html(type_id, name, is_trade_item):
     """The item name cell, rebuilt after an add or a delete. The tag call keeps
     one source of the option defaults."""

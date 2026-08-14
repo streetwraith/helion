@@ -10,6 +10,32 @@
     padding: 2px 8px;
 }
 
+#tx-notify {
+    font-size: 0.8em;
+    margin: 4px 0;
+}
+
+#tx-notify * {
+    display: inline;
+}
+
+#tx-notify-status {
+    color: #b03030;
+    margin-left: 8px;
+}
+
+#tx-notify-banner {
+    background: #2e7d32;
+    color: #fff;
+    font-size: 0.9em;
+    margin: 4px 0;
+    padding: 2px 8px;
+}
+
+#tx-notify-banner a {
+    color: #fff;
+}
+
 #user-panel {
     border-bottom: 1px solid #ccc;
     text-align: right;

@@ -2,7 +2,7 @@
 from datetime import datetime, time, timedelta, timezone
 from functools import wraps
 
-from django.db.models import F, Sum
+from django.db.models import Count, F, Max, Sum
 
 from esi.models import Token
 from evesde.models import Type
@@ -34,6 +34,37 @@ def get_market_transactions(*character_ids, type_id=None, type_name=None, locati
         market_transactions = market_transactions[:int(limit)]
 
     return market_transactions
+
+def get_transactions_since(*character_ids, after):
+    """Own transactions newer than `after`, counted and summed per side.
+
+    The cursor is `transaction_id` rather than `date`: it is the primary key, so
+    the scan is index-backed, and the ESI ids rise with the transaction date. A
+    row that lands with an id below the cursor - a late backfill after an
+    outage - is therefore never reported.
+    """
+    assert after >= 0, "the cursor is a transaction id"
+    # order_by() clears the inherited '-date' ordering: an ordering field would
+    # otherwise join the GROUP BY and split every side into one row per date.
+    rows = get_market_transactions(*character_ids).filter(
+        transaction_id__gt=after
+    ).order_by().values('is_buy').annotate(
+        rows=Count('transaction_id'),
+        isk=Sum(F('quantity') * F('unit_price')),
+        newest=Max('transaction_id'),
+    )
+    summary = {'count': 0, 'buys': 0, 'sells': 0,
+               'bought_isk': 0.0, 'sold_isk': 0.0, 'max_id': None}
+    for row in rows:
+        summary['count'] += row['rows']
+        if row['is_buy']:
+            summary['buys'] = row['rows']
+            summary['bought_isk'] = float(row['isk'])
+        else:
+            summary['sells'] = row['rows']
+            summary['sold_isk'] = float(row['isk'])
+        summary['max_id'] = max(summary['max_id'] or 0, row['newest'])
+    return summary
 
 def get_daily_transaction_prices(type_id, first_day, last_day, local_station_ids):
     """Volume-weighted average price per day, keyed by (day, is_buy, is_local).

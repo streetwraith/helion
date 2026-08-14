@@ -17,6 +17,7 @@ from .views import (
     market_ice_index,
     market_history,
     type_search,
+    transactions_since,
 )
 
 urlpatterns = [
@@ -51,4 +52,5 @@ urlpatterns = [
     path("ajax/trade_item_add_or_del", trade_item_add_or_del, name="trade_item_add_or_del"),
     path("ajax/transaction_history", transaction_history, name="transaction_history"),
     path("ajax/type_search", type_search, name="type_search"),
+    path("ajax/transactions_since", transactions_since, name="transactions_since"),
 ]
