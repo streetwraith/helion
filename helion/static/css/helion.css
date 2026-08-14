@@ -201,6 +201,28 @@ table.ice th {
     text-align: right;
 }
 
+/* The rule sits on the cells, not on the thead: WebKit does not pin a sticky thead reliably.
+   The offset of the second row must equal the height of the first row. The fixed line height
+   makes that height exact: 1.25em of text plus the two 1px borders. */
+table.sticky-head thead th {
+    position: sticky;
+    z-index: 1;
+    line-height: 1.25;
+}
+
+table.sticky-head thead tr:first-child th {
+    top: 0;
+}
+
+table.sticky-head thead tr:nth-child(2) th {
+    top: calc(1.25em + 2px);
+}
+
+/* :where() keeps the specificity at zero, so .jita and the other cell colors still win. */
+:where(table.sticky-head thead th) {
+    background-color: #fff;
+}
+
 table tr.headers-rotated th {
     vertical-align: text-bottom;
     padding: 0.2em 0;
