@@ -16,12 +16,12 @@
 //
 // The raw daily average therefore wears neutral ink, not blue: it would otherwise
 // be the same colour as the 5-day line that smooths it. Grey for observed, blue
-// for derived.
+// for derived. The daily range is observed too, so it takes a faded step of the
+// same grey: faded, because the solid average dot sits on top of it.
 const THEMES = {
     light: {
         observed: '#52514e',
-        bandEdge: '#2a78d6',
-        band: 'rgba(42, 120, 214, 0.14)',
+        range: 'rgba(82, 81, 78, 0.55)',
         maShort: '#2a78d6',
         maLong: '#86b6ef',
         volume: '#c3c2b7',
@@ -33,16 +33,19 @@ const THEMES = {
         buyFaded: 'rgba(227, 73, 72, 0.45)',
         sellFaded: 'rgba(0, 131, 0, 0.45)',
     },
+    // buy and sell hold a 12 L* gap, which is what separates them without hue for
+    // red-green deficiency. Raising the green to gain contrast closes that gap to
+    // under 1 L*, so it stays as it is: at 3.7:1 it already clears the 3:1 floor
+    // that applies to a mark rather than to text.
     dark: {
-        observed: '#c3c2b7',
-        bandEdge: '#3987e5',
-        band: 'rgba(57, 135, 229, 0.20)',
-        maShort: '#3987e5',
+        observed: '#b8bcbe',
+        range: 'rgba(184, 188, 190, 0.55)',
+        maShort: '#3788f7',
         maLong: '#9ec5f4',
-        volume: '#52514e',
-        axis: '#c3c2b7',
-        grid: '#2c2c2a',
-        ticks: '#383835',
+        volume: '#4d5457',
+        axis: '#b8bcbe',
+        grid: '#262d30',
+        ticks: '#333d42',
         buy: '#e66767',
         sell: '#008300',
         buyFaded: 'rgba(230, 103, 103, 0.45)',
@@ -54,6 +57,8 @@ const THEMES = {
 // the dots have to stay under that to read as separate marks.
 const AVERAGE_DOT_PX = 3;
 const AVERAGE_LINE_PX = 1;
+// The range bar stays thinner than the average dot, so the dot reads on top of it.
+const RANGE_BAR_PX = 1;
 // Our own fills are sparse events, not a daily series, so they can be big enough
 // to read at a glance. The cross-region ones are smaller and faded: same event,
 // different market.
@@ -97,17 +102,39 @@ function abbreviate(value) {
     return value.toFixed(0);
 }
 
-// The two edges of the daily range. Width 0 draws no line, and uPlot builds the
-// fill path anyway because the upper edge belongs to a band - so the range shows
-// as one wash instead of 355 dots per edge. Never give these a fill: only the
-// upper edge takes the band branch, so a fill on the lower edge would spill down
-// to the baseline.
-function bandEdgeSeries(label, theme) {
+// One vertical line per day, from the low to the high, like the wick of a candle.
+// uPlot ships no renderer for this, so the path is built by hand in canvas pixels.
+// The high series draws it and the low series only carries data, so hiding either
+// legend entry hides the whole mark: half a range is not worth drawing.
+function rangeBarPaths(lowIdx) {
+    return (u, seriesIdx, idx0, idx1) => {
+        if (!u.series[lowIdx].show) {
+            return null;
+        }
+        const dates = u.data[0];
+        const lows = u.data[lowIdx];
+        const highs = u.data[seriesIdx];
+        const stroke = new Path2D();
+        for (let i = idx0; i <= idx1; i++) {
+            // A gap-filled day carries no price on either end.
+            if (lows[i] == null || highs[i] == null) {
+                continue;
+            }
+            const x = Math.round(u.valToPos(dates[i], 'x', true));
+            stroke.moveTo(x, u.valToPos(highs[i], 'isk', true));
+            stroke.lineTo(x, u.valToPos(lows[i], 'isk', true));
+        }
+        return {stroke: stroke, fill: null};
+    };
+}
+
+// The low end of the range. It draws nothing itself; the legend reads its value.
+function rangeLowSeries(label, theme) {
     return {
         label: label,
         scale: 'isk',
-        stroke: theme.bandEdge,
-        width: 0,
+        stroke: theme.range,
+        paths: () => null,
         points: {show: false},
         value: (self, value) => abbreviate(value),
     };
@@ -204,8 +231,17 @@ function chartOptions(size, theme, withTransactions) {
                 points: {show: false},
                 value: (self, value) => abbreviate(value),
             },
-            bandEdgeSeries('l', theme),
-            bandEdgeSeries('h', theme),
+            rangeLowSeries('l', theme),
+            {
+                label: 'h',
+                scale: 'isk',
+                stroke: theme.range,
+                width: RANGE_BAR_PX,
+                // 2 is the low row; the series order sits at the top of this file.
+                paths: rangeBarPaths(2),
+                points: {show: false},
+                value: (self, value) => abbreviate(value),
+            },
             {
                 label: 'avg',
                 scale: 'isk',
@@ -220,9 +256,6 @@ function chartOptions(size, theme, withTransactions) {
             // Last, so our own fills draw over the history behind them.
             ...(withTransactions ? transactionSeries(theme) : []),
         ],
-        // Series 3 is the high and series 2 the low: uPlot fills between the
-        // upper and the lower edge, in that order.
-        bands: [{series: [3, 2], fill: theme.band}],
     };
 }
 

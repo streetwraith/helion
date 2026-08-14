@@ -282,8 +282,8 @@ name leave it out — the shopping list prices five regions per row, and a hauli
 ## The history chart
 
 `/market/history?type_id=&region_id=&days=90|365|730` draws one item's daily history in one
-region: the low-to-high range as a band, the average price, the volume, and a 5-day and 30-day
-moving average. It carries no menu link — every item name links to it. The chart library is uPlot,
+region: the low-to-high range as one vertical line per day, the average price, the volume, and a
+5-day and 30-day moving average. It carries no menu link — every item name links to it. The chart library is uPlot,
 vendored and pinned under `market/static/market/vendor/`.
 
 - **The URL is the only state.** Changing the region or picking an item navigates instead of
@@ -293,6 +293,12 @@ vendored and pinned under `market/static/market/vendor/`.
   `max(date)` for the region like every other history window.
 - **The x values are epoch seconds at UTC midnight.** EVE's market day is a UTC day; the server
   runs UTC+8 and the viewer's timezone is unknown, so neither may enter that conversion.
+- **The daily range draws as a vertical line, not as a filled band.** The band read as a wash
+  across the marks that matter. uPlot has no renderer for a high-to-low bar, so `rangeBarPaths`
+  builds the path. The high series draws the line and the low series only carries its value to the
+  legend, so hiding either entry hides the mark: half a range is not worth drawing. The line takes
+  a faded step of the average's grey, because the range is observed data too, and because the
+  solid average dot has to read where it sits on the line.
 - **A moving average is a trailing *calendar* window over the values that exist.** Skipping the
   gaps instead would make a "5-day" average reach back two months on an illiquid item, and
   counting them as zero would fake a price collapse. A window of nothing but gaps yields no chart
