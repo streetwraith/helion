@@ -1,0 +1,139 @@
+/* The market browser. The shared table and item-search rules live in
+   helion.css; only what is specific to this page sits here.
+
+   Both palettes below hold the same two constraints the rest of the app holds:
+   the highlight carries the body ink at 4.5:1 or better, and every security
+   colour clears 4.5:1 on the page surface *and* on the highlight. The violet is
+   a colour no other table cell uses, so "this row is mine" cannot be confused
+   with the buy, sell or Jita colours. */
+
+#browse-controls {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 1em;
+    margin-bottom: 0.5em;
+}
+
+.browse-filter-group {
+    display: flex;
+    align-items: center;
+    gap: 0.6em;
+}
+
+.browse-path,
+.browse-count {
+    color: #52514e;
+    font-weight: normal;
+}
+
+.browse-notice {
+    color: #b3261e;
+}
+
+/* The filters run in the browser, so a hidden row is still in the document. */
+tr.filtered-out {
+    display: none;
+}
+
+/* Each side scrolls in its own box, so both books stay on one screen however
+   deep they are. The height bound is what makes the sticky header work here:
+   the box becomes the scroll container the header pins to. An unbounded
+   wrapper would not - the page would scroll instead and the header would
+   travel off with it.
+
+   The row height is declared rather than guessed, so the max-height reads as a
+   row count: the 80% cell font at a 1.25 line height, plus the two 1px cell
+   borders. One extra row of slack covers the header. */
+.browse-scroll {
+    --browse-row-height: calc(0.8rem * 1.25 + 2px);
+    --browse-rows: 15;
+    max-height: calc(var(--browse-row-height) * (var(--browse-rows) + 1));
+    overflow: auto;
+}
+
+#browse-book td {
+    line-height: 1.25;
+}
+
+/* The book is a wide table of short cells. At full width the browser hands
+   every spare pixel to the location column, so on a large screen its text
+   drifts far from the rest of the row. Auto width sizes each column to its
+   longest value instead, and nowrap keeps one order on one line. A table wider
+   than its box now scrolls inside the box rather than moving the whole page. */
+#browse-book table.market {
+    width: auto;
+}
+
+#browse-book table.market th,
+#browse-book table.market td {
+    white-space: nowrap;
+}
+
+/* The app right-aligns every cell, which suits the numbers. Names read from
+   the left, so their ragged edge falls where the eye does not scan. */
+#browse-book td.text {
+    text-align: left;
+}
+
+/* An order you can trade against at a hub: a sell order sitting in one, or a
+   buy order whose range reaches one. Green rather than a blue: against the
+   violet below it, blue holds a delta E of 7 under deuteranopia, where green
+   holds 27. The two marks have to stay apart, because they answer different
+   questions. */
+tr.in-hub {
+    background-color: #d8ecd4;
+}
+
+/* Declared after in-hub on purpose: a row that is both yours and in a hub
+   reads as yours, which is the rarer and more actionable fact. */
+tr.mine {
+    background-color: #d3c4f2;
+}
+
+.sec {
+    font-variant-numeric: tabular-nums;
+}
+
+.sec-hisec {
+    color: #0f5623;
+}
+
+.sec-lowsec {
+    color: #5e3d00;
+}
+
+.sec-nullsec {
+    color: #9c1f19;
+}
+
+@media (prefers-color-scheme: dark) {
+    .browse-path,
+    .browse-count {
+        color: #a8a5a0;
+    }
+
+    .browse-notice {
+        color: #d15656;
+    }
+
+    tr.in-hub {
+        background-color: #1c3a24;
+    }
+
+    tr.mine {
+        background-color: #3b2d5e;
+    }
+
+    .sec-hisec {
+        color: #5fc27e;
+    }
+
+    .sec-lowsec {
+        color: #d9a441;
+    }
+
+    .sec-nullsec {
+        color: #f2857f;
+    }
+}

@@ -1,0 +1,133 @@
+{% extends "market_base.html" %}
+
+{% load static custom_filters item_tags %}
+
+{% block title %}browse | Helion{% endblock %}
+
+{% block css %}
+<link rel="stylesheet" href="{% static 'market/css/browse.css' %}">
+{% endblock %}
+
+{% block js %}
+<script src="{% static 'market/js/type_search.js' %}"></script>
+<script src="{% static 'market/js/browse_filters.js' %}"></script>
+{% endblock %}
+
+{% block content %}
+<form id="browse-controls" action="{% url 'market_browse' %}" method="GET">
+  <label for="type_search">Item</label>
+  <span id="type-search-box">
+    <input type="text" id="type_search" autocomplete="off" placeholder="item name"
+           value="{% if item %}{{ item.name }}{% endif %}">
+    <ul id="type-search-results"></ul>
+  </span>
+  <input type="hidden" id="type_id" name="type_id" value="{% if item %}{{ item.type_id }}{% endif %}">
+
+  <span class="browse-filter-group">
+    <span class="browse-filter-label">exclude</span>
+    <label><input type="checkbox" name="no_hisec" value="1"> high sec</label>
+    <label><input type="checkbox" name="no_lowsec" value="1"> low sec</label>
+    <label><input type="checkbox" name="no_nullsec" value="1"> null sec</label>
+    <label><input type="checkbox" name="no_structures" value="1"> player structures</label>
+  </span>
+
+  <span class="browse-filter-group">
+    <label><input type="checkbox" name="hubs_only" value="1"> market hubs only</label>
+    <select name="hub" id="hub">
+      <option value="all">all hubs</option>
+      {% for hub in trade_hubs %}
+      <option value="{{ hub.station_id }}">{{ hub.name }}</option>
+      {% endfor %}
+    </select>
+  </span>
+</form>
+
+{% for notice in notices %}
+<p class="browse-notice">{{ notice }}</p>
+{% endfor %}
+
+{% if item %}
+<h1 id="browse-title" class="item-name">
+  {# No browse link: this page is where that link leads. #}
+  {% item_name item.type_id item.name show_browse=False %}
+</h1>
+{% if group_path %}
+<p class="browse-path">{{ group_path|join:" / " }}</p>
+{% endif %}
+
+{# Hidden until the filters have run, so no row can flash and then vanish. #}
+<div id="browse-book" hidden>
+  <h2>Sellers <span class="browse-count" data-table="sell"></span></h2>
+  <div class="browse-scroll">
+    <table class="market sticky-head" id="browse-sell">
+      <thead>
+        <tr>
+          <th>region</th>
+          <th>quantity</th>
+          <th>price</th>
+          <th>location</th>
+          <th>last modified</th>
+          <th>expires in</th>
+          <th>character</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for order in sell_orders %}
+        <tr data-sec="{{ order.security_band }}" data-hub="{{ order.hub_station_id|default_if_none:'' }}"
+            data-structure="{{ order.is_structure|yesno:'1,0' }}"
+            class="{% if order.hub_station_id %}in-hub {% endif %}{% if order.character_name %}mine{% endif %}">
+          <td class="text">{{ order.region_name }}</td>
+          <td>{{ order.volume_remain }}</td>
+          <td>{{ order.price|isk_value }}</td>
+          <td class="text"><span class="sec sec-{{ order.security_band }}">{{ order.security_status|floatformat:1 }}</span> {{ order.location_name }}</td>
+          <td>{{ order.issued|since_dhms }}</td>
+          <td>{{ order.expires_at|until_dhms }}</td>
+          <td class="text">{{ order.character_name|default_if_none:"" }}</td>
+        </tr>
+        {% empty %}
+        <tr class="browse-empty"><td colspan="7">no sell orders</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+
+  <h2>Buyers <span class="browse-count" data-table="buy"></span></h2>
+  <div class="browse-scroll">
+    <table class="market sticky-head" id="browse-buy">
+      <thead>
+        <tr>
+          <th>region</th>
+          <th>quantity</th>
+          <th>price</th>
+          <th>location</th>
+          <th>range</th>
+          <th>min volume</th>
+          <th>last modified</th>
+          <th>expires in</th>
+          <th>character</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for order in buy_orders %}
+        <tr data-sec="{{ order.security_band }}" data-hub="{{ order.hub_station_id|default_if_none:'' }}"
+            data-structure="{{ order.is_structure|yesno:'1,0' }}"
+            class="{% if order.hub_station_id %}in-hub {% endif %}{% if order.character_name %}mine{% endif %}">
+          <td class="text">{{ order.region_name }}</td>
+          <td>{{ order.volume_remain }}</td>
+          <td>{{ order.price|isk_value }}</td>
+          <td class="text"><span class="sec sec-{{ order.security_band }}">{{ order.security_status|floatformat:1 }}</span> {{ order.location_name }}</td>
+          <td class="text">{{ order.range }}</td>
+          <td>{{ order.min_volume }}</td>
+          <td>{{ order.issued|since_dhms }}</td>
+          <td>{{ order.expires_at|until_dhms }}</td>
+          <td class="text">{{ order.character_name|default_if_none:"" }}</td>
+        </tr>
+        {% empty %}
+        <tr class="browse-empty"><td colspan="9">no buy orders</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endif %}
+{% endblock %}

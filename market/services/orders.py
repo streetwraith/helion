@@ -1,7 +1,10 @@
 """Order-book and trade-item queries against the local database."""
+from datetime import timedelta
+
 from django.core.cache import cache
 from django.db import connection
 from django.db.models import Max, Min
+from esi.models import Token
 
 from evesde import services as sde_service
 from evesde.models import Type
@@ -236,6 +239,96 @@ def get_price_ticker():
         }
         cache.set('price_ticker', ticker, PRICE_TICKER_CACHE_SECONDS)
     return ticker
+
+# EVE rounds 0.45 up to 0.5 and treats it as high sec; a system at 0.0 or below
+# is null sec. The security filter and the Location cell both read this.
+HIGH_SEC_FLOOR = 0.45
+
+# Player structures start here and NPC stations sit far below it, with nothing
+# in between in the order data. Classifying by the id rather than by a missing
+# name keeps a station the SDE fails to name out of the structure filter.
+FIRST_STRUCTURE_ID = 1_000_000_000_000
+
+# One row per live order, joined to everything the browser shows. The rows come
+# from the raw orders table, not from orders_hub: that view restricts itself to
+# the five hub regions and this page covers every ingested region.
+#
+# The view still answers one question here - whether an order reaches a trade
+# hub - and hub_station_id names the hub it reaches. A sell order reaches only
+# the hub it sits in, but a buy order reaches every hub its range covers, which
+# is why the filter cannot compare location ids. The view holds that rule for
+# the whole app; never restate the CASE here.
+#
+# The type filter is repeated inside the subquery on purpose. Written as a join
+# condition (hub_range.type_id = o.type_id) it never reaches the view's own
+# scan, and the query goes from 292 ms to 1.7 s on the widest item.
+ORDER_BOOK_QUERY = """
+SELECT o.order_id,
+       o.is_buy_order,
+       rs.region_name,
+       o.location_id,
+       system.name_en AS system_name,
+       system.security_status,
+       station.name AS station_name,
+       o.price,
+       o.volume_remain,
+       o.range,
+       o.min_volume,
+       o.issued,
+       o.duration,
+       mine.character_id,
+       CASE WHEN hub_range.is_in_trade_hub_range THEN hub.station_id END AS hub_station_id
+FROM market.orders AS o
+JOIN market.region_status AS rs ON rs.region_id = o.region_id
+JOIN sde.map_solar_systems AS system ON system._key = o.system_id
+LEFT JOIN sde.npc_station_names AS station ON station.station_id = o.location_id
+LEFT JOIN market_characterorder AS mine ON mine.order_id = o.order_id
+LEFT JOIN (SELECT region_id, order_id, is_in_trade_hub_range
+           FROM orders_hub WHERE type_id = %s) AS hub_range
+       ON hub_range.region_id = o.region_id AND hub_range.order_id = o.order_id
+LEFT JOIN market_tradehub AS hub ON hub.region_id = o.region_id
+WHERE o.type_id = %s
+ORDER BY CASE WHEN o.is_buy_order THEN -o.price ELSE o.price END, o.issued
+"""
+
+
+def get_order_book(type_id):
+    """Every live order for one item, as {'sell': [...], 'buy': [...]}.
+
+    Sellers come cheapest first and buyers highest first, which is the order
+    both the client and evetycoon use. The whole book ships to the browser and
+    the filters run there, so no filter argument belongs here.
+
+    A location with no name row is a player structure; it renders as its system
+    and its id, because nothing in the SDE names those.
+
+    `hub_station_id` is the trade hub the order reaches, or None. For a buy
+    order that is a question about its range, not about where it sits.
+    """
+    with connection.cursor() as cursor:
+        cursor.execute(ORDER_BOOK_QUERY, [type_id, type_id])
+        columns = [column.name for column in cursor.description]
+        rows = [dict(zip(columns, row)) for row in cursor.fetchall()]
+
+    character_names = dict(
+        Token.objects.filter(
+            character_id__in={row['character_id'] for row in rows if row['character_id']}
+        ).values_list('character_id', 'character_name'))
+
+    book = {'sell': [], 'buy': []}
+    for row in rows:
+        security_status = row['security_status']
+        row['is_structure'] = row['location_id'] >= FIRST_STRUCTURE_ID
+        row['location_name'] = row['station_name'] or f"{row['system_name']} - {row['location_id']}"
+        row['security_band'] = (
+            'hisec' if security_status >= HIGH_SEC_FLOOR
+            else 'lowsec' if security_status > 0
+            else 'nullsec')
+        row['expires_at'] = row['issued'] + timedelta(days=row['duration'])
+        row['character_name'] = character_names.get(row['character_id'])
+        book['buy' if row['is_buy_order'] else 'sell'].append(row)
+    return book
+
 
 def get_jita_best_ask(type_id):
     # The region filter prunes the order partitions; Jita 4-4 implies it.

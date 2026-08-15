@@ -55,6 +55,7 @@ class MapSolarSystem(models.Model):
     system_id = models.BigIntegerField(primary_key=True, db_column="_key")
     region_id = models.BigIntegerField()
     name = models.CharField(max_length=256, db_column="name_en")
+    security_status = models.FloatField()
 
     class Meta:
         managed = False
@@ -62,3 +63,18 @@ class MapSolarSystem(models.Model):
 
     def __str__(self):
         return str(self.system_id) + " " + self.name
+
+
+class NpcStationName(models.Model):
+    # A derived view, not an exported entity: the SDE carries no station name,
+    # so sdemanager composes it from six entities (see its PROJECT.md) and
+    # publishes the result here. Never recompose it - the moon rule is subtle.
+    station_id = models.BigIntegerField(primary_key=True)
+    name = models.TextField()
+
+    class Meta:
+        managed = False
+        db_table = 'sde"."npc_station_names'
+
+    def __str__(self):
+        return str(self.station_id) + " " + self.name

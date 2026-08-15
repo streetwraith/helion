@@ -1,5 +1,6 @@
 from .ajax_views import transaction_history, market_open_in_game, trade_item_add_or_del, type_search, transactions_since, mistakes_since, undercuts_since
 from .base_views import index, shopping_list
+from .browser_views import market_browse
 from .history_views import market_history
 from .hauling_views import market_hauling_index, market_hauling_sell_to_buy, market_hauling_sell_to_sell
 from .loyalty_points_views import lp_index, lp_data
@@ -16,6 +17,7 @@ __all__ = [
     'undercuts_since',
     'index',
     'shopping_list',
+    'market_browse',
     'market_history',
     'market_hauling_index',
     'market_hauling_sell_to_buy',

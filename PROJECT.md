@@ -34,7 +34,9 @@ fees.py           fee rates
 - **Helion's own tables** live in the app's default schema and are the only ones Django migrates.
 - **`sde`** (static EVE reference data) is owned and rewritten by a separate importer. Helion
   reads it through the `evesde` unmanaged models: `managed = False`, schema-qualified `db_table`,
-  never a migration.
+  never a migration. One of them, `sde.npc_station_names`, is a view the importer derives rather
+  than an exported entity: the SDE carries no station name, so the importer composes it from six
+  entities. Read that view; never recompose the name here.
 - **`market`** (order snapshots for the empire regions every ~5 minutes, daily price history from
   the EVE Ref dataset) is owned by a separate ingestion service and read the same way, through the
   `marketdata` unmanaged models. The read contract is three tables: `orders`, `history`,
@@ -334,6 +336,85 @@ the affected rows through `data-type-id` and leaves every cell as rendered. The 
 carry the fresh prices; the table stays honest as one snapshot. A poll returns at most 50 rows, and
 the cursor advances to the last of them, so a longer burst drains over the following polls.
 
+## The market browser
+
+`/market/browse?type_id=` shows one item's live order book across every ingested
+region: sellers, then buyers, one row per order. It is the page the in-game market
+window and evetycoon are, minus the parts that duplicate what the app already has —
+no price, quantity or jump filters, no jumps column, no market statistics, and no
+region or location inputs.
+
+- **The rows come from `market.orders`, not from `orders_hub`.** That view restricts
+  itself to the five hub regions by design, and this page covers all 25. One query
+  joins the systems for the security status, `sde.npc_station_names` for the station
+  name, and `CharacterOrder` for the highlight: 219 ms and 1406 rows for Tritanium,
+  292 ms and 1840 rows for the widest item in the data. So the page renders the whole
+  book, unpaginated, and the filters run in the browser over rows already there.
+- **"Market hubs only" asks the view, not the location id.** A sell order reaches only
+  the hub it sits in, but a buy order reaches every hub its range covers: an order one
+  jump out with range 1 buys from you at the hub, and a location test drops exactly
+  those. So the query carries `hub_station_id`, the hub an order reaches, out of
+  `orders_hub.is_in_trade_hub_range` — the rule stays in the view, where the rest of
+  the app reads it. Expect one consequence: a buy row can pass the Amarr filter while
+  its Location cell names another system, which is what the Range column beside it
+  explains. Measured on a real item, 40 of 89 buy orders reach a hub where a location
+  test kept 2. The view joins as a subquery that repeats the type filter; written as a
+  join condition (`hub_range.type_id = o.type_id`) the filter never reaches the view's
+  own scan and the query costs 1.7 s instead of 292 ms.
+- **The filters live in the URL, and only the browser reads them.** The view never
+  parses those parameters. It renders every row and the table starts hidden;
+  `browse_filters.js` sets the controls from the URL, hides what the filters hide,
+  and then reveals the table. One reader means the server and the page cannot
+  disagree about what is on screen, and the item-search form carries the live
+  controls, so picking a new item keeps the filters. The cost is deliberate: with
+  JavaScript off the page shows nothing, exactly as the notification pollers and the
+  history chart already assume a working browser.
+- **Each table prints "showing N of M"**, because an over-tight filter and an empty
+  market look identical otherwise.
+- **The two time columns read as `68d 04:23:11`**, last modified first. Django's
+  `timesince` says "2 months, 1 week", which rounds away the part that decides whether
+  a price is stale and gives every row a different width, so a column of them cannot
+  be compared by eye. `until_dhms` says `expired` rather than counting up: a snapshot
+  holds orders that reached their expiry between two refreshes, about 1% of rows.
+- **The tables size to their content, and no cell wraps.** At full width the browser
+  hands every spare pixel to the location column, which on a large screen strands its
+  text far from the rest of the row. Wrapping station names instead would cost more.
+- **Each side scrolls in its own box, about 15 rows deep.** A liquid item runs to
+  hundreds of orders per side, and both books have to stay comparable on one screen.
+  The height bound is also what makes the sticky header work: a bounded box is the
+  scroll container the header pins to, where an unbounded wrapper would let the page
+  scroll and carry the header away with it. The row height is declared in the
+  stylesheet so the `max-height` reads as a row count instead of a pixel guess.
+- **A row is a player structure when its `location_id` is at or above 1e12.** The
+  order data holds nothing between the NPC station ids and that floor, and
+  classifying by the id rather than by a missing name keeps a station the SDE fails
+  to name out of the structure filter. Structures have no name anywhere in the SDE,
+  so they render as their system and their id — that keeps two structures in one
+  system apart. All 4683 station locations in the data do resolve, so this is the
+  96-structure case only, and it includes the Perimeter tower.
+- **"My orders" means any tracked character, not the session character.** The
+  highlight is a join on `CharacterOrder` and the character name renders in its own
+  column, so a second character's order reads as yours, which it is. The page
+  therefore needs no login to show them.
+- **Two row marks, and they must not blur into each other.** A green row is an order
+  you can trade against at a hub — the same `hub_station_id` the filter reads — and a
+  violet row is your own. Both had to clear the page's usual floors, but the binding
+  constraint was the distance between them: a blue tint holds a delta E of 7 against
+  the violet under deuteranopia, where the green holds 27. A row that is both renders
+  violet, because "mine" is the rarer and more actionable fact, and the stylesheet
+  declares it second to get that.
+- **The page states no snapshot age.** The 25 regions refresh within about three
+  minutes of each other and the market index already prints `refreshed_at` per
+  region, so a second clock here would be one more thing to keep honest.
+
+The security bands follow the client: 0.45 and up is high sec, above 0.0 is low sec,
+the rest is null sec. Null sec is nearly absent from the data — 50 orders — because
+ingestion covers 25 empire regions. Widening that is marketmanager's decision, not
+this page's.
+
+PLEX needs no special case: it renders under its pseudo-region with locations across
+the universe, and the hub and security filters still mean what they say.
+
 ## The item name component
 
 Every item name in the UI renders through one inclusion tag, `{% item_name type_id name %}`
@@ -346,15 +427,17 @@ Three points of the design are load-bearing:
   shows.
 - The **link carries `data-type-id`**. The name also renders outside a table row, in a table
   caption, where the click handler finds no row to read the id from.
-- The **options select the links per render** (`show_history`, `show_add_del`, `is_trade_item`,
-  `region_id`). An inclusion tag, not an `{% include %}`, because an include resolves a flag that
-  the caller forgets against the surrounding context, while the tag applies its own default.
+- The **options select the links per render** (`show_history`, `show_browse`, `show_add_del`,
+  `is_trade_item`, `region_id`). An inclusion tag, not an `{% include %}`, because an include
+  resolves a flag that the caller forgets against the surrounding context, while the tag applies
+  its own default.
 
 The click handler delegates from the enclosing `item-name` class, so a new call site must keep
 that class on the cell.
 
-The chart icon links to the history page. `region_id` aims it at the region the caller already
-shows and defaults to The Forge. It is an explicit argument rather than something read off the
+The chart icon links to the history page and the list icon to the market browser. The browse link
+carries the type id alone, because that page covers every ingested region at once. `region_id`
+aims the history link at the region the caller already shows and defaults to The Forge. It is an explicit argument rather than something read off the
 surrounding context, for the same reason the component is a tag and not an include: a caller that
 inherits a region silently will eventually inherit the wrong one. Callers with no single region to
 name leave it out — the shopping list prices five regions per row, and a hauling deal spans two.
@@ -393,7 +476,9 @@ vendored and pinned under `market/static/market/vendor/`.
 The region list comes from `marketdata.RegionStatus`, never from `TradeHub` — that table names
 region 10000002 "Jita", while the region is "The Forge".
 
-The item search (`/market/ajax/type_search`) reads `sde.types` where `market_group_id IS NOT NULL`,
+The item search box is shared with the market browser: `type_search.js` and the styles in
+`helion.css` serve both, and each page supplies its own form around them. Its endpoint
+(`/market/ajax/type_search`) reads `sde.types` where `market_group_id IS NOT NULL`,
 needs three characters and returns at most 20 rows. `icontains` compiles to `ILIKE '%x%'`, which no
 index serves, and `sde` belongs to another writer so helion cannot add one — the scan covers ~53k
 rows and measures a few milliseconds.

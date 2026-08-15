@@ -48,6 +48,7 @@ from market.services.orders import (
     find_undercut_buy_orders,
     find_undercut_sell_orders,
     get_jita_best_ask,
+    get_order_book,
     get_orders_in_hub_range,
     get_plex_best_ask,
     get_price_ticker,

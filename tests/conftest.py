@@ -52,7 +52,14 @@ CREATE TABLE IF NOT EXISTS sde.npc_corporations (
 CREATE TABLE IF NOT EXISTS sde.map_solar_systems (
     _key bigint PRIMARY KEY,
     region_id bigint,
-    name_en varchar(256)
+    name_en varchar(256),
+    security_status double precision
+);
+-- A view on the real schema (sdemanager composes the name from six entities);
+-- a plain table stands in for it here, since the app only ever reads it.
+CREATE TABLE IF NOT EXISTS sde.npc_station_names (
+    station_id bigint PRIMARY KEY,
+    name text NOT NULL
 );
 """
 

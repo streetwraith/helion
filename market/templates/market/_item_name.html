@@ -2,6 +2,9 @@
 {% if show_history %}
  <a href="{{ history_url }}"><i class="bi bi-bar-chart-line"></i></a>
 {% endif %}
+{% if show_browse %}
+ <a href="{{ browse_url }}" title="order book"><i class="bi bi-card-list"></i></a>
+{% endif %}
 {% if show_add_del %}
  {% if is_trade_item %}
  <div class="minus-icon" alt="Remove from trade items"></div>
