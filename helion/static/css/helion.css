@@ -245,6 +245,40 @@ table.ice th {
     text-align: right;
 }
 
+/* The item search box (type_search.js), shared by the history chart and the
+   market browser. The result list overlays the page, so the box anchors it. */
+#type-search-box {
+    position: relative;
+    display: inline-block;
+}
+
+#type-search-results {
+    display: none;
+    position: absolute;
+    z-index: 10;
+    left: 0;
+    top: 100%;
+    min-width: 100%;
+    max-height: 20em;
+    overflow-y: auto;
+    margin: 0;
+    padding: 0;
+    list-style-type: none;
+    background: #fff;
+    border: 1px solid #ccc;
+}
+
+#type-search-results li {
+    padding: 1px 4px;
+    white-space: nowrap;
+    cursor: pointer;
+}
+
+#type-search-results li.active,
+#type-search-results li:hover {
+    background: #e1e0d9;
+}
+
 /* The rule sits on the cells, not on the thead: WebKit does not pin a sticky thead reliably.
    The offset of the second row must equal the height of the first row. The fixed line height
    makes that height exact: 1.25em of text plus the two 1px borders. */
@@ -316,6 +350,16 @@ table tr.headers-rotated th span {
        this background. tr.notify-new keeps its outline for the same reason. */
     .notify-status {
         color: #d15656;
+    }
+
+    #type-search-results {
+        background: #1e2325;
+        border-color: #333d42;
+    }
+
+    #type-search-results li.active,
+    #type-search-results li:hover {
+        background: #2f3639;
     }
 
     #user-panel,

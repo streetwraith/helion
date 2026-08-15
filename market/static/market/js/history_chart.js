@@ -1,4 +1,5 @@
-// The market history chart and its item search box.
+// The market history chart. The item search box beside it is shared with the
+// market browser and lives in type_search.js.
 //
 // The series order below matches get_market_history_chart in
 // market/services/history.py: volume, low, high, average, 5d average, 30d
@@ -75,9 +76,6 @@ const VOLUME_PLOT_SHARE = 0.3;
 const CHART_RESERVED_PX = 90;
 const CHART_MIN_HEIGHT_PX = 300;
 const CHART_RESIZE_DEBOUNCE_MS = 100;
-
-const SEARCH_MIN_CHARS = 3;
-const SEARCH_DEBOUNCE_MS = 200;
 
 const darkQuery = window.matchMedia('(prefers-color-scheme: dark)');
 
@@ -297,101 +295,9 @@ function drawChart() {
     darkQuery.addEventListener('change', build);
 }
 
-function bindTypeSearch() {
-    const input = $('#type_search');
-    const results = $('#type-search-results');
-    const form = $('#history-controls');
-    let searchTimer = null;
-    let request = null;
-
-    function hide() {
-        results.empty().hide();
-    }
-
-    function choose(typeId) {
-        $('#type_id').val(typeId);
-        form[0].submit();
-    }
-
-    function render(matches) {
-        results.empty();
-        matches.forEach(function(match) {
-            $('<li>').text(match.name).attr('data-type-id', match.type_id).appendTo(results);
-        });
-        results.toggle(matches.length > 0);
-    }
-
-    input.on('input', function() {
-        const query = input.val().trim();
-        clearTimeout(searchTimer);
-        if (query.length < SEARCH_MIN_CHARS) {
-            hide();
-            return;
-        }
-        searchTimer = setTimeout(function() {
-            if (request) {
-                request.abort();
-            }
-            request = $.ajax({
-                url: '/market/ajax/type_search',
-                data: {q: query},
-                dataType: 'json',
-                success: render,
-                error: hide
-            });
-        }, SEARCH_DEBOUNCE_MS);
-    });
-
-    input.on('keydown', function(event) {
-        const items = results.children('li');
-        if (event.key === 'Escape') {
-            hide();
-            return;
-        }
-        if (event.key === 'Enter') {
-            // Always swallow Enter: a native submit would send the type id of the
-            // item shown before this search, under the name just typed.
-            event.preventDefault();
-            const active = items.filter('.active');
-            const chosen = active.length ? active : items.first();
-            if (chosen.length) {
-                choose(chosen.data('type-id'));
-            }
-            return;
-        }
-        if (event.key !== 'ArrowDown' && event.key !== 'ArrowUp') {
-            return;
-        }
-        event.preventDefault();
-        if (items.length === 0) {
-            return;
-        }
-        const step = event.key === 'ArrowDown' ? 1 : -1;
-        let index = items.index(items.filter('.active')) + step;
-        if (index < 0) {
-            index = items.length - 1;
-        }
-        if (index >= items.length) {
-            index = 0;
-        }
-        items.removeClass('active').eq(index).addClass('active');
-    });
-
-    results.on('click', 'li', function() {
-        choose($(this).data('type-id'));
-    });
-
-    $(document).on('click', function(event) {
-        if ($(event.target).closest('#type-search-box').length === 0) {
-            hide();
-        }
-    });
-}
-
 $(document).ready(function() {
     $('#region_id').on('change', function() {
         $('#history-controls')[0].submit();
     });
-    bindTypeSearch();
     drawChart();
 });

@@ -22,39 +22,6 @@
     text-decoration: none;
 }
 
-/* The result list overlays the page, so the box anchors it. */
-#type-search-box {
-    position: relative;
-    display: inline-block;
-}
-
-#type-search-results {
-    display: none;
-    position: absolute;
-    z-index: 10;
-    left: 0;
-    top: 100%;
-    min-width: 100%;
-    max-height: 20em;
-    overflow-y: auto;
-    margin: 0;
-    padding: 0;
-    list-style-type: none;
-    background: #fff;
-    border: 1px solid #ccc;
-}
-
-#type-search-results li {
-    padding: 1px 4px;
-    white-space: nowrap;
-    cursor: pointer;
-}
-
-#type-search-results li.active,
-#type-search-results li:hover {
-    background: #e1e0d9;
-}
-
 #history-chart {
     width: 100%;
 }
@@ -80,16 +47,6 @@
    is not stylable: history_chart.js carries the matching axis, grid and series
    colours and rebuilds on a theme switch. */
 @media (prefers-color-scheme: dark) {
-    #type-search-results {
-        background: #1e2325;
-        border-color: #333d42;
-    }
-
-    #type-search-results li.active,
-    #type-search-results li:hover {
-        background: #2f3639;
-    }
-
     .history-notice {
         color: #d15656;
     }
