@@ -1,7 +1,7 @@
 from django.db import connection
 from django.db.models import Case, IntegerField, Value, When
 
-from evesde.models import Type
+from evesde.models import MarketGroup, MetaGroup, Type
 
 # A shorter query matches thousands of names and helps nobody.
 MIN_SEARCH_LENGTH = 3
@@ -15,6 +15,61 @@ MAX_MARKET_GROUP_DEPTH = 10
 def get_type_names(type_ids):
     type_names = Type.objects.filter(type_id__in=type_ids).values("type_id", "name")
     return {item["type_id"]: item["name"] for item in type_names}
+
+
+def get_market_group_options(excluded_root_ids=()):
+    """The market groups as a flat, ordered list for a select.
+
+    Each entry carries its depth, so the caller can indent it. The order is
+    depth-first and alphabetical, which is the order a person reads a tree in.
+
+    Two shaping rules:
+
+    - A group under an excluded root is dropped with the root.
+    - A leaf is dropped when every one of its siblings is a leaf too. That is
+      the terminal size or slot split - Small/Medium/Large/Capital Armor Rigs,
+      Implant Slot 06 to 10 - which is finer than this filter needs. A leaf
+      that sits beside a group with children stays, because it is a category
+      in its own right: Afterburners keeps its 70 types beside Propulsion's
+      other children.
+    """
+    groups = {
+        row["market_group_id"]: {"parent": row["parent_group_id"], "name": row["name"], "kids": []}
+        for row in MarketGroup.objects.values("market_group_id", "parent_group_id", "name")
+    }
+    roots = []
+    for group_id, group in groups.items():
+        siblings = groups[group["parent"]]["kids"] if group["parent"] in groups else roots
+        siblings.append(group_id)
+    for group in groups.values():
+        group["kids"].sort(key=lambda group_id: groups[group_id]["name"].casefold())
+    roots.sort(key=lambda group_id: groups[group_id]["name"].casefold())
+
+    def is_leaf(group_id):
+        return not groups[group_id]["kids"]
+
+    def keep(group_id, parent_id):
+        if not is_leaf(group_id) or parent_id is None:
+            return True
+        return not all(is_leaf(sibling) for sibling in groups[parent_id]["kids"])
+
+    options = []
+
+    def walk(group_id, depth):
+        options.append({"market_group_id": group_id, "name": groups[group_id]["name"], "depth": depth})
+        for kid in groups[group_id]["kids"]:
+            if keep(kid, group_id):
+                walk(kid, depth + 1)
+
+    for root_id in roots:
+        if root_id not in excluded_root_ids:
+            walk(root_id, 0)
+    return options
+
+
+def get_meta_groups():
+    """The meta groups as (id, name), lowest id first: the exclude filter's legend."""
+    return list(MetaGroup.objects.order_by("meta_group_id").values_list("meta_group_id", "name"))
 
 
 def get_market_type(type_id):

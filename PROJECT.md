@@ -415,6 +415,32 @@ this page's.
 PLEX needs no special case: it renders under its pseudo-region with locations across
 the universe, and the hub and security filters still mean what they say.
 
+## The station trading filter
+
+The page filters by a market group and by excluded meta groups. The group input is a
+select over the whole tree, not a number to look up elsewhere. Two rules shape it, and
+both exist because the raw tree has 2106 groups:
+
+- **Seven roots never appear**: Apparel, Blueprints & Reactions, Personalization,
+  Pilot's Services, Ship SKINs, Skills and Special Edition Assets. Nothing under them
+  carries a spread worth scanning. The list is ids in `market/constants.py`, not names,
+  because a name changes with an expansion.
+- **A leaf drops when every one of its siblings is a leaf too.** That is the terminal
+  variant split — Small/Medium/Large/Capital Armor Rigs, Implant Slot 06 to 10,
+  Amarr/Caldari/Gallente/Minmatar — and selecting the parent covers all of it. The rule
+  follows the branch rather than a fixed depth, because the branches are uneven: rigs
+  stop at depth 2 and implants at depth 3. A leaf that sits beside a group with
+  children stays, since it is a category in its own right; cutting every leaf instead
+  would drop 136 of those, Afterburners and its 70 types among them. The tree ends at
+  404 options.
+
+Selecting a group still means the group and every descendant, which is what
+`find_type_ids_by_market_groups` has always done, so the option a person picks and the
+types they get stay in step.
+
+The meta filter stays a list of ids, with the legend on an info icon beside it: a type
+with no meta group is never excluded, and 10,723 of the 19,667 market types have none.
+
 ## The item name component
 
 Every item name in the UI renders through one inclusion tag, `{% item_name type_id name %}`

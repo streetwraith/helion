@@ -44,6 +44,10 @@ CREATE TABLE IF NOT EXISTS sde.market_groups (
     name_en varchar(512),
     has_types boolean
 );
+CREATE TABLE IF NOT EXISTS sde.meta_groups (
+    _key bigint PRIMARY KEY,
+    name_en text NOT NULL
+);
 CREATE TABLE IF NOT EXISTS sde.npc_corporations (
     _key bigint PRIMARY KEY,
     faction_id bigint,

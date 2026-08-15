@@ -42,6 +42,15 @@ def until_dhms(value):
 def round_filter(value, ndigits=None):
     return round(value, ndigits if ndigits is not None else 0)
 
+# A browser collapses leading spaces inside an <option>, so a tree indents
+# there with non-breaking spaces. The character needs no escaping.
+OPTION_INDENT = '\u00a0' * 4
+
+@register.filter(name='option_indent')
+def option_indent(depth):
+    """One level of <option> indentation per depth step."""
+    return OPTION_INDENT * int(depth)
+
 @register.filter(name='get_by_key')
 def get_by_key(value, arg):
     """Retrieve a value from a dictionary or an attribute from an object."""

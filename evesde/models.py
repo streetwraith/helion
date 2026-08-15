@@ -38,6 +38,18 @@ class MarketGroup(models.Model):
         return str(self.market_group_id) + " " + self.name
 
 
+class MetaGroup(models.Model):
+    meta_group_id = models.BigIntegerField(primary_key=True, db_column="_key")
+    name = models.CharField(max_length=256, db_column="name_en")
+
+    class Meta:
+        managed = False
+        db_table = 'sde"."meta_groups'
+
+    def __str__(self):
+        return str(self.meta_group_id) + " " + self.name
+
+
 class NpcCorporation(models.Model):
     corporation_id = models.BigIntegerField(primary_key=True, db_column="_key")
     faction_id = models.BigIntegerField(null=True)

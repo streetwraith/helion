@@ -5,7 +5,11 @@ from django.shortcuts import render
 
 from evesde import services as sde_service
 from helion.decorators import require_character
-from market.constants import REGION_ID_DOMAIN, REGION_ID_FORGE
+from market.constants import (
+    NON_TRADED_MARKET_GROUP_ROOTS,
+    REGION_ID_DOMAIN,
+    REGION_ID_FORGE,
+)
 from market.models import CharacterOrder, MarketOrderUndercut, TradeHub, TradeItem
 from marketdata.models import OrdersHub, RegionStatus
 from market.services import market_service
@@ -254,5 +258,8 @@ def market_trade_hub(request, region_id):
 
     context['isk_in_escrow'] = isk_in_escrow
     context['isk_in_sell_orders'] = isk_in_sell_orders
+    context['market_group_options'] = sde_service.get_market_group_options(
+        excluded_root_ids=NON_TRADED_MARKET_GROUP_ROOTS)
+    context['meta_groups'] = sde_service.get_meta_groups()
 
     return render(request, "market/trade_hub/trade_hub.html", context)
