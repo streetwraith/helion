@@ -27,6 +27,14 @@
     font-weight: normal;
 }
 
+/* The heading has to keep the item-name class, because the click handler that
+   opens the in-game market window delegates from it. That class is sized for a
+   table cell, and its 60% resolves against the parent font rather than against
+   the h1 default, so the item name came out smaller than the path above it. */
+#browse-title {
+    font-size: 1.25rem;
+}
+
 .browse-notice {
     color: #b3261e;
 }

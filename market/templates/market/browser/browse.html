@@ -2,7 +2,7 @@
 
 {% load static custom_filters item_tags %}
 
-{% block title %}browse | Helion{% endblock %}
+{% block title %}{% if item %}{{ item.name }}{% else %}browse{% endif %} | Helion{% endblock %}
 
 {% block css %}
 <link rel="stylesheet" href="{% static 'market/css/browse.css' %}">
@@ -47,13 +47,13 @@
 {% endfor %}
 
 {% if item %}
+{% if group_path %}
+<p class="browse-path">{{ group_path|join:" / " }}</p>
+{% endif %}
 <h1 id="browse-title" class="item-name">
   {# No browse link: this page is where that link leads. #}
   {% item_name item.type_id item.name show_browse=False %}
 </h1>
-{% if group_path %}
-<p class="browse-path">{{ group_path|join:" / " }}</p>
-{% endif %}
 
 {# Hidden until the filters have run, so no row can flash and then vanish. #}
 <div id="browse-book" hidden>

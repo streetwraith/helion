@@ -263,12 +263,22 @@ class TestBrowsePage:
             reverse('market_browse'), {'type_id': TRITANIUM}).content.decode()
 
         assert "Manufacture &amp; Research / Minerals" in content
+        # The path reads first, and the item name answers it.
+        assert content.index('class="browse-path"') < content.index('id="browse-title"')
+
+    def test_the_tab_names_the_item(self, auth_client, universe):
+        content = auth_client.get(
+            reverse('market_browse'), {'type_id': TRITANIUM}).content.decode()
+
+        assert "<title>Tritanium | Helion</title>" in content
 
     def test_no_item_renders_the_search_box_alone(self, auth_client, universe):
         response = auth_client.get(reverse('market_browse'))
 
         assert response.status_code == 200
-        assert 'id="browse-book"' not in response.content.decode()
+        content = response.content.decode()
+        assert 'id="browse-book"' not in content
+        assert "<title>browse | Helion</title>" in content
 
     def test_an_unknown_item_says_so_instead_of_showing_another(self, auth_client, universe):
         response = auth_client.get(reverse('market_browse'), {'type_id': '99999999'})
