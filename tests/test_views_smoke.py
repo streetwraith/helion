@@ -217,6 +217,18 @@ class TestHauling:
         assert deals[0].price_jita == 100_000_000.0
         assert deals[0].profit == pytest.approx(120_000_000.0 * 0.964 / 100 * 100 - 100_000_000.0, rel=1e-6)
 
+    def test_sell_to_sell_row_carries_the_average_daily_volume(self, auth_client, deal_data):
+        # The volume filter runs in the browser and reads this attribute.
+        add_history(34, LATEST, average=100.0, volume=9100, region_id=AMARR_REGION)
+
+        response = auth_client.get(
+            reverse("market_hauling_sell_to_sell",
+                    kwargs={"from_location": "Jita", "to_location": "Amarr"})
+        )
+
+        assert response.context["deals"][0].history_averages["avg_daily_volume"] == 100.0
+        assert 'data-avg-volume="100.0"' in response.content.decode()
+
 
 class TestStationTrading:
     def test_trade_hub_page(self, character_client, trade_hubs, no_esi_assets):
