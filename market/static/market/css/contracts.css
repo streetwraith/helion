@@ -1,3 +1,10 @@
+/* table.market is full width. A contract row holds short values, so the
+   browser hands every spare pixel to the text columns and one row spreads
+   across the screen. Auto width sizes each column to its longest value. */
+#contracts {
+    width: auto;
+}
+
 /* The app right-aligns every cell, which suits the ISK and the volumes. Names,
    routes and statuses read from the left. */
 #contracts td.text {
