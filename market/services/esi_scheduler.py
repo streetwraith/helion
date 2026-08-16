@@ -49,6 +49,7 @@ FEEDS = {
     "orders": (esi_sync.refresh_character_orders, 1200),
     "wallet": (esi_sync.refresh_character_wallet, 3600),
     "assets": (esi_sync.refresh_character_assets, 3600),
+    "contracts": (esi_sync.refresh_character_contracts, 300),
 }
 
 
@@ -128,6 +129,20 @@ def schedule_due_fetches(enqueue):
         enqueue(feed, character_name)
 
 
+def _character_id(character_name):
+    """The character a tracked name belongs to.
+
+    Every SSO login adds a Token row, so a character re-authorised for a new
+    scope holds several. They all name the same character, and each fetch picks
+    the token carrying the scope it needs, so any row answers this question.
+    """
+    character_id = (Token.objects.filter(character_name=character_name)
+                    .values_list('character_id', flat=True).first())
+    if character_id is None:
+        raise Token.DoesNotExist(f"no token for {character_name}")
+    return character_id
+
+
 def run_feed(feed, character_name):
     """One fetch attempt for one (feed, character); called by the feed tasks."""
     if is_paused():
@@ -137,8 +152,7 @@ def run_feed(feed, character_name):
         return
     fetch, fallback_ttl = FEEDS[feed]
     try:
-        character_id = Token.objects.get(character_name=character_name).character_id
-        expires = fetch(character_id)
+        expires = fetch(_character_id(character_name))
     except (ESIErrorLimitException, ESIBucketLimitException) as exc:
         # Not this row's fault: pause globally, keep its error state clean.
         pause_all_fetching(exc.reset)

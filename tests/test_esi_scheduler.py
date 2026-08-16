@@ -1,6 +1,5 @@
 """The ESI fetch scheduler: reconciliation, pacing, and the failure policy."""
 from datetime import timedelta
-from types import SimpleNamespace
 
 import pytest
 from django.utils import timezone
@@ -25,13 +24,14 @@ def scheduler_cache(monkeypatch):
     return fake
 
 
+CHARACTER_ID = 900001
+
+
 @pytest.fixture
-def fake_token(monkeypatch):
-    monkeypatch.setattr(esi_scheduler, "Token", SimpleNamespace(
-        objects=SimpleNamespace(get=lambda character_name: SimpleNamespace(character_id=900001)),
-        DoesNotExist=Token.DoesNotExist,
-        MultipleObjectsReturned=Token.MultipleObjectsReturned,
-    ))
+def fake_token(db):
+    # A real row, not a stub: the scheduler's own token lookup is part of what
+    # these tests cover.
+    return Token.objects.create(character_id=CHARACTER_ID, character_name=TRADER)
 
 
 def orders_state(**overrides):
@@ -193,20 +193,27 @@ class TestRunFeed:
         state.refresh_from_db()
         assert state.consecutive_errors == 0
 
-    def test_missing_token_counts_as_client_error(self, scheduler_cache, monkeypatch, settings):
+    def test_missing_token_counts_as_client_error(self, scheduler_cache, settings):
         settings.ESI_FETCH_DISABLE_AFTER = 1
         state = orders_state()
 
-        def raise_does_not_exist(character_name):
-            raise Token.DoesNotExist()
-
-        monkeypatch.setattr(esi_scheduler, "Token", SimpleNamespace(
-            objects=SimpleNamespace(get=raise_does_not_exist),
-            DoesNotExist=Token.DoesNotExist,
-            MultipleObjectsReturned=Token.MultipleObjectsReturned,
-        ))
-
+        # No Token row for this character at all.
         esi_scheduler.run_feed("orders", TRADER)
 
         state.refresh_from_db()
         assert state.disabled_at is not None
+
+    def test_a_second_token_for_one_character_still_fetches(
+            self, scheduler_cache, fake_token, monkeypatch):
+        # Every SSO login adds a row, so authorising a new scope leaves two.
+        # The scheduler used to call Token.objects.get() here and broke every
+        # feed for that character the moment a person logged in again.
+        Token.objects.create(character_id=CHARACTER_ID, character_name=TRADER)
+        state = orders_state()
+        monkeypatch.setitem(esi_scheduler.FEEDS, "orders", (lambda cid: None, 1200))
+
+        esi_scheduler.run_feed("orders", TRADER)
+
+        state.refresh_from_db()
+        assert state.consecutive_errors == 0
+        assert state.last_success is not None
