@@ -84,6 +84,14 @@ def isk_value_mil(value):
         return 0
     return "{:,.1f}m".format(value/1000000)
 
+@register.filter(name='sp_value')
+def sp_value(value):
+    """Skill points in millions. Not isk_value_mil: these are not ISK, and the
+    two would drift apart the moment one of them changes."""
+    if not value:
+        return "0"
+    return "{:,.1f}m".format(value / 1000000)
+
 @register.filter(name='stradd')
 def stradd(arg1, arg2):
     """concatenate arg1 & arg2"""

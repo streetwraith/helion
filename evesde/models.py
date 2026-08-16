@@ -24,6 +24,39 @@ class Type(models.Model):
         return str(self.type_id) + " " + self.name
 
 
+class Group(models.Model):
+    """Inventory groups, the tree that groups a skill under Gunnery or Trade.
+    Not the market groups below: a type carries both, and they differ."""
+    group_id = models.BigIntegerField(primary_key=True, db_column="_key")
+    name = models.CharField(max_length=512, db_column="name_en")
+    category_id = models.BigIntegerField(null=True)
+
+    class Meta:
+        managed = False
+        db_table = 'sde"."groups'
+
+    def __str__(self):
+        return str(self.group_id) + " " + self.name
+
+
+class TypeDogmaAttribute(models.Model):
+    """One dogma attribute value of one type, for example the implant slot.
+
+    sdemanager flattens a record array into a `<parent>__<path>` child table, so
+    the type id arrives as `_parent_key` and the row's position in the array as
+    `_ordinal_1`. Those two are the key.
+    """
+    pk = models.CompositePrimaryKey("type_id", "ordinal")
+    type_id = models.BigIntegerField(db_column="_parent_key")
+    ordinal = models.IntegerField(db_column="_ordinal_1")
+    attribute_id = models.BigIntegerField()
+    value = models.FloatField(null=True)
+
+    class Meta:
+        managed = False
+        db_table = 'sde"."type_dogma__dogma_attributes'
+
+
 class MarketGroup(models.Model):
     market_group_id = models.BigIntegerField(primary_key=True, db_column="_key")
     parent_group_id = models.BigIntegerField(null=True)

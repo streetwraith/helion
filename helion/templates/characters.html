@@ -1,13 +1,114 @@
 {% extends "base.html" %}
 
-{% load custom_filters %}
+{% load static custom_filters %}
+
+{% block css %}
+<link rel="stylesheet" href="{% static 'css/character.css' %}">
+{% endblock %}
 
 {% block content %}
 {% if character %}
 <h1>{{ character.name }}</h1>
 
-{% if not character_skills %}
+{% if sheet_error %}
+<p class="sheet-notice">ESI did not answer: {{ sheet_error }}</p>
+{% elif not sheet %}
+<p class="sheet-notice">This character was authorised before the skill and clone
+scopes were added. Log in again to see the sheet.</p>
+{% else %}
+
+<h2>Jump clone</h2>
+{% if sheet.jump_clone_ready %}
+<p>{% if jump_clone_available %}ready now{% else %}ready in {{ sheet.jump_clone_ready|until_dhms }}{% endif %}
+   (last jump {{ sheet.last_clone_jump|since_dhms }} ago)</p>
+{% else %}
+<p>no clone jump on record</p>
+{% endif %}
+
+<h2>Attributes</h2>
+<table class="market" style="width: auto;">
+    <thead>
+        <tr>
+            <th>perception</th>
+            <th>memory</th>
+            <th>willpower</th>
+            <th>intelligence</th>
+            <th>charisma</th>
+            <th>bonus remaps</th>
+        </tr>
+    </thead>
+    <tbody>
+        <tr>
+            <td>{{ sheet.attributes.perception }}</td>
+            <td>{{ sheet.attributes.memory }}</td>
+            <td>{{ sheet.attributes.willpower }}</td>
+            <td>{{ sheet.attributes.intelligence }}</td>
+            <td>{{ sheet.attributes.charisma }}</td>
+            <td>{{ sheet.attributes.bonus_remaps|default_if_none:"0" }}</td>
+        </tr>
+    </tbody>
+</table>
+
+<h2>Implants</h2>
+{% if sheet.implants %}
+<ul class="implants">
+    {% for implant in sheet.implants %}
+    <li><span class="implant-slot">{{ implant.slot|default_if_none:"-" }}</span> {{ implant.name }}</li>
+    {% endfor %}
+</ul>
+{% else %}
+<p>none</p>
+{% endif %}
+
+<h2>Skill queue</h2>
+{% if sheet.skill_queue %}
+<table class="market" style="width: auto;">
+    <thead>
+        <tr>
+            <th>#</th>
+            <th>skill</th>
+            <th>level</th>
+            <th>finishes in</th>
+        </tr>
+    </thead>
+    <tbody>
+        {% for entry in sheet.skill_queue %}
+        <tr>
+            <td>{{ entry.position|add:1 }}</td>
+            <td class="text">{{ entry.name }}</td>
+            <td>{{ entry.level_roman }}</td>
+            <td>{{ entry.finish_date|until_dhms|default:"paused" }}</td>
+        </tr>
+        {% endfor %}
+    </tbody>
+</table>
+{% else %}
+<p>empty</p>
+{% endif %}
+
+<h2>Skills <span class="sheet-total">{{ sheet.total_sp|sp_value }} SP,
+    {{ sheet.unallocated_sp|sp_value }} unallocated</span></h2>
+<div class="skill-groups">
+    {% for group in sheet.skill_groups %}
+    <div class="skill-group">
+        <h3>{{ group.name }} <span class="sheet-total">{{ group.skillpoints|sp_value }}</span></h3>
+        <ul>
+            {% for skill in group.skills %}
+            <li>{{ skill.name }} <span class="skill-level">{{ skill.level_roman }}</span></li>
+            {% endfor %}
+        </ul>
+    </div>
+    {% endfor %}
+</div>
+
+{% if not show_skills %}
 <p><a href="{% url 'characters' %}?character={{ character.character_id }}&amp;show_skills=true">show character skills xml</a></p>
+{% else %}
+<pre>
+{% for group in sheet.skill_groups %}{% for skill in group.skills %}&lt;skill typeID="{{ skill.skill_id }}" name="{{ skill.name }}" level="{{ skill.trained_level }}" activelevel="{{ skill.level }}" skillpoints="{{ skill.skillpoints }}" ownsBook="false" isKnown="true" /&gt;
+{% endfor %}{% endfor %}</pre>
+{% endif %}
+
 {% endif %}
 
 <form method="post">
@@ -30,14 +131,5 @@
     <button type="submit">logout</button>
     <input type="hidden" name="next" value="{{ next }}">
 </form>
-
-{% if character_skills %}
-<div>
-<pre>
-{% for skill in character_skills.skills %}{% with skill_names|get_by_key:skill.skill_id as skill_name %}&lt;skill typeID="{{skill.skill_id}}" name="{{skill_name}}" level="{{skill.trained_skill_level}}" activelevel="{{skill.active_skill_level}}" skillpoints="{{skill.skillpoints_in_skill}}" ownsBook="false" isKnown="true" /&gt;{% endwith %}
-{% endfor %}
-</pre>
-</div>
-{% endif %}
 
 {% endblock %}

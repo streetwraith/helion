@@ -38,6 +38,19 @@ CREATE TABLE IF NOT EXISTS sde.types (
     volume double precision,
     portion_size integer
 );
+-- A record array flattened into a child table: the type id is the parent key.
+CREATE TABLE IF NOT EXISTS sde.type_dogma__dogma_attributes (
+    _parent_key bigint NOT NULL,
+    _ordinal_1 integer NOT NULL,
+    attribute_id bigint,
+    value double precision,
+    PRIMARY KEY (_parent_key, _ordinal_1)
+);
+CREATE TABLE IF NOT EXISTS sde.groups (
+    _key bigint PRIMARY KEY,
+    name_en varchar(512),
+    category_id bigint
+);
 CREATE TABLE IF NOT EXISTS sde.market_groups (
     _key bigint PRIMARY KEY,
     parent_group_id bigint,

@@ -1,0 +1,56 @@
+/* The character sheet. About 50 skill groups follow each other down the page,
+   so they run in columns instead: one group stays whole, and the page stops
+   being a single long ribbon. */
+.skill-groups {
+    columns: 4 16em;
+    gap: 2em;
+}
+
+.skill-group {
+    break-inside: avoid;
+    margin-bottom: 1em;
+}
+
+.skill-groups ul,
+ul.implants {
+    list-style: none;
+}
+
+.skill-groups li,
+ul.implants li {
+    font-size: 90%;
+}
+
+.skill-level,
+.implant-slot {
+    color: #52514e;
+}
+
+/* The slot numbers line up so the list reads as an ordered rack. */
+.implant-slot {
+    display: inline-block;
+    text-align: right;
+    width: 1.5em;
+}
+
+.sheet-total {
+    color: #52514e;
+    font-size: 80%;
+    font-weight: normal;
+}
+
+.sheet-notice {
+    color: #b3261e;
+}
+
+@media (prefers-color-scheme: dark) {
+    .skill-level,
+    .implant-slot,
+    .sheet-total {
+        color: #a8a5a0;
+    }
+
+    .sheet-notice {
+        color: #d15656;
+    }
+}

@@ -1,9 +1,11 @@
 from django.conf import settings
 from django.http import Http404
 from django.shortcuts import render, redirect
-from evesde.models import Type
-from helion.providers import esi
+from django.utils import timezone
+from aiopenapi3.errors import HTTPError
+from esi.errors import TokenError
 from esi.models import Token
+from helion.character_sheet import get_character_sheet
 import logging
 
 logger = logging.getLogger(__name__)
@@ -73,20 +75,24 @@ def characters(request, *args, **kwargs):
                 logger.debug("Token %s not found.", token_pk)
             return redirect('characters')
 
-    character = _shown_character(request)
-    context = {'character': character}
-
     # No require_character here: this view is the redirect target. Without a
-    # character the skills block is skipped and the page still offers the login
-    # that produces one.
-    if request.GET.get('show_skills', False) and character:
-        character_id = character['character_id']
-        token = Token.get_token(character_id, 'esi-skills.read_skills.v1')
-        # use_etag=False: runs in the request path and always needs the body.
-        character_skills = esi.client.Skills.GetCharactersCharacterIdSkills(
-            character_id=character_id, token=token).result(use_etag=False).model_dump()
-        context['character_skills'] = character_skills
-        skills = Type.objects.filter(type_id__in=[skill['skill_id'] for skill in character_skills['skills']]).values('type_id', 'name')
-        context['skill_names'] = {skill['type_id']: skill['name'] for skill in skills}
+    # character the sheet is skipped and the page still offers the login that
+    # produces one.
+    character = _shown_character(request)
+    context = {'character': character, 'show_skills': bool(request.GET.get('show_skills'))}
+    if character:
+        try:
+            sheet = get_character_sheet(character['character_id'])
+            context['sheet'] = sheet
+            # Derived per request, not in the sheet: the sheet is cached for
+            # minutes and this flag flips on a second.
+            ready = sheet['jump_clone_ready'] if sheet else None
+            context['jump_clone_available'] = ready is not None and ready <= timezone.now()
+        except (TokenError, HTTPError) as exc:
+            # One dead token or one ESI outage must not take the page with it:
+            # make active, add and logout all still have to work here.
+            logger.warning("character sheet for %s failed: %r",
+                           character['character_id'], exc)
+            context['sheet_error'] = repr(exc)
 
     return render(request, "characters.html", context=context)

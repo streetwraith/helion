@@ -152,9 +152,39 @@ therefore groups by character id, and the detail page offers the newest token of
 which carries the scopes of the newest authorisation.
 
 `/characters/?character=<id>` holds what does not belong in the header: make active, add a
-character, log out, and the skills XML dump. A character the user holds no token for answers
-404 rather than an empty page. Without the parameter the page falls back to the active
-character, and then to nothing — the state a first login and the SSO return both land in.
+character, log out, the character sheet, and the skills XML dump. A character the user holds no
+token for answers 404 rather than an empty page. Without the parameter the page falls back to
+the active character, and then to nothing — the state a first login and the SSO return both
+land in.
+
+### The character sheet
+
+The sheet is the one place in the app that calls ESI while a page renders. Five routes —
+attributes, skills, the skill queue, clones and implants — answer in one build, and the result
+sits in the cache for five minutes per character. The scheduler pattern would need five tables,
+five feeds and five migrations to keep data that nobody reads between visits, so the trade goes
+the other way here.
+
+The sheet needs four scopes and takes all of them or none. A character whose token predates
+them gets a notice instead, and that answer is never cached, so a fresh login takes effect at
+once. One dead token or one ESI outage renders a notice too, because make active, add and log
+out have to keep working on that page.
+
+Skills group by **inventory** group (`sde.groups`: Gunnery, Trade), not by market group. A skill
+whose type or group is missing from the sde keeps its raw id rather than dropping off the sheet.
+A skill with no skill points is injected but never trained, so it stays off the sheet, and a
+group left with none of its own disappears too. The XML dump reads the same list, so it drops
+those skills as well.
+
+Implants sort by slot, which is dogma attribute 331 (`implantness`) in
+`sde.type_dogma__dogma_attributes`. That table is a flattened record array, so the type id
+arrives as `_parent_key` and the position in the array as `_ordinal_1`; the two together are the
+key. An implant the sde carries no attribute row for sorts last instead of claiming slot zero.
+
+The jump clone cooldown is 24 hours from the last jump, less one hour per level of Infomorph
+Synchronizing (type 33399). The level comes from the skills payload the sheet already holds, so
+the exact figure costs no extra call. Whether the cooldown has passed is derived per request,
+not stored in the sheet: the sheet is minutes old and that answer changes on a second.
 
 ## The ESI fetch scheduler
 
