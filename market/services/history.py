@@ -55,6 +55,19 @@ def get_market_history_bulk(region_id, type_ids, days_back=90):
 def get_market_history_for_types(type_ids, region_ids):
     return History.objects.filter(type_id__in=type_ids, region_id__in=region_ids)
 
+def recent_daily_averages(region_id, type_id, days):
+    """The last `days` daily averages for one item, oldest first.
+
+    The window is anchored on the newest row, not on today: EVE Ref publishes a
+    day's history a day or two late, so a calendar window would end in gaps. A
+    day the item did not trade has no row and drops out.
+    """
+    assert days > 0
+    rows = (History.objects.filter(region_id=region_id, type_id=type_id,
+                                   average__isnull=False)
+            .order_by('-date').values_list('average', flat=True)[:days])
+    return [float(value) for value in reversed(list(rows))]
+
 def _price_distance(avg, lowest, highest):
     # Position of the average price within the low-high band, in percent.
     # Undefined when inputs are missing or the band is flat (highest == lowest).

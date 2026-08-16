@@ -11,6 +11,7 @@ from evesde.models import Type
 from market.constants import (
     FIRST_STRUCTURE_ID, GLOBAL_PLEX_MARKET_REGION_ID, PLEX_TYPE_ID, REGION_ID_FORGE)
 from market.models import MarketOrderUndercut, TradeHub, TradeItem
+from market.services import history
 from marketdata.models import Order, OrdersHub
 
 
@@ -228,17 +229,55 @@ LARGE_SKILL_INJECTOR_TYPE_ID = 40520
 SKILL_EXTRACTOR_TYPE_ID = 40519
 JITA_STATION_ID = 60003760
 PRICE_TICKER_CACHE_SECONDS = 600  # caps the ticker queries per page render
+# The key names the shape, not the feature: a deploy that changes the entry
+# would otherwise read the old shape back until the entry expires.
+PRICE_TICKER_CACHE_KEY = 'price_ticker_items'
+# Days behind each ticker price. Enough to show a direction, few enough to draw
+# in the few pixels the header gives the sparkline.
+TICKER_HISTORY_DAYS = 7
+
+def _ticker_item(label, price, region_id, type_id):
+    """One ticker cell: the live best ask, the days behind it, and how the two
+    compare."""
+    averages = history.recent_daily_averages(region_id, type_id, TICKER_HISTORY_DAYS)
+    # Above the newest daily average reads as up, the direction the ice page
+    # paints too. Without a price or without history nothing can be compared,
+    # and the cell stays uncoloured.
+    trend = None
+    if price is not None and averages:
+        trend = 'down' if float(price) < averages[-1] else 'up'
+    return {
+        'label': label,
+        'price': price,
+        'history': averages,
+        # peity scales a line from 0 up, and a week of prices moves by well
+        # under a percent, so the default bounds draw a flat line. The bounds
+        # come from the data instead, as they do for the ice charts.
+        'min': min(averages) if averages else None,
+        'max': max(averages) if averages else None,
+        'trend': trend,
+        # peity takes the stroke as an option, so no stylesheet can reach it.
+        'stroke': 'lightcoral' if trend == 'down' else 'lightgreen',
+    }
 
 def get_price_ticker():
-    """Best-ask prices for the header ticker. None values mean no data."""
-    ticker = cache.get('price_ticker')
+    """Header ticker cells, in display order.
+
+    One cache entry holds the prices and the history behind them: the sparkline
+    changes once a day, so it costs nothing to carry it with the price.
+    A null price means no sell order.
+    """
+    ticker = cache.get(PRICE_TICKER_CACHE_KEY)
     if ticker is None:
-        ticker = {
-            'plex': get_plex_best_ask(),
-            'lsi': get_jita_best_ask(LARGE_SKILL_INJECTOR_TYPE_ID),
-            'extractor': get_jita_best_ask(SKILL_EXTRACTOR_TYPE_ID),
-        }
-        cache.set('price_ticker', ticker, PRICE_TICKER_CACHE_SECONDS)
+        ticker = [
+            _ticker_item('PLEX', get_plex_best_ask(),
+                         GLOBAL_PLEX_MARKET_REGION_ID, PLEX_TYPE_ID),
+            _ticker_item('LSI', get_jita_best_ask(LARGE_SKILL_INJECTOR_TYPE_ID),
+                         REGION_ID_FORGE, LARGE_SKILL_INJECTOR_TYPE_ID),
+            _ticker_item('SE', get_jita_best_ask(SKILL_EXTRACTOR_TYPE_ID),
+                         REGION_ID_FORGE, SKILL_EXTRACTOR_TYPE_ID),
+        ]
+        cache.set(PRICE_TICKER_CACHE_KEY, ticker, PRICE_TICKER_CACHE_SECONDS)
     return ticker
 
 # EVE rounds 0.45 up to 0.5 and treats it as high sec; a system at 0.0 or below

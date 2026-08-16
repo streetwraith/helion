@@ -137,6 +137,25 @@ One inherent window: a just-placed own order reaches the order snapshots before 
 `CharacterOrder` refresh sees it, so it can look like a competitor for up to the route's cache
 TTL (20 minutes). Undercut rows dedupe rather than retract, which keeps that noise bounded.
 
+## The character bar
+
+The header carries one portrait per character, and a border marks the active one. A context
+processor builds that list, so every page pays for the query.
+
+The query deliberately skips django-esi's `require_valid()`. That call refreshes every expired
+token against the SSO server, and an access token lives 20 minutes, so a header built on it
+would drive a refresh on nearly every page load. A portrait needs the character id and the name
+only, and a token that stopped working already shows up in the fetch warning bar.
+
+One character can hold several tokens, because each SSO login writes a new row. The bar
+therefore groups by character id, and the detail page offers the newest token of that character,
+which carries the scopes of the newest authorisation.
+
+`/characters/?character=<id>` holds what does not belong in the header: make active, add a
+character, log out, and the skills XML dump. A character the user holds no token for answers
+404 rather than an empty page. Without the parameter the page falls back to the active
+character, and then to nothing — the state a first login and the SSO return both land in.
+
 ## The ESI fetch scheduler
 
 All recurring character fetches (own orders, wallet transactions + journal, assets) run on one
@@ -201,6 +220,15 @@ ingestion covers like any other region. The header ticker reads `min(price)` ove
 orders straight from `market.orders` — the raw table, not the hub view: the region has no trade
 hub and its orders sit in stations across the whole universe, so a hub-range filter would be
 wrong.
+
+Each cell carries the last seven daily averages as a peity sparkline, and the price takes the
+colour of its direction: green above the newest daily average, red below it, which is the
+direction the ice page paints. That window anchors on the newest history row rather than on
+today, because EVE Ref publishes a day's history a day or two late.
+
+One cache entry holds the three prices and their history together for 10 minutes. Its key names
+the shape (`price_ticker_items`), so a deploy that changes the entry cannot read the old shape
+back out of Redis until it expires.
 
 ## Undercut detection
 

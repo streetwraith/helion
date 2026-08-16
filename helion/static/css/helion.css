@@ -54,22 +54,57 @@ tr.notify-new td.item-name {
     outline-offset: -2px;
 }
 
-#user-panel {
+#top-bar {
+    align-items: center;
     border-bottom: 1px solid #ccc;
-    text-align: right;
-}
-
-#user-panel * {
-    display: inline;
-}
-
-#user-panel img {
-    width: 32px;
-    height: 32px;
+    display: flex;
+    gap: 1em;
 }
 
 header nav {
     border-bottom: 1px solid #ccc;
+}
+
+#price-ticker {
+    align-items: center;
+    display: flex;
+    gap: 1em;
+}
+
+.ticker-chart {
+    vertical-align: middle;
+}
+
+/* Against the newest daily average: up is green, down is red. Both colours
+   already carry the page ink contrast in this theme; the dark block below
+   holds the pair that clears the dark background. */
+#price-ticker .up {
+    color: #2e7d32;
+}
+
+#price-ticker .down {
+    color: #b03030;
+}
+
+/* Whatever else the bar holds, the portraits stay at the far right. */
+#character-bar {
+    display: flex;
+    gap: 4px;
+    margin-left: auto;
+}
+
+/* The border is on every portrait, transparent until the character is the
+   active one, so making another character active moves no pixel. currentColor
+   keeps it readable in both the light and the dark theme. */
+#character-bar img.portrait {
+    border: 2px solid transparent;
+    display: block;
+    height: 32px;
+    width: 32px;
+}
+
+#character-bar img.portrait.active {
+    border-color: currentColor;
 }
 
 header nav ul, header nav ul li {
@@ -370,9 +405,17 @@ table tr.headers-rotated th span {
         background: #2f3639;
     }
 
-    #user-panel,
+    #top-bar,
     header nav {
         border-bottom-color: #333d42;
+    }
+
+    #price-ticker .up {
+        color: #009400;
+    }
+
+    #price-ticker .down {
+        color: #d15656;
     }
 
     ul.pagination li.active {

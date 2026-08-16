@@ -1,6 +1,7 @@
 from django.core.cache import cache
 from django.db.models import Q
 
+from esi.models import Token
 from market.models import EsiFetchState, TradeHub
 from market.services import market_service
 
@@ -25,10 +26,29 @@ def _fetch_warnings():
     return warnings
 
 
+def _header_characters(request):
+    """One portrait per character for the header bar.
+
+    Deliberately no require_valid(): that call refreshes every expired token
+    against the SSO server, and an access token dies every 20 minutes, so the
+    header alone would drive a refresh on nearly every page load. A portrait
+    only needs the id and the name, and the fetch warning bar already reports a
+    character whose token stopped working.
+    """
+    active_id = (request.session.get('esi_token') or {}).get('character_id')
+    # Every SSO login adds a token row, so one character can hold several.
+    names_by_id = dict(Token.objects.filter(user=request.user)
+                       .values_list('character_id', 'character_name'))
+    return [{'character_id': character_id, 'name': name,
+             'is_active': character_id == active_id}
+            for character_id, name in sorted(names_by_id.items(), key=lambda pair: pair[1])]
+
+
 def global_site_data(request):
     trade_hubs = TradeHub.objects.all()
     context = { "trade_hubs": list(trade_hubs) }
     if request.user.is_authenticated:
         context["price_ticker"] = market_service.get_price_ticker()
         context["esi_fetch_warnings"] = _fetch_warnings()
+        context["header_characters"] = _header_characters(request)
     return context

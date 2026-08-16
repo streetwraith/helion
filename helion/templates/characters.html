@@ -3,53 +3,33 @@
 {% load custom_filters %}
 
 {% block content %}
-<div>
-selected token: {{ request.session.esi_token }}
-</div>
+{% if character %}
+<h1>{{ character.name }}</h1>
 
-characters:
-{% for token in tokens|dictsort:"character_name" %}
-<div class="character">
-    <form method="post">
-        {% csrf_token %}
-        <div class="{% if token.pk == request.session.esi_token %}selected{% endif %}">
-            <div>{{ token.character_name }}</div>
-            <div>
-                <input type="image" formmethod="post" src="https://images.evetech.net/characters/{{ token.character_id }}/portrait?size=64">
-            </div>
-            <div>
-                <input type="hidden" name="_token" value="{{ token.pk }}">
-                <button type="submit" title="select" formmethod="post">
-                    select
-                </button>
-            </div>
-        </div>
-    </form>
-</div>
-{% endfor %}
+{% if not character_skills %}
+<p><a href="{% url 'characters' %}?character={{ character.character_id }}&amp;show_skills=true">show character skills xml</a></p>
+{% endif %}
+
 <form method="post">
     {% csrf_token %}
-    <div>
-        <div>add character</div>
-        <div>
-            <input type="image" formmethod="post" src="https://images.evetech.net/characters/1/portrait?size=64">
-        </div>
-        <div>
-            <input type="hidden" name="_add" value="True">
-            <a href="#" type="submit">
-                <button type="submit" title="add character" formmethod="post">
-                    new
-                </button>
-            </a>
-        </div>
-    </div>
+    <input type="hidden" name="_token" value="{{ character.token_pk }}">
+    <button type="submit">make active</button>
+</form>
+{% else %}
+<p>no character selected</p>
+{% endif %}
+
+<form method="post">
+    {% csrf_token %}
+    <input type="hidden" name="_add" value="True">
+    <button type="submit">add new character</button>
 </form>
 
-{% if request.session.esi_token != None and character_skills == None%}
-<div>
-<a href="{% url 'characters' %}?show_skills=true">show character skills xml</a>
-</div>
-{% endif %}
+<form method="post" action="{% url 'logout' %}">
+    {% csrf_token %}
+    <button type="submit">logout</button>
+    <input type="hidden" name="next" value="{{ next }}">
+</form>
 
 {% if character_skills %}
 <div>
@@ -61,4 +41,3 @@ characters:
 {% endif %}
 
 {% endblock %}
-

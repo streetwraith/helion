@@ -1,4 +1,5 @@
 from django.conf import settings
+from django.http import Http404
 from django.shortcuts import render, redirect
 from evesde.models import Type
 from helion.providers import esi
@@ -6,6 +7,45 @@ from esi.models import Token
 import logging
 
 logger = logging.getLogger(__name__)
+
+
+def _active_character_id(request):
+    return (request.session.get('esi_token') or {}).get('character_id')
+
+
+def _token_for(request, character_id):
+    # One character can hold several tokens, one per SSO login. The newest
+    # carries the scopes of the newest authorisation, so it wins.
+    return (Token.objects.filter(user=request.user, character_id=character_id)
+            .order_by('-pk').first())
+
+
+def _shown_character(request):
+    """The character this page details.
+
+    The query string names it. Without one the page falls back to the active
+    character, and to nothing at all when no character is active - that is the
+    state a first login and the SSO return both land in.
+    """
+    requested = request.GET.get('character')
+    if requested is None:
+        active_id = _active_character_id(request)
+        token = _token_for(request, active_id) if active_id else None
+        if token is None:
+            return None
+    else:
+        try:
+            character_id = int(requested)
+        except ValueError:
+            raise Http404("no such character")
+        token = _token_for(request, character_id)
+        if token is None:
+            raise Http404("no such character")
+    return {
+        'character_id': token.character_id,
+        'name': token.character_name,
+        'token_pk': token.pk,
+    }
 
 def index(request):
     context = {}
@@ -33,25 +73,14 @@ def characters(request, *args, **kwargs):
                 logger.debug("Token %s not found.", token_pk)
             return redirect('characters')
 
-    context = {}
-    tokens = (
-        Token.objects.filter(user__pk=request.user.pk).require_valid()
-    )
-    if tokens.exists():
-        token_output = []
-        _characters = set()
-        for t in tokens:
-            if t.character_name in _characters:
-                continue
-            token_output.append(t)
-            _characters.add(t.character_name)
-        context['tokens'] = token_output
+    character = _shown_character(request)
+    context = {'character': character}
 
     # No require_character here: this view is the redirect target. Without a
-    # selected character the skills block is skipped and the page still lists
-    # the tokens to select.
-    if request.GET.get('show_skills', False) and request.session.get('esi_token'):
-        character_id = request.session['esi_token']['character_id']
+    # character the skills block is skipped and the page still offers the login
+    # that produces one.
+    if request.GET.get('show_skills', False) and character:
+        character_id = character['character_id']
         token = Token.get_token(character_id, 'esi-skills.read_skills.v1')
         # use_etag=False: runs in the request path and always needs the body.
         character_skills = esi.client.Skills.GetCharactersCharacterIdSkills(
