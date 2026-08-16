@@ -72,8 +72,8 @@ class MarketOrderUndercut(models.Model):
 
 class TrackedCharacter(models.Model):
     # What to fetch for this character, as comma-separated tags. Valid tags
-    # are the esi_scheduler FEEDS keys: orders, wallet, assets. Unknown tags
-    # are silently ignored.
+    # are the esi_scheduler FEEDS keys: orders, wallet, assets, contracts.
+    # Unknown tags are silently ignored.
     character_name = models.CharField(max_length=128, unique=True)
     tracks = models.CharField(max_length=128, default='orders')
 
@@ -124,6 +124,54 @@ class EsiFetchState(models.Model):
 
     def __str__(self):
         return self.character_name + ' ' + self.feed
+
+class CharacterContract(models.Model):
+    # The contracts route payload as ESI sends it. contract_id is the primary
+    # key rather than (character, contract): a contract is one global object,
+    # so two of our characters party to the same one upsert into one row. The
+    # party columns below are what a per-character filter reads instead.
+    # Nothing derived is stored - expiry, the delivery deadline and the names
+    # are computed at read time, so fixing a rule never needs a backfill.
+    contract_id = models.BigIntegerField(primary_key=True)
+    acceptor_id = models.BigIntegerField()
+    assignee_id = models.BigIntegerField()
+    issuer_id = models.BigIntegerField()
+    issuer_corporation_id = models.BigIntegerField()
+    availability = models.CharField(max_length=32)
+    status = models.CharField(max_length=32)
+    type = models.CharField(max_length=32)
+    title = models.CharField(max_length=512, blank=True, null=True)
+    for_corporation = models.BooleanField()
+    start_location_id = models.BigIntegerField(blank=True, null=True)
+    end_location_id = models.BigIntegerField(blank=True, null=True)
+    buyout = models.DecimalField(max_digits=20, decimal_places=2, blank=True, null=True)
+    collateral = models.DecimalField(max_digits=20, decimal_places=2, blank=True, null=True)
+    price = models.DecimalField(max_digits=20, decimal_places=2, blank=True, null=True)
+    reward = models.DecimalField(max_digits=20, decimal_places=2, blank=True, null=True)
+    volume = models.FloatField(blank=True, null=True)
+    days_to_complete = models.IntegerField(blank=True, null=True)
+    date_issued = models.DateTimeField()
+    date_expired = models.DateTimeField()
+    date_accepted = models.DateTimeField(blank=True, null=True)
+    date_completed = models.DateTimeField(blank=True, null=True)
+
+    def __str__(self):
+        return str(self.contract_id) + ' ' + self.type + ' (' + self.status + ')'
+
+class EveName(models.Model):
+    # Names for the ids a contract carries. Two routes fill it: /universe/names
+    # for characters and corporations, /universe/structures/{id} for player
+    # structures. NPC stations never enter it - sde.npc_station_names answers
+    # those. A null name means ESI refused the id (no docking access on a
+    # structure) and is never retried: the refusal is permanent in practice,
+    # and a retry timer would spend the error budget shared with marketmanager.
+    entity_id = models.BigIntegerField(primary_key=True)
+    name = models.CharField(max_length=256, blank=True, null=True)
+    category = models.CharField(max_length=32)
+    resolved_at = models.DateTimeField(auto_now=True)
+
+    def __str__(self):
+        return str(self.entity_id) + ': ' + (self.name or '<unresolved>')
 
 class SystemHubJumps(models.Model):
     # Jumps from a solar system to its region's trade hub. Non-CCP, ESI-derived;

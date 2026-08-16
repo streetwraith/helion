@@ -1,0 +1,5 @@
+/* The app right-aligns every cell, which suits the ISK and the volumes. Names,
+   routes and statuses read from the left. */
+#contracts td.text {
+    text-align: left;
+}

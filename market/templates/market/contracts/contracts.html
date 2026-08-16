@@ -1,0 +1,113 @@
+{% extends "market_base.html" %}
+
+{% load static custom_filters %}
+
+{% block title %}contracts | Helion{% endblock %}
+
+{% block css %}
+<link rel="stylesheet" href="{% static 'market/css/contracts.css' %}">
+{% endblock %}
+
+{% block content %}
+<h1>Contracts</h1>
+
+<form action="{% url 'market_contracts' %}" method="GET">
+  <input type="hidden" name="page" value="1">
+  <label for="type">Type</label>
+  <select id="type" name="type">
+    <option value="courier" {% if is_courier %}selected{% endif %}>courier</option>
+    <option value="others" {% if not is_courier %}selected{% endif %}>others</option>
+  </select>
+  <label for="character_id">Character</label>
+  <select id="character_id" name="character_id">
+    <option value="">all characters</option>
+    {% for option_id, option_name in character_options %}
+    <option value="{{ option_id }}" {% if option_id == character_id %}selected{% endif %}>{{ option_name }}</option>
+    {% endfor %}
+  </select>
+  <label><input type="checkbox" name="include_finished" value="1"
+                {% if include_finished %}checked{% endif %}> include finished</label>
+  <button type="submit">filter</button>
+</form>
+
+<br>
+
+{% include '_fragment_pagination.html' with page_obj=page_obj filters=filters %}
+
+{% if is_courier %}
+<table id="contracts" class="market sticky-head">
+  <thead>
+    <tr>
+      <th>status</th>
+      <th>issuer</th>
+      <th>acceptor</th>
+      <th>route</th>
+      <th>m3</th>
+      <th>collateral</th>
+      <th>reward</th>
+      <th>term</th>
+      <th>deliver in</th>
+      <th>issued</th>
+      <th>expires in</th>
+    </tr>
+  </thead>
+  <tbody>
+    {% for contract in contracts %}
+    <tr>
+      <td class="text">{{ contract.display_status }}</td>
+      <td class="text">{{ contract.issuer_name|default_if_none:"" }}</td>
+      <td class="text">{{ contract.acceptor_name|default_if_none:"" }}</td>
+      <td class="text">{{ contract.start_name|default_if_none:"" }} &rarr; {{ contract.end_name|default_if_none:"" }}</td>
+      <td>{{ contract.volume|floatformat }}</td>
+      <td>{{ contract.collateral|isk_value }}</td>
+      <td>{{ contract.reward|isk_value }}</td>
+      <td>{{ contract.days_to_complete|default_if_none:"" }}</td>
+      <td>{{ contract.deadline|until_dhms }}</td>
+      <td>{{ contract.date_issued|since_dhms }}</td>
+      <td>{{ contract.date_expired|until_dhms }}</td>
+    </tr>
+    {% empty %}
+    <tr><td colspan="11">no contracts</td></tr>
+    {% endfor %}
+  </tbody>
+</table>
+{% else %}
+<table id="contracts" class="market sticky-head">
+  <thead>
+    <tr>
+      <th>status</th>
+      <th>type</th>
+      <th>issuer</th>
+      <th>title</th>
+      <th>location</th>
+      <th>price</th>
+      <th>reward</th>
+      <th>m3</th>
+      <th>issued</th>
+      <th>expires in</th>
+    </tr>
+  </thead>
+  <tbody>
+    {% for contract in contracts %}
+    <tr>
+      <td class="text">{{ contract.display_status }}</td>
+      <td class="text">{{ contract.type }}</td>
+      <td class="text">{{ contract.issuer_name|default_if_none:"" }}</td>
+      <td class="text">{{ contract.title|default_if_none:"" }}</td>
+      <td class="text">{{ contract.start_name|default_if_none:"" }}</td>
+      <td>{{ contract.price|isk_value }}</td>
+      <td>{{ contract.reward|isk_value }}</td>
+      <td>{{ contract.volume|floatformat }}</td>
+      <td>{{ contract.date_issued|since_dhms }}</td>
+      <td>{{ contract.date_expired|until_dhms }}</td>
+    </tr>
+    {% empty %}
+    <tr><td colspan="10">no contracts</td></tr>
+    {% endfor %}
+  </tbody>
+</table>
+{% endif %}
+
+{% include '_fragment_pagination.html' with page_obj=page_obj filters=filters %}
+
+{% endblock %}

@@ -13,7 +13,9 @@ from django.db import transaction
 from esi.exceptions import HTTPNotModified
 from esi.models import Token
 from helion.providers import esi
-from market.models import CharacterAsset, CharacterOrder, MarketTransaction, WalletJournal
+from market.models import (
+    CharacterAsset, CharacterContract, CharacterOrder, MarketTransaction, WalletJournal)
+from market.services import names
 
 logger = logging.getLogger(__name__)
 
@@ -119,6 +121,44 @@ def refresh_character_orders(character_id):
         CharacterOrder.objects.filter(character_id=character_id).delete()
         CharacterOrder.objects.bulk_create(rows)
     logger.info("character %s orders refreshed: %s rows", character_id, len(rows))
+    return _expires(response.headers)
+
+
+# The payload keys match the model field names one for one, so a field ESI
+# adds later is dropped here instead of raising on construction.
+CONTRACT_FIELDS = {field.name for field in CharacterContract._meta.fields}
+CONTRACT_UPDATE_FIELDS = sorted(CONTRACT_FIELDS - {'contract_id'})
+
+
+def refresh_character_contracts(character_id):
+    """Upsert one character's contracts, then cache the names their ids carry.
+
+    This feed never deletes, where orders and assets rewrite. ESI serves a
+    30-day window, so a contract that leaves it is history no route can return.
+    A contract two of our characters share upserts into the one row: the
+    primary key is the contract, not the character.
+    """
+    try:
+        contracts, response = esi.client.Contracts.GetCharactersCharacterIdContracts(
+            character_id=character_id,
+            token=Token.get_token(character_id, 'esi-contracts.read_character_contracts.v1')
+        ).results(return_response=True)
+    except HTTPNotModified as not_modified:
+        logger.info("contracts unchanged for character %s, skipping", character_id)
+        return _expires(not_modified.headers)
+
+    rows = [
+        CharacterContract(**{key: value for key, value in contract.model_dump().items()
+                             if key in CONTRACT_FIELDS})
+        for contract in contracts
+    ]
+    CharacterContract.objects.bulk_create(
+        rows, update_conflicts=True, unique_fields=['contract_id'],
+        update_fields=CONTRACT_UPDATE_FIELDS)
+    logger.info("character %s contracts refreshed: %s rows", character_id, len(rows))
+    # After the write on purpose: the contracts are safe even if a name route
+    # fails, and a failure here still reaches the scheduler.
+    names.resolve_contract_names(rows, character_id)
     return _expires(response.headers)
 
 

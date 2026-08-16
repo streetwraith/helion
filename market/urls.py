@@ -7,6 +7,7 @@ from .views import (
     index,
     shopping_list,
     market_browse,
+    market_contracts,
     market_hauling_index,
     market_hauling_sell_to_buy,
     market_hauling_sell_to_sell,
@@ -30,6 +31,9 @@ urlpatterns = [
 
     # market browser
     path("browse", market_browse, name="market_browse"),
+
+    # contracts
+    path("contracts", market_contracts, name="market_contracts"),
 
     # station trading
     path("trade_hub/<int:region_id>", market_trade_hub, name="market_trade_hub"),

@@ -8,6 +8,7 @@ import pytest
 from django.utils import timezone
 
 from market.models import (
+    CharacterContract,
     CharacterOrder,
     MarketTransaction,
     WalletJournal,
@@ -204,6 +205,93 @@ class TestRefreshCharacterAssets:
         ship = CharacterAsset.objects.get(item_id=2)
         assert (ship.location_type, ship.is_singleton, ship.is_blueprint_copy) == (
             "solar_system", True, True)
+
+
+class TestRefreshCharacterContracts:
+    CONTRACT = {
+        "contract_id": 1, "type": "courier", "status": "outstanding",
+        "issuer_id": CHARACTER_ID, "issuer_corporation_id": 98000001,
+        "assignee_id": 0, "acceptor_id": 0, "availability": "personal",
+        "for_corporation": False, "title": "haul", "volume": 1000.0,
+        "collateral": 50000000.0, "reward": 2000000.0, "price": None,
+        "buyout": None, "days_to_complete": 3,
+        "start_location_id": JITA_STATION, "end_location_id": 1035466617946,
+        "date_accepted": None, "date_completed": None,
+    }
+
+    def payload(self, *contracts):
+        now = timezone.now()
+        return [dict(self.CONTRACT, date_issued=now,
+                     date_expired=now + timedelta(days=7), **contract)
+                for contract in contracts]
+
+    def fake_contracts_esi(self, monkeypatch, payload):
+        items = [esi_model(entry) for entry in payload]
+        monkeypatch.setattr(esi_sync, "esi", SimpleNamespace(
+            client=SimpleNamespace(Contracts=SimpleNamespace(
+                GetCharactersCharacterIdContracts=lambda **kw: SimpleNamespace(
+                    results=lambda **kw: (items, esi_response()))))))
+        monkeypatch.setattr(esi_sync, "Token", FAKE_TOKEN)
+        monkeypatch.setattr(esi_sync, "names",
+                            SimpleNamespace(resolve_contract_names=lambda *args: None))
+
+    def test_maps_the_payload_onto_the_row(self, monkeypatch):
+        self.fake_contracts_esi(monkeypatch, self.payload({}))
+
+        expires = esi_sync.refresh_character_contracts(CHARACTER_ID)
+
+        contract = CharacterContract.objects.get(contract_id=1)
+        assert contract.type == "courier"
+        assert contract.reward == 2000000
+        assert contract.start_location_id == JITA_STATION
+        assert expires == EXPIRES
+
+    def test_a_contract_esi_drops_survives_the_next_fetch(self, monkeypatch):
+        # The route serves a 30-day window. Unlike orders and assets this feed
+        # never deletes, or history would fall off the end of that window.
+        self.fake_contracts_esi(monkeypatch, self.payload({}, {"contract_id": 2}))
+        esi_sync.refresh_character_contracts(CHARACTER_ID)
+
+        self.fake_contracts_esi(monkeypatch, self.payload({}))
+        esi_sync.refresh_character_contracts(CHARACTER_ID)
+
+        assert set(CharacterContract.objects.values_list("contract_id", flat=True)) == {1, 2}
+
+    def test_a_rerun_updates_the_status_in_place(self, monkeypatch):
+        self.fake_contracts_esi(monkeypatch, self.payload({}))
+        esi_sync.refresh_character_contracts(CHARACTER_ID)
+
+        self.fake_contracts_esi(monkeypatch, self.payload({"status": "in_progress"}))
+        esi_sync.refresh_character_contracts(CHARACTER_ID)
+
+        assert CharacterContract.objects.get(contract_id=1).status == "in_progress"
+        assert CharacterContract.objects.count() == 1
+
+    def test_one_contract_shared_by_two_characters_stays_one_row(self, monkeypatch):
+        # The primary key is the contract, not the character.
+        self.fake_contracts_esi(monkeypatch, self.payload({}))
+        esi_sync.refresh_character_contracts(CHARACTER_ID)
+        esi_sync.refresh_character_contracts(900002)
+
+        assert CharacterContract.objects.count() == 1
+
+    def test_a_field_esi_adds_later_is_dropped(self, monkeypatch):
+        self.fake_contracts_esi(monkeypatch, self.payload({"brand_new_field": 7}))
+
+        esi_sync.refresh_character_contracts(CHARACTER_ID)
+
+        assert CharacterContract.objects.get(contract_id=1).type == "courier"
+
+    def test_the_names_are_resolved_after_the_write(self, monkeypatch):
+        seen = []
+        self.fake_contracts_esi(monkeypatch, self.payload({}))
+        monkeypatch.setattr(esi_sync, "names", SimpleNamespace(
+            resolve_contract_names=lambda contracts, character_id: seen.append(
+                (CharacterContract.objects.count(), len(contracts), character_id))))
+
+        esi_sync.refresh_character_contracts(CHARACTER_ID)
+
+        assert seen == [(1, 1, CHARACTER_ID)]
 
 
 class TestRefreshCharacterWallet:

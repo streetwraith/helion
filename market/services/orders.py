@@ -8,7 +8,8 @@ from esi.models import Token
 
 from evesde import services as sde_service
 from evesde.models import Type
-from market.constants import GLOBAL_PLEX_MARKET_REGION_ID, PLEX_TYPE_ID, REGION_ID_FORGE
+from market.constants import (
+    FIRST_STRUCTURE_ID, GLOBAL_PLEX_MARKET_REGION_ID, PLEX_TYPE_ID, REGION_ID_FORGE)
 from market.models import MarketOrderUndercut, TradeHub, TradeItem
 from marketdata.models import Order, OrdersHub
 
@@ -243,11 +244,6 @@ def get_price_ticker():
 # EVE rounds 0.45 up to 0.5 and treats it as high sec; a system at 0.0 or below
 # is null sec. The security filter and the Location cell both read this.
 HIGH_SEC_FLOOR = 0.45
-
-# Player structures start here and NPC stations sit far below it, with nothing
-# in between in the order data. Classifying by the id rather than by a missing
-# name keeps a station the SDE fails to name out of the structure filter.
-FIRST_STRUCTURE_ID = 1_000_000_000_000
 
 # One row per live order, joined to everything the browser shows. The rows come
 # from the raw orders table, not from orders_hub: that view restricts itself to

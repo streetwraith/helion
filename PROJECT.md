@@ -124,6 +124,10 @@ time:
 - **`CharacterAsset`** — the assets route payload stored as ESI sends it (station filtering
   happens at read time). Pages read this table instead of calling ESI during render; the route is
   server-cached for an hour anyway, so the table is exactly as fresh as the "live" call was.
+- **`CharacterContract`** — the contracts route payload, keyed on `contract_id` and never
+  deleted. See "The contracts page" for why this one accumulates where the others rewrite.
+- **`EveName`** — names for the ids a contract carries, so no page resolves an id over the wire
+  while it renders.
 
 Per-character rewrites make an HTTP 304 a correct no-op: unchanged upstream data means the rows
 are already right. This assumes the ETag cache and the database move together — restoring one
@@ -174,6 +178,7 @@ The feeds and their routes:
 | orders | `/characters/{id}/orders` | 1200 s | none |
 | wallet | `/characters/{id}/wallet/transactions` + `/wallet/journal` | 3600 s | char-wallet, 150/15 min |
 | assets | `/characters/{id}/assets` | 3600 s | char-asset, 1800/15 min |
+| contracts | `/characters/{id}/contracts` | 300 s | not measured |
 
 A full hourly cycle for a handful of characters spends under 2% of any bucket; the failure
 policy, not the budget, is the binding constraint.
@@ -414,6 +419,50 @@ this page's.
 
 PLEX needs no special case: it renders under its pseudo-region with locations across
 the universe, and the hub and security filters still mean what they say.
+
+## The contracts page
+
+`/market/contracts` lists character contracts from `CharacterContract`, one bucket at a
+time: courier by default, everything else second. Filtering is server-side and
+paginated at 100 rows, like the transactions page.
+
+- **This feed accumulates where the others rewrite.** ESI serves only contracts younger
+  than 30 days, plus anything still `in_progress`. A wholesale rewrite would therefore
+  delete history that no route can return at any price, so the feed upserts and never
+  deletes. The cost is honest: a contract that leaves the window freezes at its last
+  known status.
+- **The primary key is `contract_id`, and there is no owner column.** A contract is one
+  global object. When two of our characters are party to the same one, both feeds return
+  it and the upsert collapses them into one row. The payload already names every party,
+  so the character filter reads `issuer_id`, `assignee_id` and `acceptor_id` directly —
+  which also admits corporation ids later without a schema change.
+- **The page is not gated on a selected character**, unlike every other character page.
+  It shows all of them and the dropdown narrows it, because a contract can tie two
+  characters together. The dropdown lists `Token` characters rather than
+  `TrackedCharacter` ones: the table keeps rows for ever, so untracking a character must
+  not strand their history behind a filter that no longer offers them.
+- **Two values are derived at read time, never stored.** A contract is expired when it is
+  `outstanding` and past `date_expired`; ESI has no such status. The delivery deadline of
+  an accepted courier is `date_accepted + days_to_complete`, which no field carries. The
+  expiry test never applies to `in_progress`: `date_expired` is the deadline to *accept*,
+  and a late hauler is the row you most want to see.
+- **The buckets are a partition, not two filters.** Everything that is not `courier`
+  shares the second table, so an `auction` or a type CCP adds later cannot go missing.
+- **Ids resolve in the feed, never during a render.** NPC stations come from
+  `sde.npc_station_names`; characters and corporations from `/universe/names`, batched;
+  player structures from `/universe/structures/{id}`, one request each and capped per run.
+  A structure the character cannot dock in answers 403 or 404 permanently, so it is
+  cached with a null name and never asked again — a retry timer would spend the error
+  budget shared with marketmanager for a name that will not arrive. Those render as the
+  raw id, which pastes into the game client. Any other 4xx propagates instead, or one
+  dead token would fill the cache with permanent blanks.
+- **Contract contents are out of scope.** They need one request per contract, and
+  `status` plus `price` already answers whether a sell contract was taken. A
+  `ContractItem` table joins on `contract_id` later without touching this one.
+
+The feed needs `esi-contracts.read_character_contracts.v1`, which is newer than the
+other scopes: a token issued before it exists cannot serve this feed, and
+`Token.get_token` will not match one.
 
 ## The station trading filter
 
