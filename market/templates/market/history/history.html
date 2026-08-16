@@ -2,7 +2,7 @@
 
 {% load static item_tags %}
 
-{% block title %}history | Helion{% endblock %}
+{% block title %}{% if type_name %}{{ type_name }}{% else %}history{% endif %} | Helion{% endblock %}
 
 {% block css %}
 <link rel="stylesheet" href="{% static 'market/vendor/uPlot.min.css' %}">

@@ -237,6 +237,14 @@ table.history {
     font-size: 60%;
 }
 
+/* A page heading has to keep the class, because the click handler that opens the
+   in-game market window delegates from it. The 60% above is sized for a table
+   cell, and a percentage resolves against the parent font rather than against
+   the h1 default, so the heading came out at 9.6px. */
+h1.item-name {
+    font-size: 1.25rem;
+}
+
 table.ice {
     display: inline-block;
 }
