@@ -1,10 +1,13 @@
-"""Name resolution for the ids a contract carries.
+"""Name resolution for the ids a contract carries, and for named assets.
 
 Two ESI routes fill the EveName cache: /universe/names for characters and
 corporations, /universe/structures/{id} for player structures. The contracts
 feed calls this after it writes its rows, so no page calls ESI while it
 renders. NPC stations are absent on purpose - sde.npc_station_names answers
 those, and it stays the app's single source for a station name.
+
+Asset names take a third route and no cache: they belong to one owner, and the
+assets feed rewrites its rows wholesale, so it carries them in on each run.
 """
 import logging
 
@@ -19,6 +22,13 @@ logger = logging.getLogger(__name__)
 # /universe/names accepts 1000 ids. Batches stay well under that because ESI
 # answers 404 for the whole request when one id in it does not resolve.
 NAME_BATCH_SIZE = 250
+
+# The assets names route accepts 1000 item ids per request.
+ASSET_NAME_BATCH_SIZE = 1000
+
+# What that route sends for an item the owner never renamed: the string, not a
+# null. Verified against live ESI on 2026-08-17.
+UNNAMED = 'None'
 
 # The structures route costs one request per id, so a first run over a long
 # contract history could fire hundreds at once. The rest resolve on later runs.
@@ -79,6 +89,41 @@ def _resolve_parties(entity_ids):
             [EveName(entity_id=item['id'], name=item['name'], category=item['category'])
              for item in (_as_dict(entry) for entry in resolved)],
             ignore_conflicts=True)
+
+
+def resolve_asset_names(item_ids, character_id):
+    """The owner's own name for each item, as {item_id: name}.
+
+    Only singleton items can carry a name, so the caller passes those. ESI
+    answers for every one of them, and sends the literal string "None" where the
+    owner never renamed the item (369 of 411 on the first real run). Those are
+    dropped here.
+
+    It also answers with the hull name for a ship the owner boarded but never
+    renamed. That one is kept: it is what ESI reports, and the page drops a name
+    equal to the type when it builds the label.
+
+    Names are cosmetic. A failed batch logs and leaves those items unnamed
+    rather than failing the asset rows, which are the point of the feed.
+    """
+    if not item_ids:
+        return {}
+    token = Token.get_token(character_id, 'esi-assets.read_assets.v1')
+
+    resolved = {}
+    for start in range(0, len(item_ids), ASSET_NAME_BATCH_SIZE):
+        batch = item_ids[start:start + ASSET_NAME_BATCH_SIZE]
+        try:
+            answered = esi.client.Assets.PostCharactersCharacterIdAssetsNames(
+                character_id=character_id, body=batch, token=token).result()
+        except HTTPClientError as error:
+            logger.warning("asset names failed for %s items: %r", len(batch), error)
+            continue
+        for entry in (_as_dict(item) for item in answered):
+            name = entry.get('name')
+            if name and name != UNNAMED:
+                resolved[entry['item_id']] = name
+    return resolved
 
 
 def _resolve_structures(structure_ids, character_id):

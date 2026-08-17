@@ -14,6 +14,12 @@ class Type(models.Model):
     market_group_id = models.BigIntegerField(null=True)
     meta_group_id = models.IntegerField(null=True)
     volume = models.FloatField(null=True)
+    # volume is the assembled volume: a Station Container reads 2,000,000 m3 and
+    # a Providence 18,500,000. packaged_volume is what a stack of them occupies.
+    packaged_volume = models.FloatField(null=True)
+    # True for a type that can be packaged again, which is what makes an
+    # unpacked one worth marking. Null for types the state never applies to.
+    is_repackable = models.BooleanField(null=True)
     portion_size = models.IntegerField(null=True)
 
     class Meta:
@@ -37,6 +43,20 @@ class Group(models.Model):
 
     def __str__(self):
         return str(self.group_id) + " " + self.name
+
+
+class Category(models.Model):
+    """The top of the inventory tree: Ship, Module, Blueprint, Commodity. A type
+    reaches it through its group, so the two steps are always walked together."""
+    category_id = models.BigIntegerField(primary_key=True, db_column="_key")
+    name = models.CharField(max_length=512, db_column="name_en")
+
+    class Meta:
+        managed = False
+        db_table = 'sde"."categories'
+
+    def __str__(self):
+        return str(self.category_id) + " " + self.name
 
 
 class TypeDogmaAttribute(models.Model):

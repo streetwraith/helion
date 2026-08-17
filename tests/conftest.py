@@ -36,6 +36,8 @@ CREATE TABLE IF NOT EXISTS sde.types (
     market_group_id bigint,
     meta_group_id integer,
     volume double precision,
+    packaged_volume double precision,
+    is_repackable boolean,
     portion_size integer
 );
 -- A record array flattened into a child table: the type id is the parent key.
@@ -50,6 +52,10 @@ CREATE TABLE IF NOT EXISTS sde.groups (
     _key bigint PRIMARY KEY,
     name_en varchar(512),
     category_id bigint
+);
+CREATE TABLE IF NOT EXISTS sde.categories (
+    _key bigint PRIMARY KEY,
+    name_en varchar(512)
 );
 CREATE TABLE IF NOT EXISTS sde.market_groups (
     _key bigint PRIMARY KEY,

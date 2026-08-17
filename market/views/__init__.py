@@ -1,4 +1,5 @@
 from .ajax_views import transaction_history, market_open_in_game, trade_item_add_or_del, type_search, transactions_since, mistakes_since, undercuts_since
+from .asset_views import market_assets
 from .base_views import index, shopping_list
 from .browser_views import market_browse
 from .contract_views import market_contracts
@@ -17,6 +18,7 @@ __all__ = [
     'mistakes_since',
     'undercuts_since',
     'index',
+    'market_assets',
     'shopping_list',
     'market_browse',
     'market_contracts',

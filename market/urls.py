@@ -1,6 +1,7 @@
 from django.urls import path
 
 from .views import (
+    market_assets,
     transaction_history,
     market_open_in_game,
     trade_item_add_or_del,
@@ -34,6 +35,9 @@ urlpatterns = [
 
     # contracts
     path("contracts", market_contracts, name="market_contracts"),
+
+    # assets
+    path("assets", market_assets, name="market_assets"),
 
     # station trading
     path("trade_hub/<int:region_id>", market_trade_hub, name="market_trade_hub"),

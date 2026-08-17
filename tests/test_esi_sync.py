@@ -13,7 +13,7 @@ from market.models import (
     MarketTransaction,
     WalletJournal,
 )
-from market.services import esi_sync
+from market.services import esi_sync, names
 
 from .conftest import CHARACTER_ID
 from .test_market_service_db import JITA_STATION
@@ -174,13 +174,28 @@ class TestRefreshCharacterOrders:
 
 
 class TestRefreshCharacterAssets:
-    def fake_assets_esi(self, monkeypatch, payload):
+    def fake_assets_esi(self, monkeypatch, payload, names_payload=(), names_error=None):
         items = [esi_model(entry) for entry in payload]
         monkeypatch.setattr(esi_sync, "esi", SimpleNamespace(
             client=SimpleNamespace(Assets=SimpleNamespace(
                 GetCharactersCharacterIdAssets=lambda **kw: SimpleNamespace(
                     results=lambda **kw: (items, esi_response()))))))
         monkeypatch.setattr(esi_sync, "Token", FAKE_TOKEN)
+        self.fake_names_esi(monkeypatch, names_payload, names_error)
+
+    def fake_names_esi(self, monkeypatch, names_payload, names_error):
+        # The names route lives in the names service, so it needs its own stub -
+        # without one the real provider would reach ESI from a test.
+        def call(**kwargs):
+            if names_error is not None:
+                raise names_error
+            return names_payload
+
+        monkeypatch.setattr(names, "esi", SimpleNamespace(
+            client=SimpleNamespace(Assets=SimpleNamespace(
+                PostCharactersCharacterIdAssetsNames=lambda **kw: SimpleNamespace(
+                    result=call)))))
+        monkeypatch.setattr(names, "Token", FAKE_TOKEN)
 
     def test_stores_full_payload_and_rewrites(self, monkeypatch):
         from market.models import CharacterAsset
@@ -205,6 +220,81 @@ class TestRefreshCharacterAssets:
         ship = CharacterAsset.objects.get(item_id=2)
         assert (ship.location_type, ship.is_singleton, ship.is_blueprint_copy) == (
             "solar_system", True, True)
+
+    SHIP = {"item_id": 2, "type_id": 587, "quantity": 1, "location_id": 60003760,
+            "location_type": "station", "location_flag": "Hangar",
+            "is_singleton": True, "is_blueprint_copy": None}
+    STACK = {"item_id": 1, "type_id": 34, "quantity": 7, "location_id": 60003760,
+             "location_type": "station", "location_flag": "Hangar",
+             "is_singleton": False, "is_blueprint_copy": None}
+
+    def add_rifter_type(self):
+        from evesde.models import Type
+
+        Type.objects.create(type_id=587, name="Rifter", group_id=25,
+                            market_group_id=None, volume=27_289.0,
+                            packaged_volume=2_500.0, is_repackable=True, portion_size=1)
+
+    def test_the_owners_name_reaches_the_row(self, monkeypatch):
+        from market.models import CharacterAsset
+
+        self.add_rifter_type()
+        self.fake_assets_esi(monkeypatch, [self.SHIP],
+                             names_payload=[{"item_id": 2, "name": "Polite"}])
+
+        esi_sync.refresh_character_assets(CHARACTER_ID)
+
+        assert CharacterAsset.objects.get(item_id=2).name == "Polite"
+
+    def test_an_unnamed_item_answers_the_string_none_and_stores_nothing(self, monkeypatch):
+        # What live ESI sends for an item nobody renamed: the string, not a null.
+        from market.models import CharacterAsset
+
+        self.add_rifter_type()
+        self.fake_assets_esi(monkeypatch, [self.SHIP],
+                             names_payload=[{"item_id": 2, "name": "None"}])
+
+        esi_sync.refresh_character_assets(CHARACTER_ID)
+
+        assert CharacterAsset.objects.get(item_id=2).name is None
+
+    def test_an_empty_name_stores_nothing(self, monkeypatch):
+        from market.models import CharacterAsset
+
+        self.add_rifter_type()
+        self.fake_assets_esi(monkeypatch, [self.SHIP],
+                             names_payload=[{"item_id": 2, "name": ""}])
+
+        esi_sync.refresh_character_assets(CHARACTER_ID)
+
+        assert CharacterAsset.objects.get(item_id=2).name is None
+
+    def test_a_names_failure_still_stores_the_assets(self, monkeypatch):
+        from esi.exceptions import HTTPClientError
+        from market.models import CharacterAsset
+
+        self.add_rifter_type()
+        self.fake_assets_esi(monkeypatch, [self.SHIP, self.STACK],
+                             names_error=HTTPClientError(status_code=500, headers={},
+                                                         data=None))
+
+        esi_sync.refresh_character_assets(CHARACTER_ID)
+
+        assert CharacterAsset.objects.count() == 2
+        assert CharacterAsset.objects.get(item_id=2).name is None
+
+    def test_a_stack_is_never_asked_about(self, monkeypatch):
+        # Only a singleton can carry a name, so a hangar of stacks costs no request.
+        asked = []
+
+        self.fake_assets_esi(monkeypatch, [self.STACK])
+        monkeypatch.setattr(names, "esi", SimpleNamespace(
+            client=SimpleNamespace(Assets=SimpleNamespace(
+                PostCharactersCharacterIdAssetsNames=lambda **kw: asked.append(kw)))))
+
+        esi_sync.refresh_character_assets(CHARACTER_ID)
+
+        assert asked == []
 
 
 class TestRefreshCharacterContracts:

@@ -174,6 +174,8 @@ def refresh_character_assets(character_id):
         logger.info("assets unchanged for character %s, skipping", character_id)
         return _expires(not_modified.headers)
 
+    item_names = names.resolve_asset_names(
+        [asset.item_id for asset in assets if asset.is_singleton], character_id)
     rows = [
         CharacterAsset(
             item_id=asset.item_id, character_id=character_id,
@@ -181,6 +183,7 @@ def refresh_character_assets(character_id):
             location_id=asset.location_id, location_type=asset.location_type,
             location_flag=asset.location_flag, is_singleton=asset.is_singleton,
             is_blueprint_copy=getattr(asset, 'is_blueprint_copy', None),
+            name=item_names.get(asset.item_id),
         )
         for asset in assets
     ]

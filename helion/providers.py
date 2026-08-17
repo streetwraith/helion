@@ -12,6 +12,7 @@ esi = ESIClientProvider(
         "GetCharactersCharacterIdWalletJournal",
         "GetCharactersCharacterIdOrders",
         "GetCharactersCharacterIdAssets",
+        "PostCharactersCharacterIdAssetsNames",
         "GetCharactersCharacterIdContracts",
         "GetCharactersCharacterIdSkills",
         "GetCharactersCharacterIdSkillqueue",

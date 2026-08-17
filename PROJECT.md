@@ -123,7 +123,9 @@ time:
   join; "competitor" is `NOT EXISTS`. Rewritten wholesale per character on each fetch.
 - **`CharacterAsset`** — the assets route payload stored as ESI sends it (station filtering
   happens at read time). Pages read this table instead of calling ESI during render; the route is
-  server-cached for an hour anyway, so the table is exactly as fresh as the "live" call was.
+  server-cached for an hour anyway, so the table is exactly as fresh as the "live" call was. The
+  feed adds one request for `name`, the owner's own name for a ship or container: asset names have
+  no cache of their own, because the rewrite drops the rows they belong to.
 - **`CharacterContract`** — the contracts route payload, keyed on `contract_id` and never
   deleted. See "The contracts page" for why this one accumulates where the others rewrite.
 - **`EveName`** — names for the ids a contract carries, so no page resolves an id over the wire
@@ -521,6 +523,68 @@ paginated at 100 rows, like the transactions page.
 The feed needs `esi-contracts.read_character_contracts.v1`, which is newer than the
 other scopes: a token issued before it exists cannot serve this feed, and
 `Token.get_token` will not match one.
+
+## The assets page
+
+`/market/assets` lists the assets of every character from `CharacterAsset`, in one table
+with no pagination and no character gate. All three filters — the character dropdown, the
+category dropdown and the item name box — run in the browser over the rendered rows, so
+narrowing costs no request.
+
+- **A row resolves to a place, not to a parent id.** ESI reports a nested item against its
+  container and the container against the station, so most rows carry another row's
+  `item_id` as their location. The read walks out to the row that holds a real place and
+  shows that name. The walk is bounded by `PARENT_DEPTH_LIMIT`: the feed writes what ESI
+  sends, and a page must not spin on it. A parent absent from the table ends the walk,
+  because the feed rewrites one character at a time and a row can outlive its container
+  for one cycle. An unresolved place renders as the raw id, which pastes into the game
+  client.
+- **The `in` column names the holder, and the flag when the flag adds something.**
+  `Hangar`, `Unlocked` and `Locked` say no more than "loose in this place", so they drop
+  out. Every other flag stays: `Sunesis (RigSlot0)` is a fitted rig, `Sunesis (Cargo)` is
+  a spare, and `Deliveries` is the station's delivery hangar, not the main one.
+- **Lines merge on what the page shows** — character, place, holder, type, and whether the
+  item is assembled. ESI sends one row per stack and one per assembled item, so a
+  container with 18 blueprint copies arrives as 18 rows; the merge turned 1335 rows into
+  1163 lines on the current data. Two Station Containers in one station carry no name
+  here, so their contents merge too: the page cannot tell the containers apart, and two
+  identical lines would only puzzle the reader. When container names arrive, the same key
+  becomes per-container by itself.
+- **The m3 column reads `is_singleton`, not `volume` alone.** `sde.types.volume` is the
+  assembled volume: a Station Container reads 2,000,000 m3 against a packaged 10,000, and
+  a Providence 18,500,000 against 1,300,000. An assembled item therefore takes `volume`
+  and a stack takes `packaged_volume * quantity`, with a fallback for the few types that
+  carry no packaged volume. There is no page total: an assembled container occupies its
+  own volume and its contents are separate rows, so a sum would count them twice.
+- **The taxonomy columns are the inventory tree, not the market tree.** A type reaches its
+  category in two steps, type to group and group to category, so the read walks both and
+  labels every line with each. The category carries about 19 values over these assets and
+  therefore drives a dropdown; the inventory group carries about 180 and stays a sortable
+  column, because no list can serve that many. A dangling reference in either step leaves
+  the label empty rather than dropping the item.
+- **The dropdowns list what the lines hold**, where the contracts page lists every `Token`
+  character. Both filters run over rendered rows, so an option that can only ever empty
+  the table is noise.
+- **A named item reads as both its name and its type**, as `blueprints - Station Container`.
+  The name comes from `POST /characters/{id}/assets/names`, which the assets scope already
+  covers, and the feed asks only about singleton items — nothing else can carry a name. That
+  route answers for every id, in two shapes that mean "unnamed": the literal string `None`,
+  which the feed drops, and the hull name of a ship the owner boarded but never renamed,
+  which the label drops because it would repeat the type. Of 411 singletons on the first
+  real run, 369 answered `None` and 5 answered their own hull name. The holder column
+  carries the name too, and the merge key with it, so two named containers in one station
+  keep their contents on separate lines while two sharing a name still merge.
+- **The state marker is `(equipped)` or `(assembled)`, and only where it applies.** It needs
+  a singleton of a repackable type, which `sde.types.is_repackable` answers: a blueprint
+  copy is a singleton too and is neither. A fitting slot or a drone or fighter bay then
+  reads `(equipped)`, anything else `(assembled)`, so an unpacked module loose in a
+  container is not called equipped. A loaded charge stack stays packaged, so it carries no
+  marker — its slot still shows in the holder column. The holder column shows no marker at
+  all: a fitted module is inside an assembled ship by definition.
+
+Six queries answer the page, whatever the characters hold: the rows, the type data, the
+groups, the categories, the station names and the token names. A player structure or a
+ship in space adds one each.
 
 ## The station trading filter
 

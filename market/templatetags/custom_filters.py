@@ -92,6 +92,16 @@ def sp_value(value):
         return "0"
     return "{:,.1f}m".format(value / 1000000)
 
+@register.filter(name='m3_value')
+def m3_value(value):
+    """A volume in m3. Small volumes carry their decimals - a rocket is 0.005 m3
+    and a stack of them is what fills a hold. Large ones do not."""
+    if value is None:
+        return "-"
+    if abs(value) < 100:
+        return "{:,.2f}".format(value)
+    return "{:,.0f}".format(value)
+
 @register.filter(name='stradd')
 def stradd(arg1, arg2):
     """concatenate arg1 & arg2"""

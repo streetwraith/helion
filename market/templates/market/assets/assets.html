@@ -1,0 +1,73 @@
+{% extends "market_base.html" %}
+
+{% load static custom_filters %}
+
+{% block title %}assets | Helion{% endblock %}
+
+{% block css %}
+<link rel="stylesheet" href="{% static 'market/css/assets.css' %}">
+{% endblock %}
+
+{% block js %}
+<script src="{% static 'market/js/asset_filters.js' %}"></script>
+{% endblock %}
+
+{% block content %}
+<h1>Assets</h1>
+
+{% comment %}No form and no submit: the whole table is on the page, so both
+filters run in the browser.
+{% endcomment %}
+<div id="asset-filters">
+  <label for="character">Character</label>
+  <select id="character">
+    <option value="">all characters</option>
+    {% for option_id, option_name in character_options %}
+    <option value="{{ option_id }}">{{ option_name }}</option>
+    {% endfor %}
+  </select>
+  <label for="category">Category</label>
+  <select id="category">
+    <option value="">all categories</option>
+    {% for option in category_options %}
+    <option value="{{ option }}">{{ option }}</option>
+    {% endfor %}
+  </select>
+  <label for="item">Item</label>
+  <input type="search" id="item" placeholder="item name">
+  <span id="asset-count"></span>
+</div>
+
+<br>
+
+<table id="assets" class="market sticky-head" style="width: auto;">
+  <thead>
+    <tr>
+      <th>character</th>
+      <th>category</th>
+      <th>group</th>
+      <th>item</th>
+      <th>qty</th>
+      <th>location</th>
+      <th>in</th>
+      <th>m3</th>
+    </tr>
+  </thead>
+  <tbody>
+    {% for line in assets %}
+    <tr data-character="{{ line.character_id }}" data-category="{{ line.category }}">
+      <td class="text">{{ line.character }}</td>
+      <td class="text">{{ line.category }}</td>
+      <td class="text">{{ line.group }}</td>
+      <td class="text item">{{ line.item }}</td>
+      <td>{{ line.quantity }}</td>
+      <td class="text">{{ line.location }}</td>
+      <td class="text">{{ line.holder }}</td>
+      <td>{{ line.m3|m3_value }}</td>
+    </tr>
+    {% empty %}
+    <tr><td colspan="8">no assets</td></tr>
+    {% endfor %}
+  </tbody>
+</table>
+{% endblock %}

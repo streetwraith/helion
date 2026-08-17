@@ -1,0 +1,9 @@
+/* The app right-aligns every cell, which suits the quantities and the volumes.
+   Names, places and holders read from the left. */
+#assets td.text {
+    text-align: left;
+}
+
+#asset-count {
+    margin-left: 1em;
+}

@@ -102,6 +102,9 @@ class CharacterAsset(models.Model):
     location_flag = models.CharField(max_length=64)
     is_singleton = models.BooleanField()
     is_blueprint_copy = models.BooleanField(null=True, blank=True)
+    # The name the owner gave a ship or a container, from a second route. Null
+    # means the item carries no name of its own, which is most of them.
+    name = models.CharField(max_length=256, null=True, blank=True)
 
 class EsiFetchState(models.Model):
     # One row per (character, feed): the ESI fetch scheduler's pacing and
