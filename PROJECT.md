@@ -407,6 +407,13 @@ here and deliberately left alone.
 gives: a filtered table is browsing state, and a missed undercut costs more than a card about a
 hidden row.
 
+**The banner names the items as links; the OS card cannot.** A card body is plain text with one
+click target for the whole card, so only the banner can carry a link per item. Each name is the same
+`item-name-link` the table rows carry, which opens the in-game market window through the handler in
+`market.js`. Both surfaces take one set of text segments, where a segment is a string or an item:
+the banner turns an item into a link, and the card joins the names as text. The single-order banner
+links the name in its title, which is the common case.
+
 **The page is never re-rendered.** Building the Amarr trade-hub view costs 24 s, so the poller marks
 the affected rows through `data-type-id` and leaves every cell as rendered. The card and the banner
 carry the fresh prices; the table stays honest as one snapshot. A poll returns at most 50 rows, and
@@ -640,8 +647,10 @@ Three points of the design are load-bearing:
   resolves a flag that the caller forgets against the surrounding context, while the tag applies
   its own default.
 
-The click handler delegates from the enclosing `item-name` class, so a new call site must keep
-that class on the cell.
+The click handler delegates from the **document**, not from the enclosing cell. The undercut
+banner builds the same link after page load, outside any table, so a handler bound to the cells
+that exist at load would never see it. Only `_item_name.html` produces `item-name-link`, so the
+wider delegation cannot pick up anything else.
 
 The chart icon links to the history page and the list icon to the market browser. The browse link
 carries the type id alone, because that page covers every ingested region at once. `region_id`
@@ -766,7 +775,8 @@ touching any of the four notification files:
 2. **Mistakes.** Open a hub, set the profit box, reload: the box keeps its value. Open a second hub
    and confirm its box is independent. Wait one refresh cycle and confirm the table body swaps.
 3. **Trade hub.** Open a hub, turn the toggle on, and confirm a new undercut marks the matching row
-   and leaves the other cells unchanged.
+   and leaves the other cells unchanged. Click a name in the banner and confirm the in-game market
+   window opens for that item.
 4. **All three.** Turn a toggle off and confirm the banner clears and polling stops.
 
 Over plain HTTP the OS card never appears by design, so the banner is the observable part in dev.

@@ -15,7 +15,9 @@ $(document).ajaxSend(function(event, xhr, settings) {
 $(document).ready(function(){
     $(".market").tablesorter();
 
-    $('.item-name').on('click', '.item-name-link', function(event) {
+    // Delegated from the document, not from the enclosing cell: the undercut
+    // banner builds the same link after page load, outside any table.
+    $(document).on('click', '.item-name-link', function(event) {
         event.preventDefault();
         // The link carries the type id, because the item name also renders
         // outside a row (a table caption), where there is no row to read it from.
