@@ -5,6 +5,7 @@ market_trade_hub_mistakes -- the logic most at risk in the planned Phase 3
 query-aggregation rewrite.
 """
 from datetime import timedelta
+from html.parser import HTMLParser
 
 import pytest
 from django.urls import reverse
@@ -28,13 +29,30 @@ from .test_views_smoke import AMARR_REGION, AMARR_STATION, AMARR_SYSTEM
 pytestmark = pytest.mark.django_db
 
 
+class _RowWidths(HTMLParser):
+    """The declared column count of every row of the page, cell spans included.
+
+    Only the two market tables carry rows, so every width must be the same.
+    """
+
+    def __init__(self):
+        super().__init__()
+        self.widths = []
+
+    def handle_starttag(self, tag, attrs):
+        if tag == "tr":
+            self.widths.append(0)
+        elif tag in ("th", "td") and self.widths:
+            self.widths[-1] += int(dict(attrs).get("colspan", 1))
+
+
 def amarr_order(order_id, type_id, price, **kwargs):
     return add_order(order_id, type_id, price, region_id=AMARR_REGION,
                      location_id=AMARR_STATION, system_id=AMARR_SYSTEM, **kwargs)
 
 
 @pytest.fixture
-def trade_hub_context(character_client, trade_hubs, monkeypatch):
+def trade_hub_response(character_client, trade_hubs, monkeypatch):
     """One realistic item in the Amarr hub: own orders, competitors, history."""
     monkeypatch.setattr(market_service, "get_character_assets", lambda *a, **kw: {34: 7})
     add_type(34, "Tritanium")
@@ -46,9 +64,14 @@ def trade_hub_context(character_client, trade_hubs, monkeypatch):
     amarr_order(10, 34, 90.0, character_id=CHARACTER_ID, volume_remain=5, issued=sell_issued)
     amarr_order(13, 34, 85.0, is_buy=True, character_id=CHARACTER_ID, volume_remain=4,
                 issued=now - timedelta(days=1))
-    # competitors (character_id NULL)
+    # competitors (character_id NULL). The four issue times pin the 48-hour
+    # window of the o48 columns from both sides. The 47h and 49h prices sit far
+    # above the market so they cannot become the lowest sell.
     amarr_order(11, 34, 100.0, volume_remain=10, issued=now - timedelta(hours=3))
-    amarr_order(12, 34, 80.0, is_buy=True, volume_remain=10, issued=now - timedelta(days=2))
+    amarr_order(16, 34, 500.0, volume_remain=10, issued=now - timedelta(hours=47))
+    amarr_order(17, 34, 600.0, volume_remain=10, issued=now - timedelta(hours=49))
+    amarr_order(12, 34, 80.0, is_buy=True, volume_remain=10, issued=now - timedelta(days=3))
+    amarr_order(18, 34, 75.0, is_buy=True, volume_remain=10, issued=now - timedelta(hours=30))
     # Jita side for the comparison columns
     add_order(14, 34, 95.0)
     add_order(15, 34, 70.0, is_buy=True)
@@ -72,7 +95,12 @@ def trade_hub_context(character_client, trade_hubs, monkeypatch):
 
     response = character_client.get(reverse("market_trade_hub", kwargs={"region_id": AMARR_REGION}))
     assert response.status_code == 200
-    return response.context
+    return response
+
+
+@pytest.fixture
+def trade_hub_context(trade_hub_response):
+    return trade_hub_response.context
 
 
 @pytest.fixture
@@ -107,9 +135,10 @@ class TestTradeHubMetrics:
         assert region_data["my_sell_history"] == {"volume": 5, "avg_price": 150.0, "last_price": 150.0}
         assert region_data["my_buy_history"]["volume"] == 10
 
-    def test_recent_order_counts_exclude_own_and_old(self, region_data):
-        assert region_data["recent_sell_orders_issued"] == 1  # competitor, 3h ago
-        assert region_data["recent_buy_orders_issued"] == 0  # competitor buy is 2 days old
+    def test_recent_order_counts_span_48_hours_and_exclude_own(self, region_data):
+        # Own orders never count, whatever their age.
+        assert region_data["recent_sell_orders_issued"] == 2  # competitors, 3h and 47h
+        assert region_data["recent_buy_orders_issued"] == 1  # competitor, 30h; 3 days is out
 
     def test_history_daily_volume_average(self, region_data):
         # 91 units on one day of a gap-filled 91-day window.
@@ -168,6 +197,45 @@ class TestTradeHubItemSelection:
         assert [item.type_id for item in response.context["item_dict"]] == [1001]
         assert [item.type_id for item in response.context["item_dict_extra"]] == [1002]
         assert set(response.context["item_data"]) == {1001, 1002}
+
+
+class TestTradeHubTableMarkup:
+    """What the browser filters and the column toggles read off the page."""
+
+    def test_recent_order_column_carries_its_label_and_key(self, trade_hub_response):
+        content = trade_hub_response.content.decode()
+        assert '<th data-col="o48">o48</th>' in content
+        assert "o24" not in content
+
+    def test_row_carries_the_filter_attributes(self, trade_hub_response):
+        content = trade_hub_response.content.decode()
+        assert 'data-o48-sell="2"' in content
+        assert 'data-o48-buy="1"' in content
+        # Jita has no history at all in this fixture, so the average is None and
+        # the attribute is blank. The filter reads that as no proven volume.
+        assert 'data-hvol-other=""' in content
+
+    def test_volume_attribute_carries_the_other_hub_average(
+            self, character_client, trade_hubs, monkeypatch):
+        monkeypatch.setattr(market_service, "get_character_assets", lambda *a, **kw: {})
+        add_type(34, "Tritanium")
+        TradeItem.objects.create(type_id=34, name="Tritanium", group_id=18, market_group_id=999)
+        # 91 units on one day of the gap-filled 91-day Jita window -> 1.0 a day.
+        History.objects.create(region_id=JITA_REGION, type_id=34, date=timezone.now().date(),
+                               average=100.0, highest=110.0, lowest=90.0,
+                               order_count=1, volume=91)
+
+        response = character_client.get(
+            reverse("market_trade_hub", kwargs={"region_id": AMARR_REGION}))
+        assert 'data-hvol-other="1.00"' in response.content.decode()
+
+    def test_every_row_declares_the_same_column_count(self, trade_hub_response):
+        parser = _RowWidths()
+        parser.feed(trade_hub_response.content.decode())
+        # The column toggles shrink a group cell to its visible columns. A group
+        # row that declares a width the data rows do not have would put the
+        # header out of step with the table.
+        assert set(parser.widths) == {28}
 
 
 class TestMistakes:

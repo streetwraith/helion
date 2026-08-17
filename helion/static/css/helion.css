@@ -339,6 +339,19 @@ table.sticky-head thead tr:nth-child(2) th {
     top: calc(1.25em + 2px);
 }
 
+/* The trade hub inserts a checkbox row between the group row and the labels. It
+   deliberately does not pin: the boxes are set once, a third pinned row would take
+   a quarter more of the viewport, and a box hides with its own column anyway. The
+   labels are the third row there, and they still pin directly under the group row,
+   because a static row takes up no pinned space. */
+table.sticky-head thead tr.column-toggles th {
+    position: static;
+}
+
+table.sticky-head thead tr.column-toggles ~ tr th {
+    top: calc(1.25em + 2px);
+}
+
 /* :where() keeps the specificity at zero, so .jita and the other cell colors still win. */
 :where(table.sticky-head thead th) {
     background-color: #fff;

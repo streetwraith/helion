@@ -4,10 +4,15 @@
 
 {% block title %}{{ trade_hub_region.name }} | Helion{% endblock %}
 
+{% block css %}
+<link rel="stylesheet" href="{% static 'market/css/trade_hub.css' %}">
+{% endblock %}
+
 {% block js %}
 <script src="{% static 'market/js/history_dialog.js' %}"></script>
 <script src="{% static 'js/notify_poller.js' %}"></script>
 <script src="{% static 'market/js/undercut_notifications.js' %}"></script>
+<script src="{% static 'market/js/trade_hub_filters.js' %}"></script>
 {% endblock %}
 
 {% block content %}
@@ -38,13 +43,22 @@
     <button type="submit">search</button>
 </form>
 
-<table class="market sticky-head">
+<div id="trade-hub-controls">
+    <div class="filter-line">
+        <label>o48 &le; <input type="number" id="max-o48" class="filter-threshold" min="0" step="1"></label>
+        <label>hvol {% if trade_hub_region.name != 'Jita' %}jita{% else %}amarr{% endif %}
+            &ge; <input type="number" id="min-hvol-other" class="filter-threshold" min="0" step="1"></label>
+    </div>
+</div>
+
+<div class="trade-hub-count" data-table="trade-items"></div>
+<table id="trade-items" class="market sticky-head">
     <thead>
         <tr>
             <th colspan="4"></th>
             <th colspan="11">sell</th>
             <th colspan="11">buy</th>
-            <th colspan="3">hvol</th>
+            <th colspan="2">hvol</th>
         </tr>
         {% include 'market/trade_hub/_fragment_trade_hub_header_row.html' with jita_class=True %}
     </thead>
@@ -57,20 +71,21 @@
             <th colspan="4"></th>
             <th colspan="11">sell</th>
             <th colspan="11">buy</th>
-            <th colspan="3">hvol</th>
+            <th colspan="2">hvol</th>
         </tr>
     </tfoot>
 </table>
 
 <br>
 
-<table class="market">
+<div class="trade-hub-count" data-table="trade-extras"></div>
+<table id="trade-extras" class="market">
     <thead>
         <tr>
             <th colspan="4"></th>
             <th colspan="11">sell</th>
             <th colspan="11">buy</th>
-            <th colspan="3">hvol</th>
+            <th colspan="2">hvol</th>
         </tr>
         {% include 'market/trade_hub/_fragment_trade_hub_header_row.html' with jita_class=True %}
     </thead>
@@ -83,7 +98,7 @@
             <th colspan="4"></th>
             <th colspan="11">sell</th>
             <th colspan="11">buy</th>
-            <th colspan="3">hvol</th>
+            <th colspan="2">hvol</th>
         </tr>
     </tfoot>
 </table>

@@ -630,6 +630,78 @@ types they get stay in step.
 The meta filter stays a list of ids, with the legend on an info icon beside it: a type
 with no meta group is never excluded, and 10,723 of the 19,667 market types have none.
 
+## The station trading table
+
+### The o48 columns
+
+`o48` counts the competing orders of one side, in this region and in hub range, that carry an
+`issued` inside the window in `RECENT_ORDER_WINDOW` (48 hours). ESI moves `issued` when a price
+changes, so a repriced order counts again. Two limits are worth knowing:
+
+- The snapshot holds **live** orders only, so an order that appeared and vanished inside the window
+  never shows. True activity over 48 hours would need history the app does not keep.
+- The count excludes every row in `CharacterOrder`, which covers all tracked characters and not only
+  the session character. An alt with no token in this app therefore counts as a competitor.
+
+The column label carries the number, so the constant and the header must change together. In dev the
+count reads 0 on every row whenever the market snapshot is older than the window, which the restored
+prod dump usually is.
+
+### The browser filters and the column toggles
+
+`trade_hub_filters.js` holds both, because they interact. The filters are two number boxes:
+`o48 <=` keeps a row when **both** sides pass, since the number describes a quiet item rather than a
+quiet side, and `hvol <hub> >=` keeps a row above a volume. A region with no history at all reports
+no average, so its blank fails any threshold instead of passing as a missing number. Both boxes read
+`data-` attributes on the row, never the formatted cells. Each table reports `showing N of M`,
+because an over-tight filter otherwise reads as an empty market.
+
+**The checkboxes are a header row of their own**, inserted by the JS between the group row and the
+labels, in both tables. The row mirrors the label cells exactly, spans and all, so the table stays
+28 columns wide. Building it from the labels keeps the column names in one place, the template.
+Five rules shape the hiding:
+
+- One checkbox per header cell of the label row, which makes `best` one checkbox over its two
+  columns. The item name carries none: it is the row's identity, and the click that opens the
+  in-game market window lives in it.
+- A header cell shrinks to its visible columns and goes when none are left. One rule serves the
+  group rows, the checkbox row and the label rows, in the head and in the foot, so the order of
+  those rows does not matter. A hidden group keeps a colspan of 1, because `colspan="0"` means "to
+  the end of the table" in HTML.
+- **A checkbox hides with its own column**, which is what makes the row safe: a cell that stayed
+  behind would leave that row 28 wide while the others were 25, and the header would go out of step.
+  Nothing in the table can therefore bring a column back. Nothing persists either, so a reload is
+  the way back, and that is the whole restore mechanism by choice.
+- The checkbox row **does not pin** on the sticky-head table. The boxes are set once, a third pinned
+  row would take a quarter more of the viewport, and the labels still pin directly under the group
+  row because a static row takes up no pinned space.
+- **Hiding a column clears and disables the filter that reads it**, so no number the page does not
+  show can shrink the table. The `data-col` keys on the label cells are the contract: `o48` sits on
+  both sides, and the box needs every column with its key to be visible, which makes hiding either
+  side enough.
+
+The row carries `tablesorter-ignoreRow`, which `jquery.tablesorter` 2.31.3 honours: its header loop
+skips such a row, so a checkbox cell never becomes a sort handle and gets no sort arrow. The row is
+inserted before `market.js` initialises tablesorter, because the class is only read at that point.
+The hidden set is the state and the boxes are its view, so the two tables always agree.
+
+Every row of the page declares 28 columns, group spans included, and a test asserts it. A group row
+that declared a width the data rows do not have would put the header out of step as soon as a column
+went. The header did declare 29 until 2026-08-17.
+
+### The table has no automated browser cover
+
+`pytest` covers what the server renders: the label, the row attributes and the equal row widths. The
+behaviour needs a hand check, because no browser exists on the dev host. Walk this after touching the
+filters or the toggles:
+
+1. Type a number in each box and confirm both counts change and the two tables stay in step.
+2. Untick a column and confirm the header, the footer, the rows and the checkbox itself all lose it,
+   in both tables. Reload and confirm the column returns.
+3. Untick one `o48` column and confirm the `o48` box empties and greys out.
+4. Click a label and confirm it still sorts, and that clicking a checkbox does not sort.
+5. Scroll down and confirm the group row and the labels pin, with no gap where the checkbox row was.
+
 ## The item name component
 
 Every item name in the UI renders through one inclusion tag, `{% item_name type_id name %}`

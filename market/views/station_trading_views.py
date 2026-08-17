@@ -14,6 +14,10 @@ from market.models import CharacterOrder, MarketOrderUndercut, TradeHub, TradeIt
 from marketdata.models import OrdersHub, RegionStatus
 from market.services import market_service
 
+# The window behind the o48 columns. The column label carries the number, so the
+# two must change together.
+RECENT_ORDER_WINDOW = timedelta(hours=48)
+
 def market_trade_hub_mistakes(request, region_id):
     refreshed_at, matching_results = market_service.get_mistakes(region_id)
 
@@ -138,10 +142,14 @@ def market_trade_hub(request, region_id):
     region_daily_volumes = market_service.get_average_daily_volume_bulk(region_id, type_ids)
     other_daily_volumes = market_service.get_average_daily_volume_bulk(other_region_id, type_ids)
 
+    # Competitor orders that are live now and were issued or repriced inside the
+    # window. ESI moves `issued` when a price changes, so a repriced order counts
+    # again. An order that appeared and vanished inside the window never shows:
+    # the snapshot holds live orders only.
     recent_counts = {
         (row['type_id'], row['is_buy_order']): row['recent']
         for row in competitor_orders.filter(
-            issued__gte=now - timedelta(days=1)
+            issued__gte=now - RECENT_ORDER_WINDOW
         ).values('type_id', 'is_buy_order').annotate(recent=Count('order_id'))
     }
 

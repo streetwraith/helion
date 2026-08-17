@@ -8,7 +8,7 @@
             <th>u</th>
             <th>uc</th>
             <th>uca</th>
-            <th>o24</th>
+            <th data-col="o48">o48</th>
             <th>station</th>
             <th{% if jita_class %} class="jita"{% endif %}>{% if trade_hub_region.name != 'Jita' %}jita{% else %}amarr{% endif %}</th>
             <th colspan="2">best</th>
@@ -20,7 +20,7 @@
             <th>u</th>
             <th>uc</th>
             <th>uca</th>
-            <th>o24</th>
+            <th data-col="o48">o48</th>
             <th>station</th>
             <th{% if jita_class %} class="jita"{% endif %}>{% if trade_hub_region.name != 'Jita' %}jita{% else %}amarr{% endif %}</th>
             <th colspan="2">best</th>
@@ -28,5 +28,5 @@
             <th>havgp</th> -->
             <th>hlastp</th>
             <th>curr</th>
-            <th>{% if trade_hub_region.name != 'Jita' %}jita{% else %}amarr{% endif %}</th>
+            <th data-col="hvol-other">{% if trade_hub_region.name != 'Jita' %}jita{% else %}amarr{% endif %}</th>
         </tr>

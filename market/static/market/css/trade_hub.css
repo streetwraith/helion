@@ -1,0 +1,29 @@
+/* The trade hub's filter boxes and column checkboxes. The table is dense, so the
+   controls stay small. They set no colours, so dark mode needs no rule here. */
+#trade-hub-controls {
+    font-size: 0.8em;
+    margin: 4px 0;
+}
+
+.filter-line label {
+    margin-right: 1em;
+}
+
+.filter-threshold {
+    width: 4em;
+}
+
+/* The column toggles, a header row of their own. The box sits centred over its
+   column, and no margin keeps the row as tight as a row of labels. */
+tr.column-toggles th {
+    text-align: center;
+}
+
+tr.column-toggles input {
+    margin: 0;
+    vertical-align: middle;
+}
+
+.trade-hub-count {
+    font-size: 0.8em;
+}
