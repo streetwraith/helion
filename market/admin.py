@@ -2,6 +2,7 @@ from django.contrib import admin
 from .models import (
     EsiFetchState, MarketTransaction, TradeItem, TradeHub, TrackedCharacter,
 )
+from .services import esi_scheduler
 
 admin.site.register(MarketTransaction)
 admin.site.register(TradeItem)
@@ -11,8 +12,7 @@ admin.site.register(TrackedCharacter)
 
 @admin.action(description="Re-enable and reset error state")
 def reenable(modeladmin, request, queryset):
-    queryset.update(disabled_at=None, disabled_reason=None, consecutive_errors=0,
-                    last_error=None, last_error_at=None, next_due=None)
+    esi_scheduler.reenable(queryset)
 
 
 @admin.register(EsiFetchState)

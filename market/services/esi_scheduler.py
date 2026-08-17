@@ -58,6 +58,16 @@ FEEDS = {
     "contracts": (esi_sync.refresh_character_contracts, 300),
 }
 
+# The one scope each feed asks of Token.get_token. The tracking page greys out a
+# feed no token of the character can serve, so an entry that drifts from the
+# fetch would grey out a working feed. A test pins every pair.
+FEED_SCOPES = {
+    "orders": "esi-markets.read_character_orders.v1",
+    "wallet": "esi-wallet.read_character_wallet.v1",
+    "assets": "esi-assets.read_assets.v1",
+    "contracts": "esi-contracts.read_character_contracts.v1",
+}
+
 
 def is_paused():
     paused_until = cache.get(PAUSE_CACHE_KEY)
@@ -227,6 +237,17 @@ def _record_success(state, expires, fallback_ttl):
     state.last_error = None
     state.last_error_at = None
     state.save()
+
+
+def reenable(states):
+    """Clear the failure state of the given rows, so the next tick fetches them.
+
+    The scheduler owns this state, so the admin action and the tracking page both
+    come here rather than writing the six fields themselves. A null next_due
+    means "due now", which is the point: you press this after fixing the cause.
+    """
+    return states.update(disabled_at=None, disabled_reason=None, consecutive_errors=0,
+                         last_error=None, last_error_at=None, next_due=None)
 
 
 def _is_client_error(exc):

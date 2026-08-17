@@ -111,6 +111,48 @@ scopes were added. Log in again to see the sheet.</p>
 
 {% endif %}
 
+<h2>Tracking</h2>
+{% comment %}
+The checkboxes carry form="tracking" instead of sitting inside that form: a
+re-enable button is a form of its own, and HTML forbids nesting one form in
+another.
+{% endcomment %}
+<form method="post" id="tracking">
+    {% csrf_token %}
+    <input type="hidden" name="_tracks" value="True">
+    <input type="hidden" name="_character" value="{{ character.character_id }}">
+</form>
+<table class="market tracking" style="width: auto;">
+    <tbody>
+        {% for row in feed_rows %}
+        <tr>
+            <td class="text"><label>
+                <input type="checkbox" form="tracking" name="feed" value="{{ row.feed }}"
+                       {% if row.tracked %}checked{% endif %}
+                       {% if not row.authorised %}disabled{% endif %}>
+                {{ row.feed }}</label></td>
+            <td class="text scope">{{ row.scope }}</td>
+            <td class="text">
+                {% if not row.authorised %}not authorised - log in again to add this scope
+                {% elif not row.state %}not scheduled
+                {% elif row.disabled %}DISABLED ({{ row.state.consecutive_errors }} errors)
+                {% else %}{% if row.state.last_success %}ok {{ row.state.last_success|since_dhms }} ago{% else %}never run{% endif %},
+                    {% if row.due_now %}due now{% else %}due in {{ row.state.next_due|until_dhms }}{% endif %}{% if row.state.consecutive_errors %}, {{ row.state.consecutive_errors }} errors{% endif %}
+                {% endif %}
+            </td>
+            <td>{% if row.disabled %}
+                <form method="post">
+                    {% csrf_token %}
+                    <input type="hidden" name="_character" value="{{ character.character_id }}">
+                    <button type="submit" name="_reenable" value="{{ row.feed }}">re-enable</button>
+                </form>
+                {% endif %}</td>
+        </tr>
+        {% endfor %}
+    </tbody>
+</table>
+<button type="submit" form="tracking">save</button>
+
 <form method="post">
     {% csrf_token %}
     <input type="hidden" name="_token" value="{{ character.token_pk }}">

@@ -43,10 +43,21 @@ ul.implants li {
     color: #b3261e;
 }
 
+/* The tracking table reads as prose, where a td defaults to right for the number
+   tables everywhere else. */
+table.tracking td.text {
+    text-align: left;
+}
+
+table.tracking td.scope {
+    color: #52514e;
+}
+
 @media (prefers-color-scheme: dark) {
     .skill-level,
     .implant-slot,
-    .sheet-total {
+    .sheet-total,
+    table.tracking td.scope {
         color: #a8a5a0;
     }
 

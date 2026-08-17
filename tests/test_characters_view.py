@@ -1,10 +1,16 @@
-"""The characters page: the session ownership boundary and the header bar."""
+"""The characters page: the session ownership boundary, the header bar and the
+tracking block."""
 import re
+from datetime import timedelta
 
 import pytest
 from django.contrib.auth.models import User
+from django.utils import timezone
 
-from esi.models import Token
+from esi.errors import TokenInvalidError
+from esi.models import Scope, Token
+from market.models import EsiFetchState, TrackedCharacter
+from market.services.esi_scheduler import FEED_SCOPES
 
 pytestmark = pytest.mark.django_db
 
@@ -17,6 +23,15 @@ def add_token(user, character_id, character_name):
         character_owner_hash="hash", token_type="Character",
         access_token="a", refresh_token="r",
     )
+
+
+def add_scopes(token, *feeds):
+    """Authorise the token for the named feeds."""
+    for feed in feeds:
+        scope, _ = Scope.objects.get_or_create(name=FEED_SCOPES[feed],
+                                               defaults={"help_text": ""})
+        token.scopes.add(scope)
+    return token
 
 
 def test_own_token_is_selected_into_the_session(auth_client):
@@ -121,3 +136,119 @@ class TestCharacterDetail:
         assert response.status_code == 200
         assert response.context["character"] is None
         assert "add new character" in response.content.decode()
+
+
+class TestTracking:
+    """The tracking block: what it offers, what it refuses and what it saves."""
+
+    @pytest.fixture
+    def tracked(self, auth_client, trade_hubs):
+        user = User.objects.get(username="tester")
+        token = add_token(user, 900001, "Main")
+        add_scopes(token, "orders", "wallet", "assets", "contracts")
+        return auth_client
+
+    def post(self, client, **fields):
+        return client.post("/characters/", dict({"_character": 900001}, **fields))
+
+    def test_ticked_feeds_are_stored_in_tracks_order(self, tracked):
+        response = self.post(tracked, _tracks="True", feed=["contracts", "orders"])
+
+        assert response.status_code == 302
+        # Back to the same character, not to the active one.
+        assert response["Location"] == "/characters/?character=900001"
+        # FEEDS order, not the order the browser sent.
+        assert TrackedCharacter.objects.get(character_name="Main").tracks == "orders, contracts"
+
+    def test_saving_nothing_deletes_the_row(self, tracked):
+        TrackedCharacter.objects.create(character_name="Main", tracks="orders, wallet")
+
+        self.post(tracked, _tracks="True")
+
+        assert not TrackedCharacter.objects.filter(character_name="Main").exists()
+
+    def test_an_unauthorised_feed_is_refused(self, auth_client, trade_hubs):
+        user = User.objects.get(username="tester")
+        add_scopes(add_token(user, 900001, "Main"), "orders")
+
+        self.post(auth_client, _tracks="True", feed=["orders", "assets"])
+
+        # A disabled checkbox is a browser convention; the view decides.
+        assert TrackedCharacter.objects.get(character_name="Main").tracks == "orders"
+
+    def test_an_unknown_tag_is_dropped(self, tracked):
+        self.post(tracked, _tracks="True", feed=["orders", "nonsense"])
+
+        assert TrackedCharacter.objects.get(character_name="Main").tracks == "orders"
+
+    def test_another_users_character_cannot_be_tracked(self, auth_client, trade_hubs):
+        other = User.objects.create_user("someone-else", password="irrelevant")
+        add_scopes(add_token(other, 900001, "NotMine"), "orders")
+
+        response = self.post(auth_client, _tracks="True", feed=["orders"])
+
+        assert response.status_code == 404
+        assert not TrackedCharacter.objects.exists()
+
+    def test_the_block_offers_every_feed_and_its_scope(self, tracked):
+        TrackedCharacter.objects.create(character_name="Main", tracks="orders")
+
+        content = tracked.get("/characters/", {"character": 900001}).content.decode()
+
+        assert "Tracking" in content
+        for feed, scope in FEED_SCOPES.items():
+            assert f'value="{feed}"' in content
+            assert scope in content
+        # A {# #} comment is single-line only in Django, so a multi-line one
+        # renders as text instead of vanishing.
+        assert "{#" not in content and "{%" not in content
+
+    def test_an_unauthorised_feed_renders_disabled(self, auth_client, trade_hubs):
+        user = User.objects.get(username="tester")
+        add_scopes(add_token(user, 900001, "Main"), "orders")
+
+        content = auth_client.get("/characters/", {"character": 900001}).content.decode()
+        assets_box = re.search(r'<input type="checkbox"[^>]*value="assets"[^>]*>', content).group()
+        orders_box = re.search(r'<input type="checkbox"[^>]*value="orders"[^>]*>', content).group()
+
+        assert "disabled" in assets_box
+        assert "disabled" not in orders_box
+        assert "not authorised" in content
+
+    def test_the_block_survives_a_failed_sheet(self, tracked, monkeypatch):
+        def broken_sheet(character_id):
+            raise TokenInvalidError()
+
+        monkeypatch.setattr("helion.views.get_character_sheet", broken_sheet)
+
+        content = tracked.get("/characters/", {"character": 900001}).content.decode()
+
+        assert "ESI did not answer" in content
+        assert "Tracking" in content
+
+    def test_a_disabled_feed_offers_re_enable_and_clearing_it_works(self, tracked):
+        state = EsiFetchState.objects.create(
+            character_name="Main", feed="assets", consecutive_errors=3,
+            last_error="boom", last_error_at=timezone.now(),
+            next_due=timezone.now() + timedelta(hours=1),
+            disabled_at=timezone.now(), disabled_reason="3 consecutive client/token errors")
+
+        content = tracked.get("/characters/", {"character": 900001}).content.decode()
+        assert "DISABLED (3 errors)" in content
+        assert 'name="_reenable" value="assets"' in content
+
+        self.post(tracked, _reenable="assets")
+
+        state.refresh_from_db()
+        assert (state.disabled_at, state.disabled_reason) == (None, None)
+        assert (state.consecutive_errors, state.last_error, state.next_due) == (0, None, None)
+
+    def test_re_enabling_an_unknown_feed_changes_nothing(self, tracked):
+        state = EsiFetchState.objects.create(
+            character_name="Main", feed="assets", disabled_at=timezone.now())
+
+        response = self.post(tracked, _reenable="nonsense")
+
+        assert response.status_code == 302
+        state.refresh_from_db()
+        assert state.disabled_at is not None

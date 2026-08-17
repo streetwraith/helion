@@ -193,8 +193,9 @@ not stored in the sheet: the sheet is minutes old and that answer changes on a s
 All recurring character fetches (own orders, wallet transactions + journal, assets) run on one
 self-pacing scheduler instead of fixed-interval tasks:
 
-- **Config is runtime data**: `TrackedCharacter(character_name, tracks)` in the admin, with
-  comma-separated feed tags (`orders`, `wallet`, `assets`). Edits take effect on the next tick.
+- **Config is runtime data**: `TrackedCharacter(character_name, tracks)`, with comma-separated feed
+  tags (`orders`, `wallet`, `assets`, `contracts`). Edit it in the tracking block of the characters
+  page, or in the admin. Edits take effect on the next tick.
 - **State is a table**: `EsiFetchState`, one row per (character, feed) — `next_due`,
   `last_success`, error counters, `disabled_at`. Admin-visible; clearing `next_due` forces a
   fetch, an admin action re-enables a disabled row.
@@ -244,6 +245,33 @@ The feeds and their routes:
 
 A full hourly cycle for a handful of characters spends under 2% of any bucket; the failure
 policy, not the budget, is the binding constraint.
+
+### The tracking block
+
+The bottom of each character's page carries one line per feed: a checkbox, the scope the fetch
+needs, and how the feed fares. It renders even when the sheet fails, because tracking has nothing
+to do with the sheet. `market/services/tracking.py` holds the read model and the save.
+
+- **A feed no token can serve is greyed out**, and the view refuses it as well. A disabled checkbox
+  is a browser convention, and arming a feed that cannot work would spend the error budget three
+  times before the row hard-disabled itself. The check reads the **union of every token** of the
+  character, because `Token.get_token` searches them all: gating on the newest token alone would
+  grey out a feed an older one still serves.
+- **Saving nothing deletes the row**, so the table stays the list of characters that are tracked.
+  Either way the next tick drops the fetch state.
+- **A save writes `TrackedCharacter` only.** The watchdog creates and deletes `EsiFetchState`, and
+  its initial jitter spreads the first fetch, so a new tick lands within about five minutes.
+- **Unticking a feed and ticking it again clears a hard-disabled row**, because the reconcile deletes
+  the unwanted row and creates a fresh one. The block also offers a re-enable button per disabled
+  feed, which calls `esi_scheduler.reenable` — the same function the admin action uses, so the
+  six-field reset exists once and the scheduler keeps owning its state. That reset nulls `next_due`,
+  which means "due on the next tick".
+- `FEED_SCOPES` beside `FEEDS` names the scope per feed. The scope also sits in the fetch function,
+  so a test calls each fetch with a stub token and asserts the pair, or the page could grey out a
+  feed that works.
+- **The row is keyed by `character_name`, as `EsiFetchState` is.** An EVE rename orphans both rows
+  and fetching stops with no error anywhere. The page cannot fix that, and moving both tables to
+  `character_id` is a job of its own.
 
 ## The trade-hub jump table
 

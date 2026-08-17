@@ -1,5 +1,6 @@
 """The ESI fetch scheduler: reconciliation, pacing, and the failure policy."""
 from datetime import timedelta
+from types import SimpleNamespace
 
 import httpx
 import pytest
@@ -9,7 +10,7 @@ from esi.errors import TokenInvalidError
 from esi.exceptions import ESIErrorLimitException, HTTPServerError
 from esi.models import Token
 from market.models import EsiFetchState, TrackedCharacter
-from market.services import esi_scheduler
+from market.services import esi_scheduler, esi_sync
 
 from .conftest import FakeCache
 
@@ -312,3 +313,35 @@ class TestRunFeed:
         assert state.consecutive_errors == 0
         assert state.last_success is not None
 
+
+class TestFeedScopes:
+    def test_every_feed_asks_for_the_scope_the_map_names(self, monkeypatch):
+        """The tracking page greys out a feed by FEED_SCOPES, so an entry that
+        drifts from its fetch would grey out a feed that works."""
+        class Stop(Exception):
+            pass
+
+        class AnyPath:
+            """Any attribute path. The callee expression is evaluated before the
+            arguments, so this keeps the spec load out of the test."""
+            def __getattr__(self, name):
+                return AnyPath()
+
+            def __call__(self, *args, **kwargs):
+                raise AssertionError("the fetch called ESI before taking a token")
+
+        asked = []
+
+        def get_token(character_id, scope):
+            asked.append(scope)
+            raise Stop()
+
+        monkeypatch.setattr(esi_sync, "Token", SimpleNamespace(get_token=get_token))
+        monkeypatch.setattr(esi_sync, "esi", AnyPath())
+
+        assert set(esi_scheduler.FEED_SCOPES) == set(esi_scheduler.FEEDS)
+        for feed, (fetch, _ttl) in esi_scheduler.FEEDS.items():
+            asked.clear()
+            with pytest.raises(Stop):
+                fetch(CHARACTER_ID)
+            assert asked == [esi_scheduler.FEED_SCOPES[feed]], feed

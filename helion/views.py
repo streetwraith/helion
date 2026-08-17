@@ -1,11 +1,13 @@
 from django.conf import settings
 from django.http import Http404
 from django.shortcuts import render, redirect
+from django.urls import reverse
 from django.utils import timezone
 from aiopenapi3.errors import HTTPError
 from esi.errors import TokenError
 from esi.models import Token
 from helion.character_sheet import SheetUnavailable, get_character_sheet
+from market.services import tracking
 import logging
 
 logger = logging.getLogger(__name__)
@@ -20,6 +22,28 @@ def _token_for(request, character_id):
     # carries the scopes of the newest authorisation, so it wins.
     return (Token.objects.filter(user=request.user, character_id=character_id)
             .order_by('-pk').first())
+
+
+def _posted_character(request):
+    """The character a POSTed form names, checked against this user's tokens.
+
+    The form carries the id, so the ownership check that _shown_character does
+    for a GET has to run again here.
+    """
+    try:
+        character_id = int(request.POST.get('_character', ''))
+    except ValueError:
+        raise Http404("no such character")
+    token = _token_for(request, character_id)
+    if token is None:
+        raise Http404("no such character")
+    return token
+
+
+def _back_to_character(character_id):
+    """The page for one character. The other forms on it redirect to the plain
+    page, which shows the active character instead of the one you were editing."""
+    return redirect(f"{reverse('characters')}?character={character_id}")
 
 
 def _shown_character(request):
@@ -59,6 +83,18 @@ def characters(request, *args, **kwargs):
             from esi.views import sso_redirect
             return sso_redirect(request, scopes=settings.ESI_CLIENT_SCOPE, return_to='characters')
 
+        if request.POST.get('_tracks'):
+            token = _posted_character(request)
+            tracking.save_tracks(token.character_id, token.character_name,
+                                 request.POST.getlist('feed'))
+            return _back_to_character(token.character_id)
+
+        reenable_feed = request.POST.get('_reenable')
+        if reenable_feed:
+            token = _posted_character(request)
+            tracking.reenable_feed(token.character_name, reenable_feed)
+            return _back_to_character(token.character_id)
+
         token_pk = request.POST.get('_token', None)
         if token_pk:
             try:
@@ -81,6 +117,10 @@ def characters(request, *args, **kwargs):
     character = _shown_character(request)
     context = {'character': character, 'show_skills': bool(request.GET.get('show_skills'))}
     if character:
+        # Outside the sheet's try: tracking has nothing to do with the sheet, and
+        # a dead token or an ESI outage must not take the block with it.
+        context['feed_rows'] = tracking.get_feed_rows(
+            character['character_id'], character['name'])
         try:
             sheet = get_character_sheet(character['character_id'])
             context['sheet'] = sheet
