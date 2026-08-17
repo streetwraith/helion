@@ -1,5 +1,7 @@
 """The assets page: the walk out of containers and ships, the m3 rule, and the
 merge into one line per item and place."""
+import re
+
 import pytest
 from django.contrib.auth.models import User
 
@@ -411,6 +413,27 @@ class TestPage:
         assert "Mineral" in content
         assert "Jita IV - Moon 4" in content
         assert "<td>120</td>" in content  # 12,000 x 0.01 m3
+
+    def test_the_columns_read_item_first_and_character_last(self, auth_client,
+                                                            trade_hubs, jita):
+        add_asset(1, TRITANIUM, quantity=5)
+
+        content = auth_client.get("/market/assets").content.decode()
+        header = re.search(r"<thead>.*?</thead>", content, re.S).group()
+
+        assert re.findall(r"<th>(\w+)</th>", header) == [
+            "item", "qty", "in", "category", "group", "location", "m3", "character"]
+
+    def test_the_item_name_carries_the_shared_links(self, auth_client, trade_hubs, jita):
+        add_asset(1, TRITANIUM, quantity=5)
+
+        content = auth_client.get("/market/assets").content.decode()
+
+        # The component's three links: the in-game market window, the history
+        # chart and the order book.
+        assert f'class="item-name-link" data-type-id="{TRITANIUM}"' in content
+        assert f"market/history?type_id={TRITANIUM}" in content
+        assert f"market/browse?type_id={TRITANIUM}" in content
 
     def test_the_category_dropdown_lists_what_the_table_holds(self, auth_client,
                                                               trade_hubs, jita):

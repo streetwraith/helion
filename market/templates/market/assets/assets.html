@@ -1,6 +1,6 @@
 {% extends "market_base.html" %}
 
-{% load static custom_filters %}
+{% load static custom_filters item_tags %}
 
 {% block title %}assets | Helion{% endblock %}
 
@@ -43,27 +43,30 @@ filters run in the browser.
 <table id="assets" class="market sticky-head" style="width: auto;">
   <thead>
     <tr>
-      <th>character</th>
-      <th>category</th>
-      <th>group</th>
       <th>item</th>
       <th>qty</th>
-      <th>location</th>
       <th>in</th>
+      <th>category</th>
+      <th>group</th>
+      <th>location</th>
       <th>m3</th>
+      <th>character</th>
     </tr>
   </thead>
   <tbody>
     {% for line in assets %}
     <tr data-character="{{ line.character_id }}" data-category="{{ line.category }}">
-      <td class="text">{{ line.character }}</td>
+      {% comment %}No region: these lines span every region, so the history link
+      falls back to the one the component defaults to.
+      {% endcomment %}
+      <td class="text item">{% item_name line.type_id line.item %}</td>
+      <td>{{ line.quantity }}</td>
+      <td class="text">{{ line.holder }}</td>
       <td class="text">{{ line.category }}</td>
       <td class="text">{{ line.group }}</td>
-      <td class="text item">{{ line.item }}</td>
-      <td>{{ line.quantity }}</td>
       <td class="text">{{ line.location }}</td>
-      <td class="text">{{ line.holder }}</td>
       <td>{{ line.m3|m3_value }}</td>
+      <td class="text">{{ line.character }}</td>
     </tr>
     {% empty %}
     <tr><td colspan="8">no assets</td></tr>

@@ -628,6 +628,15 @@ narrowing costs no request.
   marker — its slot still shows in the holder column. The holder column shows no marker at
   all: a fitted module is inside an assembled ship by definition.
 
+- **The item column reads through the shared `item_name` component**, so the name opens the
+  in-game market window and carries the history and order-book links, as every other table
+  does. It passes no region: these lines span every region at once, so the history link takes
+  the component's own default. The three links per row cost about 320 KiB on 1196 lines.
+
+The columns read item, qty, in, category, group, location, m3, character: what the line is
+first, then how much and where, and the character last, because the dropdown above the table
+is the usual way to ask that question.
+
 Six queries answer the page, whatever the characters hold: the rows, the type data, the
 groups, the categories, the station names and the token names. A player structure or a
 ship in space adds one each.
@@ -757,7 +766,8 @@ carries the type id alone, because that page covers every ingested region at onc
 aims the history link at the region the caller already shows and defaults to The Forge. It is an explicit argument rather than something read off the
 surrounding context, for the same reason the component is a tag and not an include: a caller that
 inherits a region silently will eventually inherit the wrong one. Callers with no single region to
-name leave it out — the shopping list prices five regions per row, and a hauling deal spans two.
+name leave it out — the shopping list prices five regions per row, a hauling deal spans two, and
+an asset line belongs to whichever region it sits in.
 
 ## The history chart
 
