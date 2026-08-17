@@ -137,6 +137,24 @@ def test_chart_uses_current_hub_price_not_stale(ice_client):
     assert chart["color"] == "lightcoral"
 
 
+def test_the_chart_carries_its_range_as_a_tooltip(ice_client):
+    # The range used to sit in an h/l column beside every chart. The tooltip
+    # replaced it, so nothing on the page states the range in text any more.
+    add_order(1, LIQUID_OZONE, 120.0)
+    History.objects.create(
+        region_id=JITA_REGION, type_id=LIQUID_OZONE, date=date.today() - timedelta(days=3),
+        average=100.0, highest=150.0, lowest=100.0, order_count=1, volume=10,
+    )
+    response = ice_client.get(reverse("market_ice_index"), ZERO_PARAMS)
+    content = response.content.decode()
+
+    # The cell carries the tooltip and the span inside it carries the chart:
+    # peity hides whatever it draws from, so a title on that element never shows.
+    assert ('<td class="chart" title="low 120.00, high 150.00 (30 days)">'
+            '<span class="chart-values" data-peity=') in content
+    assert ">h/l<" not in content
+
+
 def test_chart_stroke_is_transparent_without_recent_history(ice_client):
     # History outside the 30-day window leaves the chart with no points. The stroke
     # must then be transparent, which hides the line under either theme: white hid

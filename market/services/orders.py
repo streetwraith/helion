@@ -250,6 +250,9 @@ def _ticker_item(label, price, region_id, type_id):
         'label': label,
         'price': price,
         'history': averages,
+        # The tooltip names the window, so the number must come from here rather
+        # than from the template, where it would drift from the slice above.
+        'days': TICKER_HISTORY_DAYS,
         # peity scales a line from 0 up, and a week of prices moves by well
         # under a percent, so the default bounds draw a flat line. The bounds
         # come from the data instead, as they do for the ice charts.

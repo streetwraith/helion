@@ -37,7 +37,8 @@
                 {% for item in price_ticker %}
                 <span class="ticker-item">{{ item.label }}:
                     <span class="{{ item.trend|default_if_none:'' }}">{{ item.price|isk_value_mil|default:"-" }}</span>
-                    {% if item.history %}<span class="ticker-chart" data-peity='{"height":14,"width":42,"fill":false,"min":{{ item.min }},"max":{{ item.max }},"stroke":"{{ item.stroke }}"}'>{{ item.history|join:"," }}</span>{% endif %}
+                    {# The tooltip sits on the wrapper: peity hides the element it draws from and puts its svg next to it, so a title on that element would never show. #}
+                    {% if item.history %}<span class="ticker-chart-tip" title="low {{ item.min|isk_value_mil }}, high {{ item.max|isk_value_mil }} ({{ item.days }} days)"><span class="ticker-chart" data-peity='{"height":14,"width":42,"fill":false,"min":{{ item.min }},"max":{{ item.max }},"stroke":"{{ item.stroke }}"}'>{{ item.history|join:"," }}</span></span>{% endif %}
                 </span>
                 {% endfor %}
             </span>

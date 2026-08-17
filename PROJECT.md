@@ -292,8 +292,12 @@ orders straight from `market.orders` — the raw table, not the hub view: the re
 hub and its orders sit in stations across the whole universe, so a hub-range filter would be
 wrong.
 
-Each cell carries the last seven daily averages as a peity sparkline, and the price takes the
-colour of its direction: green above the newest daily average, red below it, which is the
+Each cell carries the last seven daily averages as a peity sparkline, with the range it draws
+as a `title` tooltip: peity scales the line to the data, so without the low and the high the
+shape says nothing about the size of the move. The window in that text comes from the same
+constant as the slice. **The tooltip sits on a wrapper, never on the element peity draws from**:
+peity hides that element and inserts its svg beside it, so a title there is on a
+`display: none` box and never shows. The price takes the colour of its direction: green above the newest daily average, red below it, which is the
 direction the ice page paints. That window anchors on the newest history row rather than on
 today, because EVE Ref publishes a day's history a day or two late.
 
@@ -849,6 +853,13 @@ Two constraints hold the values in place. Change either one and something breaks
 - **The chart's buy and sell colours hold a 12 L\* gap.** That gap, not the hue, is what separates
   them for red-green deficiency. The green looks dim enough to invite a fix; raising it closes the
   gap to under 1 L\*. It stays, because a mark answers to a 3:1 floor rather than a text one.
+
+The ice charts carry the same `title` tooltip, and it replaced the `h/l` column that used to
+print the high over the low beside each of the four hub charts. That column cost four of the
+33 columns on the widest table in the app. For the tooltip to work, peity had to stop drawing
+from the `<td>` itself and draw from a `span` inside it. That also ends a quiet piece of invalid
+markup: peity was inserting its svg as a sibling of the cells, so every chart rendered in an
+anonymous table cell that the browser had to invent.
 
 The chart canvas is the one surface CSS cannot reach. `history_chart.js` holds both palettes and
 rebuilds the chart on a theme switch. The ice page has the same problem for a different reason:

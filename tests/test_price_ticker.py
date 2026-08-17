@@ -185,4 +185,9 @@ class TestHeaderRendering:
         assert "700000000.0,710000000.0" in content
         assert '"min":700000000.0,"max":710000000.0' in content
         assert '"stroke":"lightgreen"' in content
+        # The range the chart draws, as a tooltip: the header shows it nowhere
+        # else. It has to sit on the wrapper, because peity hides the element it
+        # draws from and inserts its svg next to it.
+        assert ('<span class="ticker-chart-tip" title="low 700.0m, high 710.0m (7 days)">'
+                '<span class="ticker-chart" data-peity=') in content
         assert '<span class="up">' in content

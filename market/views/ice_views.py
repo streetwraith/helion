@@ -18,6 +18,10 @@ REPROCESS_HUBS = ['Jita', 'Amarr', 'Hek', 'Rens']
 # The transaction-average table windows, label -> days back.
 PRICE_WINDOWS = {'7d': 7, '14d': 14, '30d': 30, '90d': 90}
 
+# Days of daily highs behind each product sparkline. The chart's tooltip names
+# the window, so the number must live in one place.
+CHART_DAYS = 30
+
 def _group_orders(orders):
     """(region_id, type_id) -> sells cheapest-first and buys highest-first."""
     books = {}
@@ -196,8 +200,10 @@ def _build_product_data(product_books, product_history, ice_products_stock,
             history_rows = product_history.get((market_hubs[market_hub], product_id), [])
             if history_rows:
                 hub_data.update(_history_window_stats(history_rows, today))
-                chart_data = [float(row.highest) for row in history_rows if row.date >= today - timedelta(days=30)]
+                chart_data = [float(row.highest) for row in history_rows
+                              if row.date >= today - timedelta(days=CHART_DAYS)]
                 hub_data['chart_data'] = {
+                    'days': CHART_DAYS,
                     # peity takes the stroke as an option, so no stylesheet can reach
                     # it and the colour has to come from here. The two light strokes
                     # read on either theme, but the empty case must be transparent:
