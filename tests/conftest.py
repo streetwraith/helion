@@ -9,7 +9,7 @@ from django.utils import timezone
 
 from market import context_processors
 from market.models import TradeHub
-from market.services import mistakes, orders
+from market.services import esi_scheduler, mistakes, orders
 from marketdata.models import RegionStatus
 
 
@@ -169,6 +169,9 @@ def isolated_shared_caches(monkeypatch):
     monkeypatch.setattr(orders, "cache", FakeCache())
     monkeypatch.setattr(context_processors, "cache", FakeCache())
     monkeypatch.setattr(mistakes, "cache", FakeCache())
+    # The scheduler's global pause lives in the same shared Redis, and anything
+    # that calls ESI now reads it. A real pause there must not fail the suite.
+    monkeypatch.setattr(esi_scheduler, "cache", FakeCache())
 
 
 @pytest.fixture(autouse=True)

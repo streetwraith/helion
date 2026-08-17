@@ -15,6 +15,7 @@ from django.core.cache import cache
 from esi.models import Token
 from evesde.models import Group, Type, TypeDogmaAttribute
 from helion.providers import esi
+from market.services.esi_scheduler import is_paused
 
 logger = logging.getLogger(__name__)
 
@@ -39,6 +40,10 @@ INFOMORPH_SYNCHRONIZING_TYPE_ID = 33399
 IMPLANT_SLOT_ATTRIBUTE_ID = 331
 
 
+class SheetUnavailable(Exception):
+    """ESI is paused after a server error, so a cache miss cannot be filled."""
+
+
 def _cache_key(character_id):
     return f'character_sheet:{character_id}'
 
@@ -49,10 +54,17 @@ def get_character_sheet(character_id):
     Returns None when the character holds no token carrying all of
     SHEET_SCOPES, which is what an older login looks like. That case is never
     cached, so a fresh login takes effect at once.
+
+    Raises SheetUnavailable while the scheduler holds its global pause. This is
+    the one page that calls ESI as it renders, so without the check every visit
+    during an ESI outage would spend requests from the budget shared with
+    marketmanager. A cached sheet still renders: the pause only stops new calls.
     """
     sheet = cache.get(_cache_key(character_id))
     if sheet is not None:
         return sheet
+    if is_paused():
+        raise SheetUnavailable("ESI fetching is paused")
     tokens = {scope: Token.get_token(character_id, scope) for scope in SHEET_SCOPES}
     if not all(tokens.values()):
         logger.info("character %s has no token for %s", character_id,

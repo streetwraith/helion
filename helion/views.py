@@ -5,7 +5,7 @@ from django.utils import timezone
 from aiopenapi3.errors import HTTPError
 from esi.errors import TokenError
 from esi.models import Token
-from helion.character_sheet import get_character_sheet
+from helion.character_sheet import SheetUnavailable, get_character_sheet
 import logging
 
 logger = logging.getLogger(__name__)
@@ -88,6 +88,10 @@ def characters(request, *args, **kwargs):
             # minutes and this flag flips on a second.
             ready = sheet['jump_clone_ready'] if sheet else None
             context['jump_clone_available'] = ready is not None and ready <= timezone.now()
+        except SheetUnavailable:
+            # ESI answered a server error minutes ago and every feed is waiting
+            # it out. Say so plainly rather than showing the exception.
+            context['sheet_error'] = "it is paused after a server error. Try again shortly."
         except (TokenError, HTTPError) as exc:
             # One dead token or one ESI outage must not take the page with it:
             # make active, add and logout all still have to work here.

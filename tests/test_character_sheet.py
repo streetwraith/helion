@@ -216,6 +216,39 @@ class TestQueueAndImplants:
         assert implants[1]["slot"] is None
 
 
+class TestUpstreamPause:
+    def test_a_cache_miss_while_paused_calls_no_route(self, sheet_cache, monkeypatch):
+        calls = []
+        fake_esi(monkeypatch, skills=[], calls=calls)
+        monkeypatch.setattr(character_sheet, "is_paused", lambda: True)
+
+        with pytest.raises(character_sheet.SheetUnavailable):
+            get_character_sheet(CHARACTER_ID)
+
+        assert calls == []
+
+    def test_a_cached_sheet_still_answers_while_paused(self, sheet_cache, monkeypatch):
+        # The pause stops new calls, not the page.
+        sheet_cache.set(f"character_sheet:{CHARACTER_ID}", {"total_sp": 42}, 300)
+        monkeypatch.setattr(character_sheet, "is_paused", lambda: True)
+
+        assert get_character_sheet(CHARACTER_ID)["total_sp"] == 42
+
+    def test_the_page_says_why_the_sheet_is_missing(self, auth_client, trade_hubs,
+                                                   monkeypatch, sheet_cache):
+        from django.contrib.auth.models import User
+
+        from .test_characters_view import add_token
+        add_token(User.objects.get(username="tester"), CHARACTER_ID, "Main")
+        monkeypatch.setattr(character_sheet, "is_paused", lambda: True)
+
+        content = auth_client.get("/characters/",
+                                  {"character": CHARACTER_ID}).content.decode()
+
+        assert "paused after a server error" in content
+        assert "make active" in content  # the page still works
+
+
 class TestCaching:
     def test_the_five_routes_run_once_per_cache_window(self, sheet_cache, monkeypatch):
         calls = []

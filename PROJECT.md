@@ -212,10 +212,21 @@ and shared with every other consumer on the host**:
   can never produce more than one request per backoff window.
 - **Client/token errors** (4xx, dead refresh tokens) are deterministic; after N consecutive
   (default 3) the row hard-disables and waits for a human.
-- **Server errors and timeouts** back off exponentially (2 min doubling to a 1 h cap, jittered)
-  and never hard-disable — routine downtime must not require admin clicks afterwards.
 - **Error-limit and bucket responses pause all fetching globally** until the reported reset;
   once the IP is limited, every further request deepens the hole.
+- **ESI being unavailable pauses all fetching too**, for `Retry-After` or one minute. Three
+  shapes count: a 5xx from a route, an httpx error from loading the spec (maintenance mode
+  fails there, before any route call, so no esi exception is ever built), and a transport
+  error. None of them is one row's fault, so no error is recorded against it: the row keeps
+  a clean counter and resumes at full speed the moment ESI answers. The pause is a timestamp
+  in the cache, so it clears itself — nothing has to remember to lift it, and no probe needs
+  an exemption. Since the pause and the watchdog tick are both a minute, an outage costs one
+  request a minute and recovery takes one tick.
+- **Any other error backs off exponentially** (2 min doubling to a 1 h cap, jittered) and
+  never hard-disables — routine trouble must not require admin clicks afterwards.
+- **The character sheet honours the same pause.** It is the one page that calls ESI as it
+  renders, so without the check every visit during an outage would spend requests from the
+  shared budget. A cached sheet still renders; only new calls stop.
 - A warning bar tops every page while any row is disabled or erroring — a dead wallet feed must
   not silently stale the profit statistics.
 

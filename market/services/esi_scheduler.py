@@ -13,12 +13,14 @@ import logging
 import random
 from datetime import timedelta
 
+import httpx
 from django.conf import settings
 from django.core.cache import cache
 from django.utils import timezone
 
 from esi.errors import TokenError
-from esi.exceptions import ESIBucketLimitException, ESIErrorLimitException, HTTPClientError
+from esi.exceptions import (
+    ESIBucketLimitException, ESIErrorLimitException, HTTPClientError, HTTPServerError)
 from esi.models import Token
 from market.models import EsiFetchState, TrackedCharacter
 from market.services import esi_sync
@@ -27,6 +29,10 @@ logger = logging.getLogger(__name__)
 
 PAUSE_CACHE_KEY = "esi_fetch_paused_until"
 PAUSE_SLACK_SECONDS = 10
+# How long to wait when ESI itself is down and says nothing about when to
+# return. One minute matches the watchdog tick: exactly one probe per minute
+# tests the water, and the first success clears the pause.
+UPSTREAM_PAUSE_SECONDS = 60
 EXPIRES_SLACK_SECONDS = 5
 # A fetch may never rerun faster than this, even on a stale Expires header.
 MIN_INTERVAL_SECONDS = 60
@@ -80,13 +86,19 @@ def seconds_until_next_wallet_fetch():
     return int(min(POLL_MAX_SECONDS, max(POLL_MIN_SECONDS, delay.total_seconds())))
 
 
-def pause_all_fetching(reset_seconds):
-    """Error-limit protection: the limit is per IP and shared with
-    marketmanager, so after a limit response every further request from this
-    app deepens the hole for both."""
+def pause_all_fetching(reset_seconds, reason="ESI limited"):
+    """Stop every feed for a while, for a reason that is not one row's fault.
+
+    Two callers: an error-limit response, because the limit is per IP and
+    shared with marketmanager, so every further request deepens the hole for
+    both; and ESI being down, where the requests cannot succeed anyway.
+
+    The pause is a timestamp in the cache, so it clears itself. Nothing has to
+    remember to lift it, and no probe needs an exemption to find out.
+    """
     seconds = (reset_seconds or 60) + PAUSE_SLACK_SECONDS
     cache.set(PAUSE_CACHE_KEY, timezone.now() + timedelta(seconds=seconds), timeout=None)
-    logger.warning("ESI limited: all fetching paused for %s seconds", seconds)
+    logger.warning("%s: all fetching paused for %s seconds", reason, seconds)
 
 
 def _initial_due(character_name, feed):
@@ -158,9 +170,49 @@ def run_feed(feed, character_name):
         pause_all_fetching(exc.reset)
         return
     except Exception as exc:
+        if _is_upstream_down(exc):
+            # Same treatment as a limit response, and for the same reason: the
+            # row did nothing wrong, so its counters and its backoff stay clean
+            # and it resumes at full speed the moment ESI answers again.
+            pause_all_fetching(_retry_after(exc) or UPSTREAM_PAUSE_SECONDS,
+                               reason=f"ESI unavailable ({exc!r})")
+            return
         _record_failure(state, exc)
         return
     _record_success(state, expires, fallback_ttl)
+
+
+def _is_upstream_down(exc):
+    """ESI is not answering, as opposed to refusing this request.
+
+    Three shapes reach here: a 5xx from a route, an httpx error from loading the
+    spec (which happens before any route call, so it never becomes an esi
+    exception), and a transport error - a refused connection or a timeout.
+    """
+    if isinstance(exc, HTTPServerError):
+        return True
+    if isinstance(exc, httpx.HTTPStatusError):
+        return exc.response.status_code >= 500
+    return isinstance(exc, httpx.TransportError)
+
+
+def _retry_after(exc):
+    """The Retry-After seconds the response asked for, if it asked at all.
+
+    Only the delay form is read. The HTTP-date form is rare here and a wrong
+    parse would pause for a wrong length, where falling back pauses for a
+    minute and asks again.
+    """
+    headers = getattr(exc, 'headers', None)
+    if headers is None:
+        response = getattr(exc, 'response', None)
+        headers = getattr(response, 'headers', None)
+    if not headers:
+        return None
+    try:
+        return int(headers.get('Retry-After'))
+    except (TypeError, ValueError):
+        return None
 
 
 def _record_success(state, expires, fallback_ttl):

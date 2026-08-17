@@ -10,3 +10,6 @@ celery[redis]==5.4.0
 django-celery-beat==2.9.0
 django-celery-results==2.5.1
 psycopg2-binary==2.9.10
+# The ESI client's transport. Pinned here because the scheduler classifies its
+# errors itself: a failed spec load raises httpx, not an esi exception.
+httpx==0.28.1

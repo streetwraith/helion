@@ -1,11 +1,12 @@
 """The ESI fetch scheduler: reconciliation, pacing, and the failure policy."""
 from datetime import timedelta
 
+import httpx
 import pytest
 from django.utils import timezone
 
 from esi.errors import TokenInvalidError
-from esi.exceptions import ESIErrorLimitException
+from esi.exceptions import ESIErrorLimitException, HTTPServerError
 from esi.models import Token
 from market.models import EsiFetchState, TrackedCharacter
 from market.services import esi_scheduler
@@ -130,7 +131,7 @@ class TestRunFeed:
         seconds = (state.next_due - timezone.now()).total_seconds()
         assert seconds > esi_scheduler.MIN_INTERVAL_SECONDS - 5
 
-    def test_server_error_backs_off_without_disabling(self, scheduler_cache, fake_token, monkeypatch):
+    def test_an_unclassified_error_backs_off_without_disabling(self, scheduler_cache, fake_token, monkeypatch):
         state = orders_state()
 
         def boom(character_id):
@@ -181,6 +182,99 @@ class TestRunFeed:
         assert paused_until is not None and paused_until > timezone.now()
         assert esi_scheduler.is_paused()
 
+    def test_a_route_server_error_pauses_everything_and_stays_clean(
+            self, scheduler_cache, fake_token, monkeypatch):
+        state = orders_state()
+
+        def boom(character_id):
+            raise HTTPServerError(status_code=503, headers={}, data=None)
+
+        self.run_with_fetch(monkeypatch, boom)
+
+        state.refresh_from_db()
+        # No error recorded, so nothing to back off from once ESI answers again.
+        assert (state.consecutive_errors, state.last_error) == (0, None)
+        assert esi_scheduler.is_paused()
+
+    def test_a_failed_spec_load_pauses_everything(self, scheduler_cache, fake_token,
+                                                 monkeypatch):
+        # Maintenance mode: the client cannot even load the spec, so httpx raises
+        # before any route call and no esi exception is ever built.
+        state = orders_state()
+
+        def boom(character_id):
+            raise httpx.HTTPStatusError(
+                "503 Service Unavailable",
+                request=httpx.Request("GET", "https://esi.evetech.net/meta/openapi.json"),
+                response=httpx.Response(503))
+
+        self.run_with_fetch(monkeypatch, boom)
+
+        state.refresh_from_db()
+        assert state.consecutive_errors == 0
+        assert esi_scheduler.is_paused()
+
+    def test_a_transport_error_pauses_everything(self, scheduler_cache, fake_token,
+                                                 monkeypatch):
+        state = orders_state()
+
+        def boom(character_id):
+            raise httpx.ConnectTimeout("no answer")
+
+        self.run_with_fetch(monkeypatch, boom)
+
+        state.refresh_from_db()
+        assert state.consecutive_errors == 0
+        assert esi_scheduler.is_paused()
+
+    def test_a_4xx_from_the_spec_url_is_not_an_outage(self, scheduler_cache, fake_token,
+                                                      monkeypatch):
+        # A 404 says the request is wrong, not that ESI is down: it belongs to
+        # this row, and pausing every character would hide it.
+        state = orders_state()
+
+        def boom(character_id):
+            raise httpx.HTTPStatusError(
+                "404 Not Found",
+                request=httpx.Request("GET", "https://esi.evetech.net/meta/openapi.json"),
+                response=httpx.Response(404))
+
+        self.run_with_fetch(monkeypatch, boom)
+
+        state.refresh_from_db()
+        assert state.consecutive_errors == 1
+        assert not esi_scheduler.is_paused()
+
+    def test_retry_after_sets_the_pause_length(self, scheduler_cache, fake_token,
+                                               monkeypatch):
+        state = orders_state()
+
+        def boom(character_id):
+            raise HTTPServerError(status_code=503, headers={"Retry-After": "300"},
+                                  data=None)
+
+        self.run_with_fetch(monkeypatch, boom)
+
+        paused_for = (scheduler_cache.get(esi_scheduler.PAUSE_CACHE_KEY)
+                      - timezone.now()).total_seconds()
+        assert 300 < paused_for <= 300 + esi_scheduler.PAUSE_SLACK_SECONDS
+
+    def test_a_pause_without_retry_after_lasts_one_watchdog_tick(
+            self, scheduler_cache, fake_token, monkeypatch):
+        # One probe per minute: the watchdog tick and the pause are the same
+        # length, so an outage costs one request a minute and recovery is fast.
+        orders_state()
+
+        def boom(character_id):
+            raise HTTPServerError(status_code=503, headers={}, data=None)
+
+        self.run_with_fetch(monkeypatch, boom)
+
+        paused_for = (scheduler_cache.get(esi_scheduler.PAUSE_CACHE_KEY)
+                      - timezone.now()).total_seconds()
+        assert paused_for <= (esi_scheduler.UPSTREAM_PAUSE_SECONDS
+                             + esi_scheduler.PAUSE_SLACK_SECONDS)
+
     def test_paused_run_skips_without_counting(self, scheduler_cache, fake_token, monkeypatch):
         state = orders_state()
         scheduler_cache.set(esi_scheduler.PAUSE_CACHE_KEY,
@@ -217,3 +311,4 @@ class TestRunFeed:
         state.refresh_from_db()
         assert state.consecutive_errors == 0
         assert state.last_success is not None
+
