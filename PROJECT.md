@@ -213,9 +213,10 @@ not stored in the sheet: the sheet is minutes old and that answer changes on a s
 All recurring character fetches (own orders, wallet transactions + journal, assets) run on one
 self-pacing scheduler instead of fixed-interval tasks:
 
-- **Config is runtime data**: `TrackedCharacter(character_name, tracks)`, with comma-separated feed
-  tags (`orders`, `wallet`, `assets`, `contracts`). Edit it in the tracking block of the characters
-  page, or in the admin. Edits take effect on the next tick.
+- **Config is runtime data**: `TrackedCharacter(character_name, tracks, is_trader)`, with
+  comma-separated feed tags (`orders`, `wallet`, `assets`, `contracts`). Edit it in the tracking
+  block of the characters page, or in the admin. Edits take effect on the next tick. `is_trader`
+  belongs to the profit statistics, not to the scheduler, which ignores it.
 - **State is a table**: `EsiFetchState`, one row per (character, feed) — `next_due`,
   `last_success`, error counters, `disabled_at`. Admin-visible; clearing `next_due` forces a
   fetch, an admin action re-enables a disabled row.
@@ -281,8 +282,9 @@ to do with the sheet. `market/services/tracking.py` holds the read model and the
   times before the row hard-disabled itself. The check reads the **union of every token** of the
   character, because `Token.get_token` searches them all: gating on the newest token alone would
   grey out a feed an older one still serves.
-- **Saving nothing deletes the row**, so the table stays the list of characters that are tracked.
-  Either way the next tick drops the fetch state.
+- **Saving nothing empties `tracks` but keeps the row**, because the row also carries `is_trader`.
+  Deleting it would drop the character from the profit statistics without saying so. The next tick
+  drops the fetch state either way, and a row with no tags asks the scheduler for nothing.
 - **A save writes `TrackedCharacter` only.** The watchdog creates and deletes `EsiFetchState`, and
   its initial jitter spreads the first fetch, so a new tick lands within about five minutes.
 - **Unticking a feed and ticking it again clears a hard-disabled row**, because the reconcile deletes
@@ -523,6 +525,56 @@ column now do too.
   journal rows the same way. A corporation wallet pays for personal purchases, so those rows are
   not trade. `get_trade_history_bulk` had no such filter at all until 2026-08-17, which put
   corporation rows inside the trade hub's profit column while the index excluded them.
+
+## The profit statistics
+
+The wallet table on `/market/` sums four metrics over five rolling windows (0-7, 7-14, 14-21, 21-28
+and 0-28 days, anchored on `now`). `WalletStatistics` owns which rows form which metric; the view
+passes it two querysets already narrowed to the owners that count.
+
+**Two owner guards, both on the index view.** A row counts only when a **trader** made it and the
+row is **personal**. `TrackedCharacter.is_trader` marks a trader, so an alt that only hauls or runs
+missions can still be fetched without pulling its mission rewards into the numbers. The corporation
+guard stays because a corporation wallet pays for personal purchases. The journal keys on
+`corporation_id IS NULL` — it carries no `is_personal` column — and the transactions key on
+`is_personal`, which ESI itself reports. Neither guard needs the corporation to be tracked.
+
+**The buy side reads the transaction table, every other metric reads the journal.** A market buy
+writes no journal line at all: the ISK leaves through `market_escrow`, which also holds ISK still
+locked in unfilled orders, so summing it would count money that was never spent. Sells verify
+against each other — since the first journal day the journal `market_transaction` rows and the
+personal sell transactions agree to the ISK.
+
+**Which `ref_type` lands where** (the journal holds 35 types; 16 reach a metric):
+
+| metric | ref_types |
+| --- | --- |
+| sell | `market_transaction`, `contract_collateral_payout`, `contract_price` when positive |
+| buy | the buy transactions, minus `contract_reward_deposited`, `contract_reward_refund`, `contract_deposit`, `contract_deposit_refund`, `contract_price` when negative |
+| fees | `brokers_fee`, `contract_brokers_fee` |
+| taxes | `transaction_tax`, `contract_sales_tax`, `reprocessing_tax`, `manufacturing`, `industry_job_tax` |
+
+`profit = sell - buy + fees + taxes`, where fees and taxes are already negative.
+
+- **A contract price splits by sign.** It is income when the owner sells through a contract and a
+  cost when the owner buys through one. Summing both into `sell` let a purchase net off against
+  sales revenue, so the `sell` row understated while `profit` stayed right.
+- **Deposits and their refunds all sit on the buy side**, and all are subtracted: a cost is a
+  negative journal amount, a refund a positive one, so subtracting adds the cost and removes the
+  refund. A refund reverses its own deposit, so keeping the pair together is what makes the `buy`
+  row mean "what the goods cost".
+- **A collateral payout is income on purpose.** The owner sets courier collateral well above the
+  value of the goods, so a failed contract pays better than the delivery would have.
+- **Industry taxes join the market taxes** — reprocessing, job installation and job tax are a cost
+  of goods that later sell, and no other row on the page would show them.
+- **`fees/profit` has an unusable sign** and is left that way: fees are negative, so a profitable
+  window reads negative and a losing one positive.
+- **One known data defect, currently harmless.** A transfer between a character and its corporation
+  is **one** `journal_id` in two wallets with opposite amounts, and `journal_id` is the primary key.
+  Both feeds list `amount` and `balance` in their update fields, so the second to run overwrites the
+  first. Only `player_donation` and `corporation_account_withdrawal` collide today and neither
+  reaches a metric, so the statistics are unaffected. A per-character wallet view would need one row
+  per wallet first.
 
 ## The market browser
 

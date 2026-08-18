@@ -93,6 +93,10 @@ class TrackedCharacter(models.Model):
     # Unknown tags are silently ignored.
     character_name = models.CharField(max_length=128, unique=True)
     tracks = models.CharField(max_length=128, default='orders')
+    # Whether the profit statistics count this character's wallet. A character
+    # can be worth fetching without being a trader - an alt that only hauls or
+    # runs missions would otherwise pull its mission rewards into the numbers.
+    is_trader = models.BooleanField(default=True)
 
     def track_list(self):
         return [tag.strip() for tag in self.tracks.split(',') if tag.strip()]

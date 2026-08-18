@@ -151,6 +151,10 @@ another.
         {% endfor %}
     </tbody>
 </table>
+<label><input type="checkbox" form="tracking" name="is_trader" value="True"
+              {% if is_trader %}checked{% endif %}>
+    trader - count this wallet in the profit statistics</label>
+<br>
 <button type="submit" form="tracking">save</button>
 
 <form method="post">

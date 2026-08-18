@@ -170,8 +170,33 @@ def _memoized(method):
         return self._cache[key]
     return wrapper
 
+# Which journal rows each metric sums. A collateral payout is income here on
+# purpose: the owner sets the collateral well above the value of the goods, so a
+# failed courier contract pays better than the delivery would have.
+SELL_REF_TYPES = ['market_transaction', 'contract_collateral_payout']
+# Money put down on a contract, and money a cancelled or completed contract
+# returns. A refund reverses its deposit, so the pair belongs on the buy side
+# rather than inflating the sell total.
+BUY_REF_TYPES = ['contract_reward_deposited', 'contract_reward_refund',
+                 'contract_deposit', 'contract_deposit_refund']
+FEE_REF_TYPES = ['brokers_fee', 'contract_brokers_fee']
+# Industry taxes join the market taxes: they are a cost of the goods that later
+# sell, and no other row on the page would show them.
+TAX_REF_TYPES = ['transaction_tax', 'contract_sales_tax',
+                 'reprocessing_tax', 'manufacturing', 'industry_job_tax']
+
+# A contract price is income when the owner sells through a contract and a cost
+# when the owner buys through one. The sign says which, so the row lands on the
+# matching side instead of netting off against the sell total.
+SELL_FILTER = Q(ref_type__in=SELL_REF_TYPES) | Q(ref_type='contract_price', amount__gt=0)
+BUY_FILTER = Q(ref_type__in=BUY_REF_TYPES) | Q(ref_type='contract_price', amount__lt=0)
+
 class WalletStatistics():
-    """The index-page wallet table: journal/transaction sums per time window."""
+    """The index-page wallet table: journal/transaction sums per time window.
+
+    Both querysets arrive narrowed to the owners that count. This class decides
+    only which rows form which metric.
+    """
 
     def __init__(self, journal_data, transaction_data):
         self.journal_data = journal_data
@@ -184,37 +209,40 @@ class WalletStatistics():
         now = datetime.now(timezone.utc)
         return now - timedelta(days=days_from), now - timedelta(days=days_to)
 
-    def _journal_sum(self, ref_types, days_to, days_from):
+    def _journal_sum(self, condition, days_to, days_from):
         start, end = self._window(days_to, days_from)
-        total = self.journal_data.filter(date__gte=start, date__lt=end, ref_type__in=ref_types).aggregate(total=Sum('amount'))['total']
+        total = self.journal_data.filter(condition, date__gte=start, date__lt=end).aggregate(total=Sum('amount'))['total']
         return 0 if total is None else total
 
     @_memoized
     def brokers_fee(self, days_to, days_from):
-        return self._journal_sum(['brokers_fee', 'contract_brokers_fee'], days_to, days_from)
+        return self._journal_sum(Q(ref_type__in=FEE_REF_TYPES), days_to, days_from)
 
     @_memoized
-    def transaction_tax(self, days_to, days_from):
-        return self._journal_sum(['contract_sales_tax', 'transaction_tax'], days_to, days_from)
+    def taxes(self, days_to, days_from):
+        return self._journal_sum(Q(ref_type__in=TAX_REF_TYPES), days_to, days_from)
 
     @_memoized
     def sell(self, days_to, days_from):
-        return self._journal_sum(['market_transaction', 'contract_collateral_payout', 'contract_reward_refund', 'contract_price'], days_to, days_from)
+        return self._journal_sum(SELL_FILTER, days_to, days_from)
 
     @_memoized
     def buy(self, days_to, days_from):
+        # A market buy writes no journal line: the ISK leaves through
+        # market_escrow, which also holds ISK still locked in unfilled orders.
+        # The transaction table is therefore the only honest source for it.
         start, end = self._window(days_to, days_from)
-        contracts = self.journal_data.filter(date__gte=start, date__lt=end, ref_type='contract_reward_deposited').aggregate(total=Sum('amount'))['total'] or 0
+        contracts = self._journal_sum(BUY_FILTER, days_to, days_from)
         transactions = self.transaction_data.filter(date__gte=start, date__lt=end, is_buy=True).aggregate(total=Sum(F('quantity') * F('unit_price')))['total'] or 0
-        # Deposited courier rewards are negative journal amounts; they are a
-        # cost, so subtract to add their absolute value to the buy total.
+        # The contract amounts read from the wallet: a cost is negative and a
+        # refund is positive. Subtracting adds the cost and removes the refund.
         return transactions - contracts
 
     @_memoized
     def profit(self, days_to, days_from):
         # Fees and taxes are negative amounts: adding subtracts.
         return (self.sell(days_to, days_from) - self.buy(days_to, days_from)
-                + self.brokers_fee(days_to, days_from) + self.transaction_tax(days_to, days_from))
+                + self.brokers_fee(days_to, days_from) + self.taxes(days_to, days_from))
 
     @_memoized
     def fee_to_profit(self, days_to, days_from):

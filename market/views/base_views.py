@@ -4,7 +4,7 @@ import re
 from django.shortcuts import render
 
 from market.models import TradeHub, WalletJournal
-from market.services import market_service
+from market.services import market_service, tracking
 from marketdata.models import RegionStatus
 
 logger = logging.getLogger(__name__)
@@ -17,7 +17,7 @@ def _wallet_table(statistics):
     rows = [
         ('buy', statistics.buy, 'isk'),
         ('sell', statistics.sell, 'isk'),
-        ('taxes', statistics.transaction_tax, 'isk'),
+        ('taxes', statistics.taxes, 'isk'),
         ('fees', statistics.brokers_fee, 'isk'),
         ('profit', statistics.profit, 'isk'),
         ('fees/profit', statistics.fee_to_profit, 'percent'),
@@ -35,18 +35,16 @@ def index(request):
     # are outside helion's trading scope.
     market_regions = list(RegionStatus.objects.filter(
         region_id__in=hubs_by_region.keys()).order_by('region_name'))
-    # Personal rows only, on both sides. A corporation wallet pays for personal
-    # purchases, so its rows are not trade - the reason this app has always
-    # hardcoded is_personal here. get_market_transactions no longer filters that
-    # itself, because the transactions page shows both.
+    # Two guards, on both sides. Only a character marked as a trader counts, and
+    # only its personal rows: a corporation wallet pays for personal purchases,
+    # so its rows are not trade. get_market_transactions no longer filters
+    # is_personal itself, because the transactions page shows both.
+    trader_ids = tracking.trader_character_ids()
     wallet_statistics = market_service.WalletStatistics(
         WalletJournal.objects.filter(
-            corporation_id__isnull=True,
-            ref_type__in=['transaction_tax', 'brokers_fee', 'contract_brokers_fee',
-                          'market_transaction', 'contract_collateral_payout',
-                          'contract_price', 'contract_reward_deposited',
-                          'contract_reward_refund', 'contract_sales_tax']),
-        market_service.get_market_transactions().filter(is_personal=True))
+            character_id__in=trader_ids, corporation_id__isnull=True),
+        market_service.get_market_transactions().filter(
+            is_personal=True, character_id__in=trader_ids))
     context = {
         "market_regions": market_regions,
         'wallet_windows': WALLET_WINDOWS,

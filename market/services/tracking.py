@@ -47,6 +47,29 @@ def corporation_ids():
     return ids
 
 
+def trader_character_ids():
+    """The character ids whose wallet the profit statistics count.
+
+    TrackedCharacter is keyed by name and the wallet tables by id, so the tokens
+    carry the mapping. A trader with no token resolves to nothing, which is
+    right: without a token no feed fills that wallet either.
+    """
+    names = TrackedCharacter.objects.filter(is_trader=True).values_list(
+        'character_name', flat=True)
+    return set(Token.objects.filter(character_name__in=names)
+               .values_list('character_id', flat=True))
+
+
+def is_trader(character_name):
+    """Whether the statistics count this character. An untracked one is not.
+
+    False rather than the field default: `trader_character_ids` reads rows, so a
+    character with no row counts for nothing and the checkbox must say so.
+    """
+    tracked = TrackedCharacter.objects.filter(character_name=character_name).first()
+    return tracked.is_trader if tracked else False
+
+
 def _authorised_scopes(character_id):
     """Every scope the character holds, across all of its tokens.
 
@@ -89,23 +112,25 @@ def get_feed_rows(character_id, character_name):
     return rows
 
 
-def save_tracks(character_id, character_name, feeds):
-    """Store the ticked feeds, and drop the row when none are ticked.
+def save_tracks(character_id, character_name, feeds, is_trader):
+    """Store the ticked feeds and the trader flag.
 
     An unauthorised feed is refused here and not only in the template: a disabled
     checkbox is a browser convention, and arming a feed that cannot work would
     spend the error budget three times before the row hard-disabled itself.
 
     Unknown tags are dropped, which is what the scheduler already does with them.
+
+    The row survives with no feed ticked, because it also carries `is_trader`.
+    Deleting it would drop the character from the profit statistics without
+    saying so. A row with no tags asks the scheduler for nothing.
     """
     scopes = _authorised_scopes(character_id)
     wanted = [feed for feed in FEEDS
               if feed in feeds and FEED_SCOPES[feed] in scopes]
-    if not wanted:
-        TrackedCharacter.objects.filter(character_name=character_name).delete()
-        return None
     tracked, _ = TrackedCharacter.objects.update_or_create(
-        character_name=character_name, defaults={'tracks': ', '.join(wanted)})
+        character_name=character_name,
+        defaults={'tracks': ', '.join(wanted), 'is_trader': is_trader})
     return tracked
 
 

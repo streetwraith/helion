@@ -86,7 +86,8 @@ def characters(request, *args, **kwargs):
         if request.POST.get('_tracks'):
             token = _posted_character(request)
             tracking.save_tracks(token.character_id, token.character_name,
-                                 request.POST.getlist('feed'))
+                                 request.POST.getlist('feed'),
+                                 bool(request.POST.get('is_trader')))
             return _back_to_character(token.character_id)
 
         reenable_feed = request.POST.get('_reenable')
@@ -121,6 +122,7 @@ def characters(request, *args, **kwargs):
         # a dead token or an ESI outage must not take the block with it.
         context['feed_rows'] = tracking.get_feed_rows(
             character['character_id'], character['name'])
+        context['is_trader'] = tracking.is_trader(character['name'])
         try:
             sheet = get_character_sheet(character['character_id'])
             context['sheet'] = sheet

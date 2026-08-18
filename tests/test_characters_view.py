@@ -160,12 +160,39 @@ class TestTracking:
         # FEEDS order, not the order the browser sent.
         assert TrackedCharacter.objects.get(character_name="Main").tracks == "orders, contracts"
 
-    def test_saving_nothing_deletes_the_row(self, tracked):
+    def test_saving_nothing_empties_the_tracks_but_keeps_the_row(self, tracked):
+        # The row also carries is_trader, so deleting it would drop the
+        # character from the profit statistics without saying so.
         TrackedCharacter.objects.create(character_name="Main", tracks="orders, wallet")
 
-        self.post(tracked, _tracks="True")
+        self.post(tracked, _tracks="True", is_trader="True")
 
-        assert not TrackedCharacter.objects.filter(character_name="Main").exists()
+        row = TrackedCharacter.objects.get(character_name="Main")
+        assert row.tracks == ""
+        assert row.track_list() == []
+        assert row.is_trader is True
+
+    def test_the_trader_flag_is_saved_and_cleared(self, tracked):
+        self.post(tracked, _tracks="True", feed=["orders"], is_trader="True")
+        assert TrackedCharacter.objects.get(character_name="Main").is_trader is True
+
+        # An unticked checkbox sends nothing at all.
+        self.post(tracked, _tracks="True", feed=["orders"])
+        assert TrackedCharacter.objects.get(character_name="Main").is_trader is False
+
+    def test_the_block_offers_the_trader_checkbox(self, tracked):
+        TrackedCharacter.objects.create(
+            character_name="Main", tracks="orders", is_trader=True)
+
+        content = tracked.get("/characters/", {"character": 900001}).content.decode()
+
+        assert re.search(r'name="is_trader"[^>]*checked', content)
+
+    def test_an_untracked_character_is_no_trader(self, tracked):
+        content = tracked.get("/characters/", {"character": 900001}).content.decode()
+
+        assert 'name="is_trader"' in content
+        assert not re.search(r'name="is_trader"[^>]*checked', content)
 
     def test_an_unauthorised_feed_is_refused(self, auth_client, trade_hubs):
         user = User.objects.get(username="tester")
