@@ -29,17 +29,21 @@
 
 <form action="{% url 'market_trade_hub' region_id=trade_hub_region.region_id %}" method="POST">
     {% csrf_token %}
-    <label for="market_group_id">Market group</label>
-    <select id="market_group_id" name="market_group_id">
-        <option value="">the trade list</option>
-        {% for option in market_group_options %}
-        <option value="{{ option.market_group_id }}"
-                {% if option.market_group_id|stringformat:"s" == market_group_id %}selected{% endif %}>{{ option.depth|option_indent }}{{ option.name }}</option>
-        {% endfor %}
-    </select>
-    <label for="excluded_meta_ids">Excluded Meta IDs</label>
-    <input type="text" id="excluded_meta_ids" name="excluded_meta_ids" value="{{ excluded_meta_ids }}">
-    <i class="bi bi-info-circle" title="{% for meta_id, name in meta_groups %}{{ meta_id }} - {{ name }}&#10;{% endfor %}&#10;A type with no meta group is never excluded."></i>
+    <fieldset class="grid">
+        <label for="market_group_id">Market group
+            <select id="market_group_id" name="market_group_id">
+                <option value="">the trade list</option>
+                {% for option in market_group_options %}
+                <option value="{{ option.market_group_id }}"
+                        {% if option.market_group_id|stringformat:"s" == market_group_id %}selected{% endif %}>{{ option.depth|option_indent }}{{ option.name }}</option>
+                {% endfor %}
+            </select>
+        </label>
+        <label for="excluded_meta_ids">Excluded Meta IDs
+            <i class="bi bi-info-circle" title="{% for meta_id, name in meta_groups %}{{ meta_id }} - {{ name }}&#10;{% endfor %}&#10;A type with no meta group is never excluded."></i>
+            <input type="text" id="excluded_meta_ids" name="excluded_meta_ids" value="{{ excluded_meta_ids }}">
+        </label>
+    </fieldset>
     <button type="submit">search</button>
 </form>
 
@@ -75,8 +79,6 @@
         </tr>
     </tfoot>
 </table>
-
-<br>
 
 <div class="trade-hub-count" data-table="trade-extras"></div>
 <table id="trade-extras" class="market">

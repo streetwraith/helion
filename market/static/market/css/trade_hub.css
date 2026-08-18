@@ -5,11 +5,17 @@
     margin: 4px 0;
 }
 
+/* Pico makes a label a block, which would put each box on its own line. */
 .filter-line label {
+    display: inline-block;
     margin-right: 1em;
 }
 
-.filter-threshold {
+/* The element qualifier is load-bearing. Pico sizes every input to 100% with
+   input:not([type=checkbox],[type=radio]), and :not() takes the specificity of
+   its argument, so that rule scores 0,1,1 and a bare class would lose. This ties
+   it, and this file loads after Pico. */
+input.filter-threshold {
     width: 4em;
 }
 

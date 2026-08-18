@@ -4,6 +4,13 @@
     color-scheme: light dark;
 }
 
+/* Pico scales the root font up to 131.25% at wide viewports, which would grow
+   every cell of a 28-column table by two thirds. Its rule sits in :where(:root)
+   at zero specificity, so this one line is the intended way to opt out. */
+html {
+    font-size: 100%;
+}
+
 * {
     margin: 0;
     padding: 0;
@@ -107,11 +114,6 @@ header nav {
     border-color: currentColor;
 }
 
-header nav ul, header nav ul li {
-    display: inline;
-    list-style-type: none;
-}
-
 ul.pagination {
     list-style-type: none;
     margin: 0;
@@ -186,6 +188,16 @@ ul.pagination li.active {
     top: 50%; /* Center vertically */
     left: 0;
     transform: translateY(-50%);
+}
+
+/* Pico builds its cells for prose tables. Its padding would add ~1200px to a
+   28-column table, its opaque cell background would hide the row backgrounds that
+   tr:hover and tr.selected paint, and its ink fails 17 of the 28 cell colours in
+   dark. Delete a line here and one of those comes back. See PROJECT.md. */
+td, th {
+    padding: 0;
+    background-color: transparent;
+    color: CanvasText;
 }
 
 td {
@@ -280,8 +292,11 @@ h1.item-name {
     font-size: 1.25rem;
 }
 
+/* One table per ice type, flowing beside each other. The width holds them there:
+   Pico's :where(table) sets width:100%, which would stack them one per line. */
 table.ice {
     display: inline-block;
+    width: auto;
 }
 
 table.ice th {
@@ -374,32 +389,17 @@ table tr.headers-rotated th span {
 /* Dark mode follows the system setting, so there is no toggle to read anywhere.
    Each cell colour keeps the hue of its light counterpart and inverts only the
    lightness, so a colour means the same thing in both themes. Every cell colour
-   below carries the body ink at 4.5:1 or better - the ink is the reason these
-   are dark surfaces and not the light chips with dark ink on them. */
+   below carries the cell ink at 4.5:1 or better - the ink is the reason these
+   are dark surfaces and not the light chips with dark ink on them. That ink is
+   the CanvasText above, so here it is white, and the tightest cell clears 5.8:1. */
 @media (prefers-color-scheme: dark) {
     body {
         background: #121516;
         color: #e4e2df;
     }
 
-    a {
-        color: #3788f7;
-    }
-
-    a:visited {
-        color: #a25de1;
-    }
-
-    /* color-scheme themes the controls, but not to this palette, so the three we
-       use take the panel surface explicitly. */
-    select,
-    input[type="text"],
-    input[type="number"],
-    button {
-        background: #1e2325;
-        color: #e4e2df;
-        border: 1px solid #333d42;
-    }
+    /* Links and the form controls are deliberately absent: Pico themes both, and
+       a rule added here would restyle dark mode only. */
 
     /* #fetch-warning-bar and .notify-banner keep their light-mode colours: both
        are already dark surfaces under white ink, and both still separate from

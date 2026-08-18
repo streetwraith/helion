@@ -10,6 +10,8 @@
     <link rel="icon" href="/favicon.ico" sizes="32x32">
     <link rel="icon" href="{% static 'icon.svg' %}" type="image/svg+xml">
     <link rel="apple-touch-icon" href="{% static 'apple-touch-icon.png' %}">
+    {# Pico first, so helion.css wins the ties that keep the tables dense. #}
+    <link rel="stylesheet" href="{% static 'vendor/pico.min.css' %}">
     <link rel="stylesheet" href="{% static 'css/helion.css' %}">
     <link rel="stylesheet" href="{% static 'css/dialog.css' %}">
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css">
@@ -61,25 +63,31 @@
         </div>
         <nav>
             <ul>
-                <li>market:
-                    <ul>
-                        <li><a href="{% url 'market_index' %}">stats</a></li>
-                        <li><a href="{% url 'market_browse' %}">browse</a></li>
-                        <li><a href="{% url 'market_contracts' %}">contracts</a></li>
-                        <li><a href="{% url 'market_assets' %}">assets</a></li>
-                        <li><a href="{% url 'market_transactions' %}">transactions</a></li>
-                        <li><a href="{% url 'market_hauling_index' %}">hauling</a></li>
-                        <li><a href="{% url 'market_ice_index' %}">ice</a></li>
-                        <li><a href="{% url 'lp_index' %}">loyalty points</a></li>
-                        <li><a href="{% url 'shopping_list' %}">shopping</a></li>
-                        <li>station trading:
-                            <ul class="hub-links">
-                                {% for trade_hub in trade_hubs %}
-                                <li><a href="{% url 'market_trade_hub' region_id=trade_hub.region_id %}">{{ trade_hub.name }}</a> (<a href="{% url 'market_trade_hub_mistakes' region_id=trade_hub.region_id %}">M</a>)</li>
-                                {% endfor %}
-                            </ul>
-                        </li>
-                    </ul>
+                <li>
+                    <details class="dropdown">
+                        <summary>market</summary>
+                        <ul>
+                            <li><a href="{% url 'market_index' %}">stats</a></li>
+                            <li><a href="{% url 'market_browse' %}">browse</a></li>
+                            <li><a href="{% url 'market_contracts' %}">contracts</a></li>
+                            <li><a href="{% url 'market_assets' %}">assets</a></li>
+                            <li><a href="{% url 'market_transactions' %}">transactions</a></li>
+                            <li><a href="{% url 'market_hauling_index' %}">hauling</a></li>
+                            <li><a href="{% url 'market_ice_index' %}">ice</a></li>
+                            <li><a href="{% url 'lp_index' %}">loyalty points</a></li>
+                            <li><a href="{% url 'shopping_list' %}">shopping</a></li>
+                        </ul>
+                    </details>
+                </li>
+                <li>
+                    <details class="dropdown">
+                        <summary>station trading</summary>
+                        <ul class="hub-links">
+                            {% for trade_hub in trade_hubs %}
+                            <li><a href="{% url 'market_trade_hub' region_id=trade_hub.region_id %}">{{ trade_hub.name }}</a> (<a href="{% url 'market_trade_hub_mistakes' region_id=trade_hub.region_id %}">M</a>)</li>
+                            {% endfor %}
+                        </ul>
+                    </details>
                 </li>
             </ul>
             {% block nav %}

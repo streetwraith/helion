@@ -1111,23 +1111,82 @@ region and the others.
   to two regions. The five hub stations cover 97.5% of the transactions exactly; everything else
   reads as another region, which is the conservative error.
 
+## Styling: Pico CSS, and the six declarations that hold the tables
+
+[Pico CSS](https://picocss.com/) 2.1.1 styles the chrome, the typography and the forms. It is
+vendored and served through whitenoise, like the other third-party front-end assets. It is the
+standard build, not the classless or the conditional one, so nothing gets a container and the pages
+stay full width — a 28-column table needs every pixel.
+
+**The load order is the design.** Pico loads first and `helion.css` second. Every rule below wins a
+tie on specificity because it comes later, which is what keeps the dense tables dense. Reverse the
+two links and the tables break.
+
+Pico builds its tables for prose, and three of its cell defaults are wrong here. The override budget
+is **six declarations**, each answering a measured failure rather than a preference:
+
+- `html { font-size: 100% }`. Pico scales the root font up to 131.25% at wide viewports. That grows
+  every cell by two thirds. Pico puts its rule in `:where(:root)` at zero specificity, so opting out
+  with one line is the intended path, not a workaround.
+- `td, th { padding: 0 }`. Pico gives cells 1rem of horizontal padding, which adds about 1200px to a
+  28-column table.
+- `td, th { background-color: transparent }`. Pico gives every cell an opaque background, and a cell
+  background paints over the row background. Without this, `tr:hover` and `tr.selected` stop showing.
+  Pico's own `.striped` colours cells rather than rows, for the same reason.
+- `td, th { color: CanvasText }`. Pico's ink drops 17 of the 28 cell colours below 4.5:1 in dark and
+  5 of 28 in light. See the dark-mode section below.
+- `table.ice { width: auto }`. Pico's `:where(table)` sets `width: 100%`, which would stack the
+  per-ice tables one per line instead of letting them flow side by side.
+- `.filter-line label { display: inline-block }`. Pico makes a label a block, which would put each
+  filter box on its own line.
+
+Pico needs no border override: it sets `border-bottom` only, so the full 1px grid already wins.
+
+One selector carries an element qualifier that looks redundant and is not. Pico sizes inputs with
+`input:not([type=checkbox],[type=radio])`, and `:not()` takes the specificity of its argument, so
+that rule scores 0,1,1. A bare class loses to it. `input.filter-threshold` ties and therefore wins on
+order. `.notify-panel .notify-threshold` needs no such help, because two classes already outrank it.
+
+Adopting Pico also removed rules that fought it. The dark block used to restyle links and the form
+controls. Those rules applied in dark mode only, so the two themes looked like different
+applications, and they defeated the form styling that is one of Pico's main contributions. Pico's
+dark link also carries 7.16:1 on this background where the replaced blue carried 5.27:1. The nav
+rule that forced the list inline went too, because it outranked Pico's flex nav.
+
+The nav is Pico's `details.dropdown` pattern: two menus, market and station trading. It replaced a
+three-level nested list of 19 links. Pico's flex nav sets no `flex-wrap`, so those 19 links would
+have overflowed the viewport as one row.
+
+Forms use Pico's `.grid`, which becomes `repeat(auto-fit, minmax(0, 1fr))` above 768px. The ice
+parameter form is therefore two grids of seven and three controls rather than 10 full-width stacked
+selects, which would have pushed the tables below the fold. Submit buttons keep Pico's full width.
+
+Pico loads on every page, but only the ice and station trading pages have had their own markup
+reworked. The rest take Pico's defaults untouched.
+
 ## Dark mode
 
 The theme follows `prefers-color-scheme`. There is no toggle, so no state to store and no flash of
-the wrong theme on the first paint. `helion.css` carries the site-wide dark block; `dialog.css` and
-`history.css` each carry only what is specific to them. `:root` declares `color-scheme: light dark`,
-which is what themes the scrollbars and the native form controls — no rule can reach those.
+the wrong theme on the first paint. Pico follows the same signal, so two dark palettes are live at
+once: Pico themes the chrome, the links and the form controls, and `helion.css` themes the tables.
+`helion.css` carries the site-wide dark block; `dialog.css` and `history.css` each carry only what is
+specific to them. `:root` declares `color-scheme: light dark`, which is what themes the scrollbars
+and the native form controls — no rule can reach those. It also drives `CanvasText`, which is how the
+table cells get their ink.
 
 The dark palette is derived from the light one rather than invented. Each colour keeps its hue and
 inverts only its lightness, so a cell means the same thing in both themes. The tables colour cells
 by category (`.jita`, `.red`, `.warning`) and by a 21-step heat scale (`.gradient_0` to
 `.gradient_100`), and all of those are light backgrounds built for black ink. They therefore become
-dark backgrounds under the pale body ink, not light chips with dark ink on them.
+dark backgrounds under the pale cell ink, not light chips with dark ink on them.
 
 Two constraints hold the values in place. Change either one and something breaks quietly:
 
-- **Every cell colour carries the body ink at 4.5:1 or better.** The lightest chips need more than
-  a plain lightness inversion to reach it, so they are darkened until they do.
+- **Every cell colour carries the cell ink at 4.5:1 or better.** The lightest chips need more than
+  a plain lightness inversion to reach it, so they are darkened until they do. The ink is
+  `CanvasText`, so it is black in light and white in dark. Pico's ink must not reach a cell: it fails
+  17 of the 28 colours in dark and 5 in light. Against white the tightest dark cell measures 5.82:1,
+  where the body ink these cells were first tuned against measured 4.50:1.
 - **The chart's buy and sell colours hold a 12 L\* gap.** That gap, not the hue, is what separates
   them for red-green deficiency. The green looks dim enough to invite a fix; raising it closes the
   gap to under 1 L\*. It stays, because a mark answers to a 3:1 floor rather than a text one.
