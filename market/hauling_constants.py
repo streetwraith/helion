@@ -1,5 +1,18 @@
 """Data for the hauling views."""
 
+# A deal must clear both bounds to earn a row: enough ISK to be worth the trip,
+# and enough margin that a small price move does not erase it.
+MIN_DEAL_PROFIT = 5_000_000.0
+MIN_DEAL_PROFIT_PERCENT = 5.0
+
+# Fallbacks when the form sends a number that does not parse.
+DEFAULT_MAX_VOLUME = 520_000.0
+DEFAULT_MAX_PRICE = 1_000_000_000.0
+
+# A sell-to-sell price this far above Jita is a thin or manipulated book, not an
+# opportunity. Applied to both ends of the deal.
+MAX_JITA_RATIO_PERCENT = 1000.0
+
 # Market groups the sell-to-sell hauling scan skips (hand-curated). The
 # sell-to-buy scan deliberately excludes nothing: a standing buy order
 # already proves demand at the destination.

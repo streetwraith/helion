@@ -195,14 +195,14 @@ class TestOwnerOptions:
         Token.objects.create(character_id=OTHER_CHARACTER_ID, character_name="Zeta")
         Token.objects.create(character_id=CHARACTER_ID, character_name="Alpha")
 
-        assert contract_service.get_owner_options() == [
+        assert contract_service.contract_owner_options() == [
             (CHARACTER_ID, "Alpha"), (OTHER_CHARACTER_ID, "Zeta")]
 
     def test_two_tokens_for_one_character_give_one_option(self):
         Token.objects.create(character_id=CHARACTER_ID, character_name="Alpha")
         Token.objects.create(character_id=CHARACTER_ID, character_name="Alpha")
 
-        assert contract_service.get_owner_options() == [(CHARACTER_ID, "Alpha")]
+        assert contract_service.contract_owner_options() == [(CHARACTER_ID, "Alpha")]
 
 
 class TestContractsPage:
@@ -272,7 +272,7 @@ class TestCorporationContracts:
                                category="corporation")
         CharacterOrder.objects.create(order_id=1, corporation_id=CORPORATION_ID)
 
-        assert contract_service.get_owner_options() == [
+        assert contract_service.contract_owner_options() == [
             (CHARACTER_ID, "Alpha"), (CORPORATION_ID, "Silk Road")]
 
     def test_a_corporation_with_no_feed_rows_is_not_offered(self, db):
@@ -281,4 +281,4 @@ class TestCorporationContracts:
         Token.objects.create(character_id=CHARACTER_ID, character_name="Alpha")
         add_contract(1, issuer_id=OTHER_CHARACTER_ID, issuer_corporation_id=777)
 
-        assert contract_service.get_owner_options() == [(CHARACTER_ID, "Alpha")]
+        assert contract_service.contract_owner_options() == [(CHARACTER_ID, "Alpha")]

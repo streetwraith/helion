@@ -46,6 +46,6 @@ def market_contracts(request):
         'filters': filters,
         'is_courier': contract_type == COURIER,
         'owner_id': owner_id,
-        'owner_options': contract_service.get_owner_options(),
+        'owner_options': contract_service.contract_owner_options(),
         'include_finished': include_finished,
     })

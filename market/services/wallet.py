@@ -17,11 +17,12 @@ def get_market_transactions(owner_id=None, *, type_id=None, type_name=None, loca
     filter `is_personal` themselves.
 
     `owner_id` narrows to one character or one corporation, which is what the
-    page's dropdown sends.
+    page's dropdown sends. The view parses the query string, so `is_buy` and
+    `location_id` arrive typed.
     """
     filters = {}
-    if is_buy is not None and is_buy != '':
-        filters['is_buy'] = is_buy == 'True'
+    if is_buy is not None:
+        filters['is_buy'] = is_buy
     if location_id:
         filters['location_id'] = int(location_id)
     if type_id:
@@ -32,7 +33,12 @@ def get_market_transactions(owner_id=None, *, type_id=None, type_name=None, loca
             del filters['type_id']
         filters['type_id__in'] = matching_type_ids
 
-    market_transactions = MarketTransaction.objects.filter(**filters).order_by('-date')
+    # The id breaks date ties. 1748 of the stored rows share a date with another
+    # (39 on the worst second), and a page boundary inside a tie group would
+    # otherwise repeat one row and drop another: Postgres gives no stable order
+    # across the separate LIMIT/OFFSET queries a paginator runs.
+    market_transactions = MarketTransaction.objects.filter(**filters).order_by(
+        '-date', '-transaction_id')
     if owner_id:
         market_transactions = market_transactions.filter(
             Q(character_id=int(owner_id)) | Q(corporation_id=int(owner_id)))
@@ -42,7 +48,7 @@ def get_market_transactions(owner_id=None, *, type_id=None, type_name=None, loca
 
     return market_transactions
 
-def get_owner_options():
+def transaction_owner_options():
     """The owners the transaction table holds, for the page filter."""
     ids = set(MarketTransaction.objects.values_list('character_id', flat=True).distinct())
     ids |= set(MarketTransaction.objects.values_list('corporation_id', flat=True).distinct())

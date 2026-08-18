@@ -70,9 +70,8 @@ class MarketOrderUndercut(models.Model):
     type_id = models.BigIntegerField(db_index=True)
     region_id = models.BigIntegerField(db_index=True)
     character_id = models.BigIntegerField(db_index=True, blank=True, null=True)
-    # Set on a row the corporation feeds own. A row can carry both: the
-    # character route names who executed the trade, the corporation route
-    # names the wallet that paid, and neither write clears the other.
+    # Exactly one of the two owner columns is set: the undercut job runs per
+    # owner, so a row names the character or the corporation, never both.
     corporation_id = models.BigIntegerField(db_index=True, blank=True, null=True)
     order_id = models.BigIntegerField()
     order_price = models.DecimalField(max_digits=20, decimal_places=2)
@@ -124,9 +123,9 @@ class CharacterAsset(models.Model):
     # rest is stored for future use.
     item_id = models.BigIntegerField(primary_key=True)
     character_id = models.BigIntegerField(db_index=True, blank=True, null=True)
-    # Set on a row the corporation feeds own. A row can carry both: the
-    # character route names who executed the trade, the corporation route
-    # names the wallet that paid, and neither write clears the other.
+    # Exactly one of the two owner columns is set: an item sits in a character
+    # hangar or in a corporation hangar, never in both, which is why each assets
+    # feed can delete its own rows wholesale.
     corporation_id = models.BigIntegerField(db_index=True, blank=True, null=True)
     type_id = models.BigIntegerField()
     quantity = models.BigIntegerField()

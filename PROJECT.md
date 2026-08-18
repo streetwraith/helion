@@ -20,13 +20,20 @@ tests/         pytest suite; external schemas are faked minimally (see Testing)
 facade; implementations move freely underneath):
 
 ```
-esi_sync.py       the per-character ESI fetches (orders, wallet, assets)
-esi_scheduler.py  the fetch scheduler state machine and failure policy
-assets.py         asset reads from the CharacterAsset overlay
-orders.py         order-book queries: undercuts, best asks, shopping, ticker
-history.py        market-history queries and the statistics over them
-wallet.py         own-transaction queries and wallet statistics
-fees.py           fee rates
+market_service.py   the facade: re-exports the modules below
+esi_sync.py         the per-owner ESI fetches (orders, wallet, assets, contracts)
+esi_scheduler.py    the fetch scheduler state machine and failure policy
+tracking.py         what the characters page reads and writes: feeds, the trader flag
+names.py            name resolution for the ids a contract or an asset carries
+assets.py           asset reads from the CharacterAsset overlay
+contracts.py        contract reads, and the active/deadline rules
+orders.py           order-book queries: undercuts, best asks, shopping, ticker
+history.py          market-history queries and the statistics over them
+wallet.py           own-transaction queries and the profit statistics
+station_trading.py  the trade hub desk table, one entry per item
+hauling.py          the two hauling deal scans
+mistakes.py         underpriced sell orders in a region
+fees.py             fee rates
 ```
 
 ## Data boundaries: three schemas, one writer each
@@ -545,7 +552,8 @@ locked in unfilled orders, so summing it would count money that was never spent.
 against each other — since the first journal day the journal `market_transaction` rows and the
 personal sell transactions agree to the ISK.
 
-**Which `ref_type` lands where** (the journal holds 35 types; 16 reach a metric):
+**Which `ref_type` lands where** (14 of the many the journal carries reach a metric; everything
+else, `market_escrow` and the mission and bounty rows included, is ignored):
 
 | metric | ref_types |
 | --- | --- |
@@ -773,6 +781,34 @@ is the usual way to ask that question.
 Six queries answer the page, whatever the characters hold: the rows, the type data, the
 groups, the categories, the station names and the token names. A player structure or a
 ship in space adds one each.
+
+## The hauling scans
+
+Two pages, two algorithms, one `MarketDeal` row type. Both buy the source hub's sell orders; they
+differ in what they do at the destination.
+
+- **Sell-to-buy** fills the destination's standing **buy** orders. Demand is already proven, so the
+  scan excludes no market group. It walks each source stack down the bid book, so one cheap stack
+  can feed several deals until it runs out.
+- **Sell-to-sell** undercuts the destination's **sell** orders. That is a bet on demand, so it skips
+  the curated `SELL_TO_SELL_EXCLUDED_MARKET_GROUPS` and rejects either end priced more than
+  `MAX_JITA_RATIO_PERCENT` above Jita - a book that thin is manipulation, not opportunity. It reads
+  one row per type, because the deal buys the whole trip's worth from the bottom of the book.
+
+Both bound a deal by the ISK cap and by what one trip can hold, and both require it to clear
+`MIN_DEAL_PROFIT` and `MIN_DEAL_PROFIT_PERCENT`.
+
+Two things a reader will not guess:
+
+- **A rejected deal consumes no volume.** In sell-to-buy, a bid too thin to clear the floors leaves
+  the bid's remaining volume intact, because source stacks are walked cheapest first and a later,
+  dearer stack can be large enough to clear the ISK floor the small one missed. Moving the
+  decrement above the check silently shrinks those deals; a test pins it.
+- **`profit` means different things in the two scans.** Sell-to-buy stores the batch total,
+  sell-to-sell the per-unit margin. So `MarketDeal.profit_percent` (and the percent floor) are
+  inflated by the deal size on the sell-to-buy side. Known and deliberately left alone: changing it
+  moves every displayed hauling profit. Do not "fix" one scan to match the other without deciding
+  what the two pages should report.
 
 ## The station trading filter
 

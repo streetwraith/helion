@@ -58,6 +58,24 @@ OPTIONAL_JOURNAL_FIELDS = (
     'context_id', 'context_id_type', 'tax', 'tax_receiver_id',
 )
 
+
+def _journal_row(value, owner):
+    """One WalletJournal row from a journal entry, for either wallet route.
+
+    Both routes send the same entry shape; only the owner columns differ. The two
+    feeds keep separate update_fields lists, because each may write only its own
+    owner columns.
+    """
+    return WalletJournal(
+        journal_id=value['id'],
+        amount=value['amount'],
+        balance=value['balance'],
+        date=value['date'],
+        ref_type=value['ref_type'],
+        **{field: value[field] for field in OPTIONAL_JOURNAL_FIELDS if field in value},
+        **owner)
+
+
 def get_wallet_journal(character_id):
     token = Token.get_token(character_id, 'esi-wallet.read_character_wallet.v1')
     try:
@@ -68,15 +86,7 @@ def get_wallet_journal(character_id):
         return _expires(not_modified.headers)
 
     journal_entries = [
-        WalletJournal(
-            character_id=character_id,
-            journal_id=value['id'],
-            amount=value['amount'],
-            balance=value['balance'],
-            date=value['date'],
-            ref_type=value['ref_type'],
-            **{field: value[field] for field in OPTIONAL_JOURNAL_FIELDS if field in value},
-        )
+        _journal_row(value, {'character_id': character_id})
         for value in (entry.model_dump() for entry in journal_data)
     ]
 
@@ -95,6 +105,17 @@ def refresh_character_wallet(character_id):
     expirations = [update_market_transactions(character_id), get_wallet_journal(character_id)]
     expirations = [value for value in expirations if value is not None]
     return max(expirations) if expirations else None
+
+
+def _drop_unowned_orders():
+    """Delete the CharacterOrder rows no feed claims any more.
+
+    One order can be reported by both routes - this character placed it and the
+    corporation owns it - so a feed gives up only its own columns and then drops
+    what nobody owns. Deleting its own rows outright would take the other feed's
+    column with them.
+    """
+    CharacterOrder.objects.filter(character_id=None, corporation_id=None).delete()
 
 
 def refresh_character_orders(character_id):
@@ -121,15 +142,11 @@ def refresh_character_orders(character_id):
                        is_corporation=order.is_corporation)
         for order in orders
     ]
-    # Three statements, and atomic so no failure can leave the character without
-    # ownership rows. A plain delete would take the corporation feed's column
-    # with it, because one order can be reported by both routes: this character
-    # placed it and the corporation owns it. So the feed gives up its own
-    # columns, drops the rows nobody owns any more, and claims the current set.
+    # Atomic so no failure can leave the character without ownership rows.
     with transaction.atomic():
         CharacterOrder.objects.filter(character_id=character_id).update(
             character_id=None, is_corporation=None)
-        CharacterOrder.objects.filter(character_id=None, corporation_id=None).delete()
+        _drop_unowned_orders()
         CharacterOrder.objects.bulk_create(
             rows, update_conflicts=True, unique_fields=['order_id'],
             update_fields=['character_id', 'is_corporation'])
@@ -143,21 +160,20 @@ CONTRACT_FIELDS = {field.name for field in CharacterContract._meta.fields}
 CONTRACT_UPDATE_FIELDS = sorted(CONTRACT_FIELDS - {'contract_id'})
 
 
-def refresh_character_contracts(character_id):
-    """Upsert one character's contracts, then cache the names their ids carry.
+def _refresh_contracts(fetch, character_id, subject):
+    """Upsert one owner's contracts, then cache the names their ids carry.
 
     This feed never deletes, where orders and assets rewrite. ESI serves a
     30-day window, so a contract that leaves it is history no route can return.
-    A contract two of our characters share upserts into the one row: the
-    primary key is the contract, not the character.
+    A contract two owners share upserts into the one row: the primary key is the
+    contract, not the owner, and the table carries no owner column at all. That
+    is why the character and the corporation feed differ only in the route they
+    read, and both write through here.
     """
     try:
-        contracts, response = esi.client.Contracts.GetCharactersCharacterIdContracts(
-            character_id=character_id,
-            token=Token.get_token(character_id, 'esi-contracts.read_character_contracts.v1')
-        ).results(return_response=True)
+        contracts, response = fetch()
     except HTTPNotModified as not_modified:
-        logger.info("contracts unchanged for character %s, skipping", character_id)
+        logger.info("contracts unchanged for %s, skipping", subject)
         return _expires(not_modified.headers)
 
     rows = [
@@ -168,11 +184,43 @@ def refresh_character_contracts(character_id):
     CharacterContract.objects.bulk_create(
         rows, update_conflicts=True, unique_fields=['contract_id'],
         update_fields=CONTRACT_UPDATE_FIELDS)
-    logger.info("character %s contracts refreshed: %s rows", character_id, len(rows))
+    logger.info("%s contracts refreshed: %s rows", subject, len(rows))
     # After the write on purpose: the contracts are safe even if a name route
     # fails, and a failure here still reaches the scheduler.
     names.resolve_contract_names(rows, character_id)
     return _expires(response.headers)
+
+
+def refresh_character_contracts(character_id):
+    return _refresh_contracts(
+        lambda: esi.client.Contracts.GetCharactersCharacterIdContracts(
+            character_id=character_id,
+            token=Token.get_token(character_id, 'esi-contracts.read_character_contracts.v1')
+        ).results(return_response=True),
+        character_id, f"character {character_id}")
+
+
+# The asset fields both routes send, mapped one for one. `owner` is the id column
+# that names the holder. `name` only ever arrives from the character route -
+# refresh_corporation_assets says why.
+def _asset_row(asset, owner, name=None):
+    return CharacterAsset(
+        item_id=asset.item_id, type_id=asset.type_id, quantity=asset.quantity,
+        location_id=asset.location_id, location_type=asset.location_type,
+        location_flag=asset.location_flag, is_singleton=asset.is_singleton,
+        is_blueprint_copy=asset.is_blueprint_copy, name=name, **owner)
+
+
+def _replace_assets(rows, owner):
+    """Swap one owner's rows for the set ESI just reported, in one transaction.
+
+    A plain delete is safe here, unlike the orders feed: an item sits in a
+    character hangar or in a corporation hangar, never in both, so the two feeds
+    share no row.
+    """
+    with transaction.atomic():
+        CharacterAsset.objects.filter(**owner).delete()
+        CharacterAsset.objects.bulk_create(rows)
 
 
 def refresh_character_assets(character_id):
@@ -189,20 +237,9 @@ def refresh_character_assets(character_id):
 
     item_names = names.resolve_asset_names(
         [asset.item_id for asset in assets if asset.is_singleton], character_id)
-    rows = [
-        CharacterAsset(
-            item_id=asset.item_id, character_id=character_id,
-            type_id=asset.type_id, quantity=asset.quantity,
-            location_id=asset.location_id, location_type=asset.location_type,
-            location_flag=asset.location_flag, is_singleton=asset.is_singleton,
-            is_blueprint_copy=getattr(asset, 'is_blueprint_copy', None),
-            name=item_names.get(asset.item_id),
-        )
-        for asset in assets
-    ]
-    with transaction.atomic():
-        CharacterAsset.objects.filter(character_id=character_id).delete()
-        CharacterAsset.objects.bulk_create(rows)
+    owner = {'character_id': character_id}
+    rows = [_asset_row(asset, owner, item_names.get(asset.item_id)) for asset in assets]
+    _replace_assets(rows, owner)
     logger.info("character %s assets refreshed: %s rows", character_id, len(rows))
     return _expires(response.headers)
 
@@ -220,8 +257,7 @@ def _corporation_id(character_id):
     """
     affiliations = esi.client.Character.PostCharactersAffiliation(
         body=[character_id]).result()
-    for entry in affiliations:
-        entry = entry if isinstance(entry, dict) else entry.model_dump()
+    for entry in (names.as_dict(row) for row in affiliations):
         if entry.get('character_id') == character_id:
             return entry['corporation_id']
     raise CorporationUnknown(f"no affiliation for character {character_id}")
@@ -278,15 +314,7 @@ def _corporation_journal(corporation_id, division, token):
         return _expires(not_modified.headers)
 
     entries = [
-        WalletJournal(
-            corporation_id=corporation_id, division=division,
-            journal_id=value['id'],
-            amount=value['amount'],
-            balance=value['balance'],
-            date=value['date'],
-            ref_type=value['ref_type'],
-            **{field: value[field] for field in OPTIONAL_JOURNAL_FIELDS if field in value},
-        )
+        _journal_row(value, {'corporation_id': corporation_id, 'division': division})
         for value in (row.model_dump() for row in rows)
     ]
     WalletJournal.objects.bulk_create(
@@ -311,13 +339,7 @@ def refresh_corporation_wallet(character_id):
 
 
 def refresh_corporation_orders(character_id):
-    """Rewrite the corporation's rows in CharacterOrder.
-
-    Three statements rather than delete-then-insert: an order the corporation and
-    one of our characters both report is one row, and this feed owns only
-    corporation_id. So it gives up its column, drops the rows nobody owns any
-    more, and claims the current set.
-    """
+    """Rewrite the corporation's rows in CharacterOrder."""
     corporation_id = _corporation_id(character_id)
     try:
         orders, response = esi.client.Market.GetCorporationsCorporationIdOrders(
@@ -333,7 +355,7 @@ def refresh_corporation_orders(character_id):
     with transaction.atomic():
         CharacterOrder.objects.filter(corporation_id=corporation_id).update(
             corporation_id=None)
-        CharacterOrder.objects.filter(character_id=None, corporation_id=None).delete()
+        _drop_unowned_orders()
         CharacterOrder.objects.bulk_create(
             rows, update_conflicts=True, unique_fields=['order_id'],
             update_fields=['corporation_id'])
@@ -342,11 +364,7 @@ def refresh_corporation_orders(character_id):
 
 
 def refresh_corporation_assets(character_id):
-    """Rewrite the corporation's CharacterAsset rows.
-
-    A plain delete here, unlike the orders feed: an item belongs to a character
-    hangar or to a corporation hangar, never to both, so no row is shared.
-    """
+    """Rewrite the corporation's CharacterAsset rows."""
     corporation_id = _corporation_id(character_id)
     try:
         assets, response = esi.client.Assets.GetCorporationsCorporationIdAssets(
@@ -364,48 +382,18 @@ def refresh_corporation_assets(character_id):
     # nameable ids out needs a type taxonomy this feed has no other use for, and
     # a name is cosmetic - the type, the hangar division and the location all
     # still render. Verified against live ESI on 2026-08-17.
-    rows = [
-        CharacterAsset(
-            item_id=asset.item_id, corporation_id=corporation_id,
-            type_id=asset.type_id, quantity=asset.quantity,
-            location_id=asset.location_id, location_type=asset.location_type,
-            location_flag=asset.location_flag, is_singleton=asset.is_singleton,
-            is_blueprint_copy=getattr(asset, 'is_blueprint_copy', None),
-        )
-        for asset in assets
-    ]
-    with transaction.atomic():
-        CharacterAsset.objects.filter(corporation_id=corporation_id).delete()
-        CharacterAsset.objects.bulk_create(rows)
+    owner = {'corporation_id': corporation_id}
+    rows = [_asset_row(asset, owner) for asset in assets]
+    _replace_assets(rows, owner)
     logger.info("corporation %s assets refreshed: %s rows", corporation_id, len(rows))
     return _expires(response.headers)
 
 
 def refresh_corporation_contracts(character_id):
-    """Upsert the corporation's contracts into the same table the characters use.
-
-    The table has no owner column - a contract is one global object and the
-    payload names every party - so this feed adds rows and never deletes, exactly
-    as the character one does.
-    """
     corporation_id = _corporation_id(character_id)
-    try:
-        contracts, response = esi.client.Contracts.GetCorporationsCorporationIdContracts(
+    return _refresh_contracts(
+        lambda: esi.client.Contracts.GetCorporationsCorporationIdContracts(
             corporation_id=corporation_id,
             token=Token.get_token(character_id, 'esi-contracts.read_corporation_contracts.v1')
-        ).results(return_response=True)
-    except HTTPNotModified as not_modified:
-        logger.info("contracts unchanged for corporation %s, skipping", corporation_id)
-        return _expires(not_modified.headers)
-
-    rows = [
-        CharacterContract(**{key: value for key, value in contract.model_dump().items()
-                             if key in CONTRACT_FIELDS})
-        for contract in contracts
-    ]
-    CharacterContract.objects.bulk_create(
-        rows, update_conflicts=True, unique_fields=['contract_id'],
-        update_fields=CONTRACT_UPDATE_FIELDS)
-    logger.info("corporation %s contracts refreshed: %s rows", corporation_id, len(rows))
-    names.resolve_contract_names(rows, character_id)
-    return _expires(response.headers)
+        ).results(return_response=True),
+        character_id, f"corporation {corporation_id}")

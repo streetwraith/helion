@@ -33,9 +33,10 @@ def market_transactions(request):
             filters['owner_id'] = int(owner_id)
         except ValueError:
             return HttpResponseBadRequest('invalid owner_id')
-    market_transactions = market_service.get_market_transactions(
-        filters.get('owner_id'), location_id=location_id, is_buy=is_buy, type_name=type_name)
-    paginator = Paginator(market_transactions, 100)
+    rows = market_service.get_market_transactions(
+        filters.get('owner_id'), location_id=filters.get('location_id'),
+        is_buy=filters.get('is_buy'), type_name=type_name)
+    paginator = Paginator(rows, 100)
     page_obj = paginator.get_page(page_number)
 
     # Each row shows the opposite-side history of its type: buys show the
@@ -64,7 +65,7 @@ def market_transactions(request):
     context = {
         'page_obj': page_obj,
         'page_transactions': page_transactions,
-        'owner_options': market_service.get_owner_options(),
+        'owner_options': market_service.transaction_owner_options(),
         'max_transaction_id': max_transaction_id,
         'history_buy': history_buy,
         'history_sell': history_sell,

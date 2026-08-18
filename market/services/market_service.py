@@ -48,8 +48,7 @@ from market.services.orders import (
     UNDERCUT_POLL_LIMIT,
     best_orders_by_type,
     find_type_ids_by_market_groups,
-    find_undercut_buy_orders,
-    find_undercut_sell_orders,
+    find_undercut_orders,
     get_jita_best_ask,
     get_order_book,
     get_orders_in_hub_range,
@@ -64,8 +63,8 @@ from market.services.orders import (
 )
 from market.services.wallet import (
     WalletStatistics,
-    get_owner_options,
     owner_label,
+    transaction_owner_options,
     get_average_transaction_price,
     get_average_transaction_price_bulk,
     get_daily_transaction_prices,

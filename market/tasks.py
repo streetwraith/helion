@@ -70,12 +70,10 @@ def compute_undercuts(self):
             if mark is not None and status.refreshed_at <= mark:
                 continue
             for owner_id, is_corporation in owners:
-                for is_buy, find_undercuts in (
-                        (False, market_service.find_undercut_sell_orders),
-                        (True, market_service.find_undercut_buy_orders)):
-                    undercuts = find_undercuts(
+                for is_buy in (False, True):
+                    undercuts = market_service.find_undercut_orders(
                         region_id=status.region_id, owner_id=owner_id,
-                        is_corporation=is_corporation)
+                        is_buy=is_buy, is_corporation=is_corporation)
                     market_service.save_market_order_undercuts(
                         region_id=status.region_id, owner_id=owner_id,
                         is_buy=is_buy, market_order_undercut_data=undercuts,

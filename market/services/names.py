@@ -82,7 +82,7 @@ def _unseen(entity_ids):
     return sorted(entity_ids - known)
 
 
-def _as_dict(item):
+def as_dict(item):
     # The route is untyped in this client (-> Any), so it may hand back parsed
     # JSON or a pydantic model depending on the response.
     return item if isinstance(item, dict) else item.model_dump()
@@ -101,7 +101,7 @@ def _resolve_parties(entity_ids):
             continue
         EveName.objects.bulk_create(
             [EveName(entity_id=item['id'], name=item['name'], category=item['category'])
-             for item in (_as_dict(entry) for entry in resolved)],
+             for item in (as_dict(entry) for entry in resolved)],
             ignore_conflicts=True)
 
 
@@ -133,7 +133,7 @@ def resolve_asset_names(item_ids, character_id):
         except HTTPClientError as error:
             logger.warning("asset names failed for %s items: %r", len(batch), error)
             continue
-        for entry in (_as_dict(item) for item in answered):
+        for entry in (as_dict(item) for item in answered):
             name = entry.get('name')
             if name and name != UNNAMED:
                 resolved[entry['item_id']] = name

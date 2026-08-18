@@ -39,7 +39,9 @@ def get_contracts(contract_type, owner_id=None, include_finished=False):
     if not include_finished:
         rows = rows.filter(Q(status='in_progress')
                            | Q(status='outstanding', date_expired__gt=timezone.now()))
-    return rows.order_by('-date_issued')
+    # The id breaks date_issued ties, so a page boundary inside a batch issued in
+    # one second cannot repeat one row and drop another.
+    return rows.order_by('-date_issued', '-contract_id')
 
 
 def add_display_fields(contracts):
@@ -48,19 +50,19 @@ def add_display_fields(contracts):
     Called on a page slice, never on the whole table: the two name queries
     then cost the page size instead of the history.
     """
-    names = _names_for(contracts)
+    labels = _names_for(contracts)
     now = timezone.now()
     for contract in contracts:
-        contract.issuer_name = _name(names, contract.issuer_id)
-        contract.acceptor_name = _name(names, contract.acceptor_id)
-        contract.start_name = _name(names, contract.start_location_id)
-        contract.end_name = _name(names, contract.end_location_id)
+        contract.issuer_name = _name(labels, contract.issuer_id)
+        contract.acceptor_name = _name(labels, contract.acceptor_id)
+        contract.start_name = _name(labels, contract.start_location_id)
+        contract.end_name = _name(labels, contract.end_location_id)
         contract.display_status = _display_status(contract, now)
         contract.deadline = _deadline(contract)
     return contracts
 
 
-def get_owner_options():
+def contract_owner_options():
     """Our owners, for the filter: every character holding an SSO token, plus
     every corporation the table names as an issuer.
 
@@ -89,14 +91,14 @@ def _names_for(contracts):
             target = structure_ids if location_id >= FIRST_STRUCTURE_ID else station_ids
             target.add(location_id)
 
-    names = dict(EveName.objects.filter(entity_id__in=party_ids | structure_ids)
-                 .exclude(name=None).values_list('entity_id', 'name'))
-    names.update(NpcStationName.objects.filter(station_id__in=station_ids)
-                 .values_list('station_id', 'name'))
-    return names
+    labels = dict(EveName.objects.filter(entity_id__in=party_ids | structure_ids)
+                  .exclude(name=None).values_list('entity_id', 'name'))
+    labels.update(NpcStationName.objects.filter(station_id__in=station_ids)
+                  .values_list('station_id', 'name'))
+    return labels
 
 
-def _name(names, entity_id):
+def _name(labels, entity_id):
     """The name of an id, or the id itself when nothing resolved it.
 
     A raw id beats an invented label: you can paste it into the game client.
@@ -104,7 +106,7 @@ def _name(names, entity_id):
     """
     if not entity_id:
         return None
-    return names.get(entity_id) or str(entity_id)
+    return labels.get(entity_id) or str(entity_id)
 
 
 def _display_status(contract, now):

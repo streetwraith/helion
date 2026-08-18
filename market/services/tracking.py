@@ -112,7 +112,7 @@ def get_feed_rows(character_id, character_name):
     return rows
 
 
-def save_tracks(character_id, character_name, feeds, is_trader):
+def save_tracks(character_id, character_name, feeds, trader):
     """Store the ticked feeds and the trader flag.
 
     An unauthorised feed is refused here and not only in the template: a disabled
@@ -130,7 +130,7 @@ def save_tracks(character_id, character_name, feeds, is_trader):
               if feed in feeds and FEED_SCOPES[feed] in scopes]
     tracked, _ = TrackedCharacter.objects.update_or_create(
         character_name=character_name,
-        defaults={'tracks': ', '.join(wanted), 'is_trader': is_trader})
+        defaults={'tracks': ', '.join(wanted), 'is_trader': trader})
     return tracked
 
 

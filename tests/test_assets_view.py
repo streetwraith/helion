@@ -401,14 +401,14 @@ class TestOwnerOptions:
         add_token(ALT, "Alt")  # a token, but no assets feed
         add_asset(1, TRITANIUM, quantity=5)
 
-        options = asset_service.get_owner_options(asset_service.get_asset_list())
+        options = asset_service.asset_owner_options(asset_service.get_asset_list())
 
         assert options == [(MAIN, "Main")]
 
     def test_an_owner_without_a_name_falls_back_to_its_id(self, jita):
         add_asset(1, TRITANIUM, quantity=5, character_id=ALT)
 
-        options = asset_service.get_owner_options(asset_service.get_asset_list())
+        options = asset_service.asset_owner_options(asset_service.get_asset_list())
 
         assert options == [(ALT, str(ALT))]
 

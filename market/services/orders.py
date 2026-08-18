@@ -97,7 +97,7 @@ def save_market_order_undercuts(region_id, owner_id, is_buy, market_order_underc
 
     MarketOrderUndercut.objects.bulk_create(new_market_order_undercuts, ignore_conflicts=True)
 
-def _find_undercut_orders(region_id, owner_id, is_buy, is_corporation=False):
+def find_undercut_orders(region_id, owner_id, is_buy, is_corporation=False):
     # A sell order is undercut by a newer, cheaper competitor; a buy order by a
     # newer, higher bidder. The closest competing price wins in both cases.
     #
@@ -132,7 +132,7 @@ def _find_undercut_orders(region_id, owner_id, is_buy, is_corporation=False):
         AND NOT EXISTS (SELECT 1 FROM market_characterorder AS other
                         WHERE other.order_id = competitor.order_id)
         ORDER BY competitor.price {closest_first}
-        LIMIT 1  -- Ensure only one competitor is selected per order
+        LIMIT 1
     ) AS competing ON TRUE
     WHERE my_orders.region_id = %s
     AND my_orders.is_in_trade_hub_range = TRUE
@@ -142,14 +142,6 @@ def _find_undercut_orders(region_id, owner_id, is_buy, is_corporation=False):
     with connection.cursor() as cursor:
         cursor.execute(query, [owner_id, region_id, is_buy])
         return cursor.fetchall()
-
-def find_undercut_sell_orders(region_id, owner_id, is_corporation=False):
-    return _find_undercut_orders(region_id, owner_id, is_buy=False,
-                                 is_corporation=is_corporation)
-
-def find_undercut_buy_orders(region_id, owner_id, is_corporation=False):
-    return _find_undercut_orders(region_id, owner_id, is_buy=True,
-                                 is_corporation=is_corporation)
 
 # One poll never carries more than this. The cursor advances to the last row
 # returned, so a longer burst drains over the following polls instead of

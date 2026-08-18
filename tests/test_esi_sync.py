@@ -447,6 +447,53 @@ def fake_corporation_esi(monkeypatch, group, endpoint, items, response=None):
     monkeypatch.setattr(esi_sync, "Token", FAKE_TOKEN)
 
 
+class TestCorporationLookup:
+    """The affiliation lookup every corporation feed makes first."""
+
+    def fake_affiliation(self, monkeypatch, entries):
+        monkeypatch.setattr(esi_sync, "esi", SimpleNamespace(
+            client=SimpleNamespace(Character=SimpleNamespace(
+                PostCharactersAffiliation=lambda body: SimpleNamespace(
+                    result=lambda **kw: entries)))))
+        monkeypatch.setattr(esi_sync, "Token", FAKE_TOKEN)
+
+    def test_reads_the_corporation_off_the_matching_entry(self, monkeypatch):
+        # Another character's entry must not answer for ours.
+        self.fake_affiliation(monkeypatch, [
+            {"character_id": CHARACTER_ID + 1, "corporation_id": 98_000_999},
+            {"character_id": CHARACTER_ID, "corporation_id": CORPORATION_ID},
+        ])
+
+        assert esi_sync._corporation_id(CHARACTER_ID) == CORPORATION_ID
+
+    def test_an_empty_answer_raises_corporation_unknown(self, monkeypatch):
+        # A raise, not a None: every corporation feed would otherwise write its
+        # rows against no owner at all.
+        self.fake_affiliation(monkeypatch, [])
+
+        with pytest.raises(esi_sync.CorporationUnknown):
+            esi_sync._corporation_id(CHARACTER_ID)
+
+    def test_an_answer_about_another_character_raises(self, monkeypatch):
+        self.fake_affiliation(
+            monkeypatch, [{"character_id": CHARACTER_ID + 1, "corporation_id": 7}])
+
+        with pytest.raises(esi_sync.CorporationUnknown):
+            esi_sync._corporation_id(CHARACTER_ID)
+
+    @pytest.mark.parametrize("feed", [
+        "refresh_corporation_orders", "refresh_corporation_assets",
+        "refresh_corporation_contracts", "refresh_corporation_wallet",
+    ])
+    def test_every_corporation_feed_propagates_the_failure(self, monkeypatch, feed):
+        # The scheduler must see it: a swallowed failure would look like a
+        # successful fetch that found nothing, and never back off.
+        self.fake_affiliation(monkeypatch, [])
+
+        with pytest.raises(esi_sync.CorporationUnknown):
+            getattr(esi_sync, feed)(CHARACTER_ID)
+
+
 class TestCorporationOrders:
     def test_stores_the_orders_against_the_corporation(self, monkeypatch):
         fake_corporation_esi(monkeypatch, "Market", "GetCorporationsCorporationIdOrders",

@@ -8,7 +8,7 @@ import pytest
 
 from marketdata.models import History
 from market.services import market_service
-from market.views.hauling_views import MarketDeal
+from market.services.hauling import MarketDeal
 from market.views.ice_views import ICE_TYPES, calculate_average_sell_price_from_yield
 from market.views.loyalty_points_views import LpDeal
 from market.services.mistakes import _fourth_significant_digit
@@ -201,12 +201,38 @@ class TestBulkHistoryAverages:
             highest=price + 10, lowest=price - 10, order_count=1, volume=volume,
         )
 
-    def test_matches_per_type_calculation(self, db):
+    @pytest.fixture
+    def three_types(self, db):
         latest = date(2026, 8, 1)
         self.add_history(34, latest, volume=91, price=100.0)
         self.add_history(34, latest - timedelta(days=2), volume=182, price=200.0)
         self.add_history(35, latest, volume=7, price=50.0)
 
+    def test_bulk_values_are_the_expected_numbers(self, three_types):
+        """Concrete expectations, so the test can disagree with the code.
+
+        Type 34 holds two days inside a 91-day window: the medians of two values
+        are their means, and the daily volume averages the window, not the days
+        with a row. Type 36 has no history at all.
+        """
+        bulk = market_service.calculate_market_history_averages_bulk(
+            10000002, [34, 35, 36])
+
+        assert bulk[34]["median_avg"] == pytest.approx(150.0)  # (100 + 200) / 2
+        assert bulk[34]["median_lowest"] == pytest.approx(140.0)  # (90 + 190) / 2
+        assert bulk[34]["median_highest"] == pytest.approx(160.0)  # (110 + 210) / 2
+        assert bulk[34]["volume_total"] == 273  # 91 + 182
+        assert bulk[34]["avg_daily_volume"] == pytest.approx(3.0)  # 273 / 91 days
+        assert bulk[35]["median_avg"] == pytest.approx(50.0)
+        assert bulk[35]["volume_total"] == 7
+        # A type with no row still gets a dict, because the region has history.
+        # Compare test_region_without_history_returns_none, where the region has
+        # none and every type answers None instead.
+        assert bulk[36]["median_avg"] is None
+        assert bulk[36]["volume_total"] == 0
+        assert bulk[36]["avg_daily_volume"] == 0.0
+
+    def test_matches_per_type_calculation(self, three_types):
         bulk = market_service.calculate_market_history_averages_bulk(
             10000002, [34, 35, 36])
         for type_id in (34, 35, 36):

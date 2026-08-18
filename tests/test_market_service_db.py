@@ -105,9 +105,13 @@ class TestGetMarketTransactions:
         assert {row.transaction_id for row in mine} == {1, 2, 3}
         assert {row.transaction_id for row in theirs} == {4}
 
-    def test_is_buy_string_filter(self):
-        buys = market_service.get_market_transactions(is_buy="True")
+    def test_is_buy_filter(self):
+        buys = market_service.get_market_transactions(is_buy=True)
         assert [t.transaction_id for t in buys] == [4, 1]
+
+    def test_is_buy_none_keeps_both_sides(self):
+        both = market_service.get_market_transactions(is_buy=None)
+        assert len(both) == 4
 
     def test_type_name_fuzzy_filter(self):
         got = market_service.get_market_transactions(type_name="trit")
@@ -201,7 +205,7 @@ class TestUndercutQueries:
         add_order(2, 34, 95.0, issued=t0 + timedelta(hours=1))  # closest undercut
         add_order(3, 34, 90.0, issued=t0 + timedelta(hours=2))  # deeper, not reported
         add_order(4, 34, 80.0, issued=t0 - timedelta(hours=1))  # older than mine, ignored
-        rows = market_service.find_undercut_sell_orders(JITA_REGION, CHARACTER_ID)
+        rows = market_service.find_undercut_orders(JITA_REGION, CHARACTER_ID, is_buy=False)
         assert len(rows) == 1
         type_id, order_id, price, issued, comp_id, comp_issued, comp_price = rows[0]
         assert (type_id, order_id, price, comp_id, comp_price) == (34, 1, 100.0, 2, 95.0)
@@ -211,7 +215,7 @@ class TestUndercutQueries:
         add_order(1, 34, 100.0, is_buy=True, character_id=CHARACTER_ID, issued=t0)
         add_order(2, 34, 105.0, is_buy=True, issued=t0 + timedelta(hours=1))
         add_order(3, 34, 120.0, is_buy=True, issued=t0 + timedelta(hours=2))
-        rows = market_service.find_undercut_buy_orders(JITA_REGION, CHARACTER_ID)
+        rows = market_service.find_undercut_orders(JITA_REGION, CHARACTER_ID, is_buy=True)
         assert len(rows) == 1
         assert rows[0][4] == 2 and rows[0][6] == 105.0
 

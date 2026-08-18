@@ -74,7 +74,7 @@ def get_asset_list():
                   owner_labels({entry['owner_id'] for entry in entries}))
 
 
-def get_owner_options(lines):
+def asset_owner_options(lines):
     """The owners the page actually shows, for the filter.
 
     Taken from the lines, not from the tokens: the filter runs in the browser

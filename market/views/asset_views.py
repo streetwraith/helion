@@ -14,6 +14,6 @@ def market_assets(request):
     assets = asset_service.get_asset_list()
     return render(request, 'market/assets/assets.html', {
         'assets': assets,
-        'owner_options': asset_service.get_owner_options(assets),
+        'owner_options': asset_service.asset_owner_options(assets),
         'category_options': asset_service.get_category_options(assets),
     })

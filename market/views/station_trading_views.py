@@ -1,6 +1,6 @@
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timezone
 
-from django.db.models import Count, Q
+from django.db.models import Q
 from django.shortcuts import render
 
 from evesde import services as sde_service
@@ -10,13 +10,9 @@ from market.constants import (
     REGION_ID_DOMAIN,
     REGION_ID_FORGE,
 )
-from market.models import CharacterOrder, MarketOrderUndercut, TradeHub, TradeItem
-from marketdata.models import OrdersHub, RegionStatus
-from market.services import market_service, tracking
-
-# The window behind the o48 columns. The column label carries the number, so the
-# two must change together.
-RECENT_ORDER_WINDOW = timedelta(hours=48)
+from market.models import CharacterOrder, TradeHub, TradeItem
+from marketdata.models import OrdersHub
+from market.services import market_service, station_trading, tracking
 
 def market_trade_hub_mistakes(request, region_id):
     refreshed_at, matching_results = market_service.get_mistakes(region_id)
@@ -51,38 +47,12 @@ def _resolve_item_sets(request, trade_items, character_order_type_ids):
     ]
     return context_extras, trade_items, extra_items
 
-def _undercut_times(undercut_rows, my_order, now):
-    """Hours until the current order was undercut, and the 30-day average."""
-    current_time = None
-    if undercut_rows and my_order:
-        # Both fields: order_id names the order and order_issued names the
-        # pricing, which is what the unique constraint pairs. Matching the time
-        # alone would take another owner's row if two orders shared a second,
-        # and matching the id alone would report the undercut of a price this
-        # order no longer carries.
-        matching = [u for u in undercut_rows
-                    if u.order_id == my_order.order_id
-                    and u.order_issued == my_order.issued]
-        if matching:
-            current = max(matching, key=lambda u: u.created_at)
-            current_time = (current.competitor_issued - current.order_issued).total_seconds() / 3600
-
-    average_time = None
-    recent = [u for u in undercut_rows if u.created_at >= now - timedelta(days=30)]
-    if recent:
-        time_diffs = [(u.competitor_issued - u.order_issued).total_seconds() / 3600 for u in recent]
-        average_time = sum(time_diffs) / len(time_diffs)
-
-    return current_time, average_time
-
 @require_character
 def market_trade_hub(request, region_id):
-    context = {}
     now = datetime.now(timezone.utc)
 
     trade_hubs = list(TradeHub.objects.all())
     hubs_by_region = {hub.region_id: hub for hub in trade_hubs}
-    hub_names_by_station = {hub.station_id: hub.name for hub in trade_hubs}
     trade_hub_region = hubs_by_region[region_id]
     trade_hub_jita = next(hub for hub in trade_hubs if hub.name == 'Jita')
     trade_hub_amarr = next(hub for hub in trade_hubs if hub.name == 'Amarr')
@@ -106,11 +76,8 @@ def market_trade_hub(request, region_id):
         request, TradeItem.objects.all(),
         {order.type_id for order in character_order_list},
     )
-    context.update(context_extras)
-
     items_to_process = list(trade_items) + extra_items
     item_dict = list(trade_items.order_by('group_id', 'name'))
-    item_dict_extra = extra_items
     type_ids = [item.type_id for item in items_to_process]
 
     character_assets = market_service.get_character_assets(
@@ -119,167 +86,33 @@ def market_trade_hub(request, region_id):
         owner_ids=owner_ids,
     )
 
-    # Everything the per-item loop needs, prefetched in bulk: the loop itself
-    # runs no queries, so the page cost no longer grows with the item count.
-    market_orders = OrdersHub.objects.filter(
-        region_id__in=[hub.region_id for hub in trade_hubs],
-        is_in_trade_hub_range=True,
-        type_id__in=type_ids,
+    item_data, isk_in_escrow, isk_in_sell_orders = station_trading.build_desk(
+        region_id=region_id,
+        other_region_id=other_region_id,
+        station_id=trade_hub_region.station_id,
+        trade_hubs=trade_hubs,
+        type_ids=type_ids,
+        own_orders=character_order_list,
+        assets=character_assets,
+        now=now,
     )
-    global_lowest_sells = market_service.best_orders_by_type(market_orders, is_buy=False)
-    global_highest_buys = market_service.best_orders_by_type(market_orders, is_buy=True)
 
-    competitor_orders = market_orders.filter(region_id=region_id).exclude(
-        order_id__in=CharacterOrder.objects.values('order_id'))
-    station_lowest_sells = market_service.best_orders_by_type(competitor_orders, is_buy=False)
-    station_highest_buys = market_service.best_orders_by_type(competitor_orders, is_buy=True)
-
-    # The comparison-hub columns include own orders.
-    other_hub_orders = market_orders.filter(region_id=other_region_id)
-    other_lowest_sells = market_service.best_orders_by_type(other_hub_orders, is_buy=False)
-    other_highest_buys = market_service.best_orders_by_type(other_hub_orders, is_buy=True)
-
-    my_orders_by_type = {}
-    for order in character_order_list:
-        my_orders_by_type.setdefault((order.type_id, order.is_buy_order), []).append(order)
-
-    sell_histories = market_service.get_trade_history_bulk(
-        type_ids, location_id=trade_hub_region.station_id, is_buy=False)
-    buy_histories = market_service.get_trade_history_bulk(type_ids, is_buy=True)
-
-    undercuts_by_type = {}
-    for undercut in MarketOrderUndercut.objects.filter(type_id__in=type_ids, region_id=region_id):
-        undercuts_by_type.setdefault((undercut.type_id, undercut.is_buy_order), []).append(undercut)
-
-    region_daily_volumes = market_service.get_average_daily_volume_bulk(region_id, type_ids)
-    other_daily_volumes = market_service.get_average_daily_volume_bulk(other_region_id, type_ids)
-
-    # Competitor orders that are live now and were issued or repriced inside the
-    # window. ESI moves `issued` when a price changes, so a repriced order counts
-    # again. An order that appeared and vanished inside the window never shows:
-    # the snapshot holds live orders only.
-    recent_counts = {
-        (row['type_id'], row['is_buy_order']): row['recent']
-        for row in competitor_orders.filter(
-            issued__gte=now - RECENT_ORDER_WINDOW
-        ).values('type_id', 'is_buy_order').annotate(recent=Count('order_id'))
-    }
-
-    region_names = dict(RegionStatus.objects.values_list('region_id', 'region_name'))
-
-    context["trade_hub_region"] = trade_hub_region
-    context["trade_hub_jita"] = trade_hub_jita
-    context["trade_hub_amarr"] = trade_hub_amarr
-    context["trade_hub_other"] = trade_hub_other
-    context["item_data"] = {}
-    context["item_dict"] = item_dict
-    context["item_dict_extra"] = item_dict_extra
-    # The notification poller's start cursor, so a reload never reports
-    # undercuts that happened while the page was closed.
-    context["max_undercut_id"] = market_service.latest_undercut_id(region_id, owner_ids)
-
-    isk_in_escrow = 0
-    isk_in_sell_orders = 0
-
-    for trade_item in items_to_process:
-        type_id = trade_item.type_id
-        item_data = {
-            'in_assets': character_assets.get(type_id, 0),
-            'regions': {}
-        }
-
-        global_lowest_sell = global_lowest_sells.get(type_id)
-        global_highest_buy = global_highest_buys.get(type_id)
-
-        if global_lowest_sell:
-            item_data['global_lowest_sell_order'] = {
-                'price': global_lowest_sell.price,
-                'hub': hub_names_by_station[global_lowest_sell.location_id]
-            }
-
-        if global_highest_buy:
-            # In-range buy orders can sit in non-hub stations; fall back to
-            # the region name.
-            hub_name = hub_names_by_station.get(global_highest_buy.location_id)
-            if hub_name is None:
-                hub_name = region_names[global_highest_buy.region_id]
-            item_data['global_highest_buy_order'] = {
-                'price': global_highest_buy.price,
-                'hub': hub_name
-            }
-
-        my_sell_orders = my_orders_by_type.get((type_id, False), [])
-        my_buy_orders = my_orders_by_type.get((type_id, True), [])
-
-        isk_in_sell_orders = isk_in_sell_orders + sum(order.volume_remain * order.price for order in my_sell_orders)
-        isk_in_escrow = isk_in_escrow + sum(order.volume_remain * order.price for order in my_buy_orders)
-
-        my_sell_history = sell_histories[type_id]
-        my_buy_history = buy_histories[type_id]
-
-        # Realized profit over the volume that has completed a full buy-sell cycle
-        volume_for_profit = min(my_sell_history['volume'], my_buy_history['volume'])
-        my_profit = 0
-        if volume_for_profit > 0:
-            my_profit = volume_for_profit * my_sell_history['avg_price'] - volume_for_profit * my_buy_history['avg_price']
-
-        station_lowest_sell = station_lowest_sells.get(type_id)
-        station_highest_buy = station_highest_buys.get(type_id)
-
-        station_lowest_sell_price = station_lowest_sell.price if station_lowest_sell else 1000000000
-        station_highest_buy_price = station_highest_buy.price if station_highest_buy else 1
-        spread = (station_lowest_sell_price - station_highest_buy_price)/station_lowest_sell_price*100
-        spread_inverse_rounded = (100 - round(spread / 5) * 5)
-
-        my_sell_order = min(my_sell_orders, key=lambda order: order.price) if my_sell_orders else None
-        my_buy_order = max(my_buy_orders, key=lambda order: order.price) if my_buy_orders else None
-
-        my_sell_price_last_update = (now - my_sell_order.issued).days if my_sell_order else ''
-        my_buy_price_last_update = (now - my_buy_order.issued).days if my_buy_order else ''
-
-        my_sell_price_undercut_time, my_sell_price_undercut_time_avg = _undercut_times(
-            undercuts_by_type.get((type_id, False), []), my_sell_order, now)
-        my_buy_price_undercut_time, my_buy_price_undercut_time_avg = _undercut_times(
-            undercuts_by_type.get((type_id, True), []), my_buy_order, now)
-
-        region_data = {
-            'my_profit': my_profit,
-            'my_sell_price': my_sell_order.price if my_sell_order else None,
-            'my_sell_price_last_update': my_sell_price_last_update,
-            'my_sell_price_undercut_time': my_sell_price_undercut_time,
-            'my_sell_price_undercut_time_avg': my_sell_price_undercut_time_avg,
-            'my_sell_volume': sum(order.volume_remain for order in my_sell_orders),
-            'my_sell_history': my_sell_history,
-            'my_buy_price': my_buy_order.price if my_buy_order else None,
-            'my_buy_price_last_update': my_buy_price_last_update,
-            'my_buy_price_undercut_time': my_buy_price_undercut_time,
-            'my_buy_price_undercut_time_avg': my_buy_price_undercut_time_avg,
-            'my_buy_volume': sum(order.volume_remain for order in my_buy_orders),
-            'my_buy_history': my_buy_history,
-            'station_lowest_sell_order': station_lowest_sell,
-            'station_highest_buy_order': station_highest_buy,
-            'spread': spread,
-            'spread_inverse_rounded': spread_inverse_rounded,
-            'history_daily_volume_avg': region_daily_volumes[type_id],
-            'recent_sell_orders_issued': recent_counts.get((type_id, False), 0),
-            'recent_buy_orders_issued': recent_counts.get((type_id, True), 0),
-        }
-
-        item_data['regions'][region_id] = region_data
-
-        # The comparison hub: Jita, or Amarr when already looking at Jita.
-        item_data['regions'][other_region_id] = {
-            'station_lowest_sell_order': other_lowest_sells.get(type_id),
-            'station_highest_buy_order': other_highest_buys.get(type_id),
-            'history_daily_volume_avg': other_daily_volumes[type_id]
-        }
-
-        context['item_data'][type_id] = item_data
-
-    context['isk_in_escrow'] = isk_in_escrow
-    context['isk_in_sell_orders'] = isk_in_sell_orders
-    context['market_group_options'] = sde_service.get_market_group_options(
-        excluded_root_ids=NON_TRADED_MARKET_GROUP_ROOTS)
-    context['meta_groups'] = sde_service.get_meta_groups()
+    context = dict(context_extras, **{
+        'trade_hub_region': trade_hub_region,
+        'trade_hub_jita': trade_hub_jita,
+        'trade_hub_amarr': trade_hub_amarr,
+        'trade_hub_other': trade_hub_other,
+        'item_data': item_data,
+        'item_dict': item_dict,
+        'item_dict_extra': extra_items,
+        'isk_in_escrow': isk_in_escrow,
+        'isk_in_sell_orders': isk_in_sell_orders,
+        # The notification poller's start cursor, so a reload never reports
+        # undercuts that happened while the page was closed.
+        'max_undercut_id': market_service.latest_undercut_id(region_id, owner_ids),
+        'market_group_options': sde_service.get_market_group_options(
+            excluded_root_ids=NON_TRADED_MARKET_GROUP_ROOTS),
+        'meta_groups': sde_service.get_meta_groups(),
+    })
 
     return render(request, "market/trade_hub/trade_hub.html", context)

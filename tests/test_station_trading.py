@@ -14,7 +14,7 @@ from django.utils import timezone
 from evesde.models import MarketGroup
 from market.models import MarketOrderUndercut, TradeItem
 from marketdata.models import History
-from market.services import market_service
+from market.services import market_service, station_trading
 
 from .conftest import CHARACTER_ID
 from .test_market_service_db import (
@@ -123,6 +123,45 @@ class TestTradeHubMetrics:
     def test_spread_from_competitor_orders(self, region_data):
         assert region_data["spread"] == pytest.approx((100.0 - 80.0) / 100.0 * 100)
         assert region_data["spread_inverse_rounded"] == 80
+
+    def test_spread_without_a_competitor_seller(self, character_client, trade_hubs,
+                                                monkeypatch):
+        # An item nobody offers has no ask to price against, so the stand-in ask
+        # makes the spread total and the colour band the lowest one.
+        monkeypatch.setattr(market_service, "get_character_assets", lambda *a, **kw: {})
+        add_type(34, "Tritanium")
+        TradeItem.objects.create(type_id=34, name="Tritanium", group_id=18,
+                                 market_group_id=999)
+        amarr_order(1, 34, 80.0, is_buy=True, volume_remain=10)
+
+        response = character_client.get(
+            reverse("market_trade_hub", kwargs={"region_id": AMARR_REGION}))
+
+        region_data = response.context["item_data"][34]["regions"][AMARR_REGION]
+        assert region_data["station_lowest_sell_order"] is None
+        # float(): the stand-in ask is an int and the bid a Decimal, so the
+        # spread comes back as a Decimal and approx cannot subtract the two.
+        assert float(region_data["spread"]) == pytest.approx(
+            (station_trading.NO_SELLER_PRICE - 80.0)
+            / station_trading.NO_SELLER_PRICE * 100)
+        assert region_data["spread_inverse_rounded"] == 0
+
+    def test_spread_without_a_competitor_buyer(self, character_client, trade_hubs,
+                                               monkeypatch):
+        monkeypatch.setattr(market_service, "get_character_assets", lambda *a, **kw: {})
+        add_type(34, "Tritanium")
+        TradeItem.objects.create(type_id=34, name="Tritanium", group_id=18,
+                                 market_group_id=999)
+        amarr_order(1, 34, 100.0, volume_remain=10)
+
+        response = character_client.get(
+            reverse("market_trade_hub", kwargs={"region_id": AMARR_REGION}))
+
+        region_data = response.context["item_data"][34]["regions"][AMARR_REGION]
+        assert region_data["station_highest_buy_order"] is None
+        assert float(region_data["spread"]) == pytest.approx(
+            (100.0 - station_trading.NO_BUYER_PRICE) / 100.0 * 100)
+        assert region_data["spread_inverse_rounded"] == 0
 
     def test_undercut_times_in_hours(self, region_data):
         assert region_data["my_sell_price_undercut_time"] == pytest.approx(2.0)
