@@ -42,8 +42,8 @@
     <td>{{ buy_history|get_by_key:'avg_price'|isk_value }}</td> -->
     <td class="history-last-price"><a href="#">{{ buy_history|get_by_key:'last_price'|isk_value }}</a></td>
     {% endwith %}
-    <td>{{ item_data_hub|get_by_key:'history_daily_volume_avg'|floatformat:0 }}</td>
-    <td>{{ item_data_other_hub|get_by_key:'history_daily_volume_avg'|floatformat:0 }}</td>
+    <td>{{ item_data_hub|get_by_key:'history_daily_volume_avg'|floatformat:1 }}</td>
+    <td>{{ item_data_other_hub|get_by_key:'history_daily_volume_avg'|floatformat:1 }}</td>
     <td>{{ item_data_hub|get_by_key:'history_median_high'|isk_value_blank }}</td>
     <td>{{ item_data_other_hub|get_by_key:'history_median_high'|isk_value_blank }}</td>
     <td>{{ item_data_hub|get_by_key:'history_price_ratio'|floatformat:2 }}</td>
