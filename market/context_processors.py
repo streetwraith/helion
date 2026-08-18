@@ -3,10 +3,30 @@ from django.db.models import Q
 
 from esi.models import Token
 from market.models import EsiFetchState, TradeHub
-from market.services import market_service
+from market.services import balances, market_service, tracking
 
 # Matches the watchdog tick, so the bar is at most one tick behind.
 FETCH_WARNINGS_CACHE_SECONDS = 60
+
+# The balance itself only changes when an hourly wallet feed runs, so a minute of
+# staleness costs nothing and keeps six queries off every page load.
+WALLET_BALANCE_CACHE_SECONDS = 60
+
+
+def _wallet_balance():
+    """Every tracked wallet summed, for the header.
+
+    Cached because deciding *which* wallets to sum costs six queries -
+    TrackedCharacter, the tokens behind it, and one distinct per table that names
+    a corporation - which is far too much for a figure on every page. Held in a
+    dict, because the sum is legitimately None when no balance is cached at all
+    and that must not read as a cache miss.
+    """
+    held = cache.get('wallet_balance_total')
+    if held is None:
+        held = {'total': balances.total(*tracking.wallet_balance_owner_ids())}
+        cache.set('wallet_balance_total', held, WALLET_BALANCE_CACHE_SECONDS)
+    return held['total']
 
 
 def _fetch_warnings():
@@ -51,4 +71,5 @@ def global_site_data(request):
         context["price_ticker"] = market_service.get_price_ticker()
         context["esi_fetch_warnings"] = _fetch_warnings()
         context["header_characters"] = _header_characters(request)
+        context["wallet_balance"] = _wallet_balance()
     return context

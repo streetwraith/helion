@@ -424,9 +424,13 @@ class TestRefreshCharacterWallet:
 
         monkeypatch.setattr(esi_sync, "update_market_transactions", fake_transactions)
         monkeypatch.setattr(esi_sync, "get_wallet_journal", fake_journal)
+        # The balance rides along on this feed. It has no Expires of its own: the
+        # header figure must not pace the journal.
+        monkeypatch.setattr(esi_sync, "store_character_balance",
+                            lambda character_id: calls.append("balance"))
 
         assert esi_sync.refresh_character_wallet(CHARACTER_ID) == EXPIRES + timedelta(minutes=1)
-        assert set(calls) == {"transactions", "journal"}
+        assert set(calls) == {"transactions", "journal", "balance"}
 
 
 CORPORATION_ID = 98_000_001
@@ -559,9 +563,18 @@ class TestCorporationWallet:
                 [esi_model(row) for row in (journal if division == 1 else [])],
                 esi_response()))
 
+        # Deliberately not recorded in `seen`: one route answers every division,
+        # so it has no place in the per-division fan-out assertions. The dedicated
+        # balance tests read the cache instead.
+        def balance_route(corporation_id, token):
+            return SimpleNamespace(result=lambda **kw: [
+                SimpleNamespace(division=division, balance=100.0 * division)
+                for division in esi_sync.WALLET_DIVISIONS])
+
         monkeypatch.setattr(esi_sync, "esi", SimpleNamespace(client=SimpleNamespace(
             Character=affiliation,
             Wallet=SimpleNamespace(
+                GetCorporationsCorporationIdWallets=balance_route,
                 GetCorporationsCorporationIdWalletsDivisionTransactions=transactions_route,
                 GetCorporationsCorporationIdWalletsDivisionJournal=journal_route))))
         monkeypatch.setattr(esi_sync, "Token", FAKE_TOKEN)

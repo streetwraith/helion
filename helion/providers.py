@@ -10,6 +10,7 @@ esi = ESIClientProvider(
     operations=[
         "GetCharactersCharacterIdWalletTransactions",
         "GetCharactersCharacterIdWalletJournal",
+        "GetCharactersCharacterIdWallet",
         "GetCharactersCharacterIdOrders",
         "GetCharactersCharacterIdAssets",
         "PostCharactersCharacterIdAssetsNames",
@@ -19,6 +20,7 @@ esi = ESIClientProvider(
         "PostCharactersAffiliation",
         "GetCorporationsCorporationIdWalletsDivisionTransactions",
         "GetCorporationsCorporationIdWalletsDivisionJournal",
+        "GetCorporationsCorporationIdWallets",
         "GetCorporationsCorporationIdAssets",
         "GetCorporationsCorporationIdContracts",
         "GetCorporationsCorporationIdOrders",

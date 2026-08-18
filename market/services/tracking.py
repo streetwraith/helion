@@ -60,6 +60,25 @@ def trader_character_ids():
                .values_list('character_id', flat=True))
 
 
+def wallet_balance_owner_ids():
+    """(character ids, corporation ids) whose balance the header sums.
+
+    The characters come from TrackedCharacter, because only a running wallet feed
+    ever writes a balance. Matching on `track_list()` rather than the raw `tracks`
+    string, so `corp_wallet` alone does not read as a personal wallet feed.
+
+    The corporations come off the stored rows, not from the affiliation route:
+    that route costs an ESI call and this answer feeds every page. A corporation
+    with no wallet feed therefore appears here and simply has nothing cached.
+    """
+    names = [tracked.character_name for tracked
+             in TrackedCharacter.objects.only('character_name', 'tracks')
+             if 'wallet' in tracked.track_list()]
+    character_ids = set(Token.objects.filter(character_name__in=names)
+                        .values_list('character_id', flat=True))
+    return character_ids, corporation_ids()
+
+
 def is_trader(character_name):
     """Whether the statistics count this character. An untracked one is not.
 

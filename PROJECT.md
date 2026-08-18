@@ -30,6 +30,7 @@ contracts.py        contract reads, and the active/deadline rules
 orders.py           order-book queries: undercuts, best asks, shopping, ticker
 history.py          market-history queries and the statistics over them
 wallet.py           own-transaction queries and the profit statistics
+balances.py         the cached wallet balances the header sums
 ice_stats.py        the ice business as the wallet recorded it, per window
 station_trading.py  the trade hub desk table, one entry per item
 hauling.py          the two hauling deal scans
@@ -362,6 +363,46 @@ today, because EVE Ref publishes a day's history a day or two late.
 One cache entry holds the three prices and their history together for 10 minutes. Its key names
 the shape (`price_ticker_items`), so a deploy that changes the entry cannot read the old shape
 back out of Redis until it expires.
+
+## The header wallet balance
+
+One figure beside the ticker: every tracked wallet summed, characters and corporations together.
+The corporation wallets are deliberately in the same number — they pay for most personal
+purchases, so the sum reads as "ISK I can reach". That is the opposite of the rule the profit
+statistics use, where corporate money is not trade, and the two are meant to differ.
+
+**It lives only in the cache** (`balances.py`), written by the wallet feeds and read by the context
+processor. No table holds it: the figure is a header display, the next feed run replaces it, and
+nothing else reads it.
+
+**Deriving it from `WalletJournal.balance` was rejected, and measurement is why.** That column holds
+the balance after the newest *stored* row, which is the balance at the last ISK movement rather than
+now. Measured against the live route on 2026-08-18, after two idle days the journal was short of the
+real balance by a factor of nearly five — wrong, not merely stale.
+
+**Two extra requests per feed cycle, no new scope.** `GetCharactersCharacterIdWallet` returns one
+float; `GetCorporationsCorporationIdWallets` answers all seven divisions in one call and they are
+summed. Both sit under the scopes the journal feeds already hold, verified against live ESI. Both
+had to be added to the `operations` whitelist in `helion/providers.py` — the client loads only the
+operations helion names, because the full spec costs ~90 MB of pydantic models.
+
+- **A failed balance call never fails the feed.** It logs and leaves the key absent. The balance is
+  cosmetic; the journal beside it feeds the profit statistics, and letting a 403 hard-disable the
+  wallet feed after three attempts would stop the journal too. Only ESI's own failures are caught
+  (`ESI_FAILURES`), so a bug in the module still raises. A network failure propagates on purpose:
+  the journal call beside it would fail anyway.
+- **`use_etag=False` on both calls.** A 304 carries no balance, and honouring it would let the
+  cached figure expire and silently drop that wallet out of the sum. The payload is one number, so
+  the ETag saves nothing worth that.
+- **A missing wallet contributes nothing, silently.** A fresh Redis, a newly tracked wallet and a
+  failed call all look identical and all resolve on the next feed run. The sum is `None` rather than
+  zero when *no* balance is cached, so the header omits the figure instead of claiming the wallets
+  are empty.
+- **The TTL is three feed cycles**, so one missed hourly run cannot blank the header, while a feed
+  that stays dead eventually drops out — and that case already shows in the fetch warning bar.
+- **The total is cached for a minute on top.** Deciding *which* wallets to sum costs six queries
+  (TrackedCharacter, its tokens, and one distinct per table that names a corporation), which is far
+  too much for a figure rendered on every page.
 
 ## Undercut detection
 

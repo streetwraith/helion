@@ -9,7 +9,7 @@ from django.utils import timezone
 
 from market import context_processors
 from market.models import TradeHub
-from market.services import esi_scheduler, mistakes, orders
+from market.services import balances, esi_scheduler, mistakes, orders
 from marketdata.models import RegionStatus
 
 
@@ -148,6 +148,9 @@ class FakeCache:
     def get(self, key, default=None):
         return self._data.get(key, default)
 
+    def get_many(self, keys):
+        return {key: self._data[key] for key in keys if key in self._data}
+
     def set(self, key, value, timeout=None):
         self._data[key] = value
 
@@ -169,6 +172,9 @@ def isolated_shared_caches(monkeypatch):
     monkeypatch.setattr(orders, "cache", FakeCache())
     monkeypatch.setattr(context_processors, "cache", FakeCache())
     monkeypatch.setattr(mistakes, "cache", FakeCache())
+    # The header wallet balance lives in the same shared Redis, written by the
+    # wallet feeds. A real prod balance must not leak into a test assertion.
+    monkeypatch.setattr(balances, "cache", FakeCache())
     # The scheduler's global pause lives in the same shared Redis, and anything
     # that calls ESI now reads it. A real pause there must not fail the suite.
     monkeypatch.setattr(esi_scheduler, "cache", FakeCache())

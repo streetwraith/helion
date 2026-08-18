@@ -33,6 +33,9 @@
     <header>
         <div id="top-bar">
             {% if user.is_authenticated %}
+            {% if wallet_balance %}
+            <span id="wallet-balance" title="Every tracked wallet, characters and corporations, summed">{{ wallet_balance|isk_value_mil }}</span>
+            {% endif %}
             <span id="price-ticker">
                 {% for item in price_ticker %}
                 <span class="ticker-item">{{ item.label }}:

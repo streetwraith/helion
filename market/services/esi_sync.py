@@ -10,12 +10,19 @@ from email.utils import parsedate_to_datetime
 
 from django.db import transaction
 
-from esi.exceptions import HTTPNotModified
+from esi.exceptions import (
+    ESIBucketLimitException, ESIErrorLimitException, HTTPError, HTTPNotModified)
 from esi.models import Token
 from helion.providers import esi
 from market.models import (
     CharacterAsset, CharacterContract, CharacterOrder, MarketTransaction, WalletJournal)
-from market.services import names
+from market.services import balances, names
+
+# What ESI itself can fail with: a 4xx or 5xx, a 304, and the two rate limits.
+# A balance fetch catches these and nothing wider, so a bug in this module still
+# fails loudly. A network-level failure propagates on purpose - the journal call
+# beside it would fail too, so isolating it would buy nothing.
+ESI_FAILURES = (HTTPError, ESIErrorLimitException, ESIBucketLimitException)
 
 logger = logging.getLogger(__name__)
 
@@ -98,11 +105,35 @@ def get_wallet_journal(character_id):
     return _expires(response.headers)
 
 
+def store_character_balance(character_id):
+    """Cache the character's wallet balance for the header.
+
+    A failure here must not fail the wallet feed. The balance is a header figure;
+    the journal beside it feeds the profit statistics, and letting a 403 from a
+    missing scope hard-disable the feed after three attempts would stop the
+    journal too. The header reads an absent key as nothing to add.
+
+    `use_etag=False` because a 304 carries no balance, and honouring it would let
+    the cached figure expire and drop the wallet out of the header sum. The
+    payload is one number, so the ETag saves nothing worth that.
+    """
+    token = Token.get_token(character_id, 'esi-wallet.read_character_wallet.v1')
+    try:
+        balance = esi.client.Wallet.GetCharactersCharacterIdWallet(
+            character_id=character_id, token=token).result(use_etag=False)
+    except ESI_FAILURES:
+        logger.warning("wallet balance failed for character %s", character_id,
+                       exc_info=True)
+        return
+    balances.store_character(character_id, balance)
+
+
 def refresh_character_wallet(character_id):
     """Both wallet routes together: they serve one consumer (the profit
     statistics) and share one rate bucket. The later Expires wins so the
     pair repolls as one."""
     expirations = [update_market_transactions(character_id), get_wallet_journal(character_id)]
+    store_character_balance(character_id)
     expirations = [value for value in expirations if value is not None]
     return max(expirations) if expirations else None
 
@@ -323,11 +354,28 @@ def _corporation_journal(corporation_id, division, token):
     return _expires(response.headers)
 
 
+def store_corporation_balance(corporation_id, token):
+    """Cache the corporation's balance for the header: all seven divisions summed.
+
+    One route answers every division, so this is one request. It is isolated the
+    same way `store_character_balance` is, and for the same reason.
+    """
+    try:
+        wallets = esi.client.Wallet.GetCorporationsCorporationIdWallets(
+            corporation_id=corporation_id, token=token).result(use_etag=False)
+    except ESI_FAILURES:
+        logger.warning("wallet balance failed for corporation %s", corporation_id,
+                       exc_info=True)
+        return
+    balances.store_corporation(corporation_id, sum(row.balance for row in wallets))
+
+
 def refresh_corporation_wallet(character_id):
     """Journal and transactions for all seven wallets of the character's
     corporation. The later Expires wins, so the set repolls as one."""
     corporation_id = _corporation_id(character_id)
     token = Token.get_token(character_id, 'esi-wallet.read_corporation_wallets.v1')
+    store_corporation_balance(corporation_id, token)
     expirations = []
     for division in WALLET_DIVISIONS:
         expirations.append(_corporation_transactions(corporation_id, division, token))
