@@ -99,6 +99,11 @@ def test_ice_page_query_ceiling(character_client, trade_hubs, monkeypatch):
     add_order(1, 28434, 1_000_000.0)  # Compressed Clear Icicle in Jita
     add_order(2, 16272, 500.0)  # Heavy Water sell
     add_order(3, 16272, 400.0, is_buy=True)  # Heavy Water buy
+    # The profit block reads the ice type ids off the SDE groups. Without these
+    # rows the id set is empty, Django drops the transaction query, and the count
+    # misses a query the real page runs.
+    add_type(28434, "Compressed Clear Icicle", group_id=465)
+    add_type(16272, "Heavy Water", group_id=423)
 
     character_client.get(url, ICE_PAGE_PARAMS)  # warm the ticker cache
     # 12 ice types x 5 hubs and 7 products x 4 hubs used to cost ~700 queries.

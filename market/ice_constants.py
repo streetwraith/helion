@@ -1,5 +1,20 @@
 """Ice hauling data: hull sizes, product type ids, and reprocessing yield tables."""
 
+# The SDE inventory groups that define the ice business: ice, compressed and not,
+# and the seven products it reprocesses into. Wider than ICE_TYPES below, which
+# fixes the yield table and holds compressed ice only.
+ICE_GROUP_IDS = (465, 423)
+
+# The corporation that runs the reprocessing structure used for ice. A
+# reprocessing_tax row names the owner of the facility and never the structure
+# itself, so this is the finest filter the wallet journal allows.
+ICE_REFINING_CORPORATION_ID = 98671032
+
+# Collateral paid out on two failed ice couriers, pinned by journal id. A payout
+# names no item, so a later one could be for anything; pinning keeps a non-ice
+# payout out of the ice sales total.
+ICE_COLLATERAL_PAYOUT_JOURNAL_IDS = (24325786604, 24325786992)
+
 FREIGHTER_HULL_CAPACITY = {
     'fenrir': 435000,
     'charon': 465000,

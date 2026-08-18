@@ -6,7 +6,7 @@ from django.utils import timezone
 from urllib.parse import urlencode
 from market.ice_constants import FREIGHTER_HULL_CAPACITY, ICE_PRODUCT_TYPES, ICE_TYPES
 from market.models import TradeHub
-from market.services import market_service
+from market.services import ice_stats, market_service
 
 # Region and station ids come from the TradeHub table; these lists only fix
 # the display order and the reprocessing scope.
@@ -167,6 +167,8 @@ def market_ice_index(request):
         market_hubs, context['params'], ice_buy_averages, average_transaction_prices, today)
 
     context['average_transaction_prices'] = average_transaction_prices
+    # What the wallet did, not what the parameters above project.
+    context['ice_stats'] = ice_stats.build_stats(timezone.now())
     return render(request, "market/ice.html", context)
 
 def _build_product_data(product_books, product_history, ice_products_stock,

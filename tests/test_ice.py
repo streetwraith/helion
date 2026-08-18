@@ -3,8 +3,10 @@ from datetime import date, timedelta
 
 import pytest
 from django.urls import reverse
+from django.utils import timezone
 
 from marketdata.models import History
+from market.models import MarketTransaction
 from market.services import market_service
 
 from .test_market_service_db import JITA_REGION, add_order, add_type
@@ -166,6 +168,21 @@ def test_chart_stroke_is_transparent_without_recent_history(ice_client):
     context = get_ice(ice_client)
     chart = context["ice_product_data"]["Liquid Ozone"]["Jita"]["chart_data"]
     assert chart["color"] == "transparent"
+
+
+def test_the_profit_block_reaches_the_page(ice_client):
+    add_type(HEAVY_WATER, "Heavy Water", group_id=423)
+    MarketTransaction.objects.create(
+        transaction_id=1, character_id=901, client_id=1, date=timezone.now(),
+        is_buy=False, is_personal=True, journal_ref_id=1, location_id=60008494,
+        quantity=100, type_id=HEAVY_WATER, unit_price=1_000_000.0)
+
+    response = ice_client.get(reverse("market_ice_index"), ZERO_PARAMS)
+    sells, = [row for row in response.context["ice_stats"]["rows"]
+              if row["label"] == "sells"]
+
+    assert sells["cells"][0] == pytest.approx(100_000_000.0)
+    assert "<h2>Ice profit</h2>" in response.content.decode()
 
 
 def test_reprocessing_offered_only_for_the_four_haul_hubs(ice_client):

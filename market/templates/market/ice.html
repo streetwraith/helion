@@ -378,6 +378,47 @@
 {% endwith %}
 {% endfor %}
 
+<h2>Ice profit</h2>
+
+<table>
+    <thead>
+        <tr>
+            <th></th>
+            {% for window in ice_stats.windows %}
+            <th>{{ window }}</th>
+            {% endfor %}
+        </tr>
+    </thead>
+    <tbody>
+        {% for row in ice_stats.rows %}
+        <tr>
+            <th>{{ row.label }}</th>
+            {% for cell in row.cells %}
+            <td>{{ cell|isk_value }}</td>
+            {% endfor %}
+        </tr>
+        {% endfor %}
+    </tbody>
+</table>
+
+<p>
+    Ice and ice products only, from the wallet, so the parameters above do not
+    change it. Sells include the collateral paid out on two failed ice couriers,
+    in the windows that reach them.
+</p>
+<p>
+    The broker fee is the one modelled figure. No journal row attributes a broker
+    fee to an item, so this is the sell value at the rate above, and it understates
+    by roughly a third because a relisted order pays again. Sales tax is measured
+    and split by the second it was charged in. Refining is the reprocessing tax of
+    one facility owner, which assumes ice is all that goes through it.
+</p>
+<p>
+    A short window misleads on purpose: ice bought in one month sells as products
+    in the next, so the cells hold whatever happened in the window, not the margin
+    on the ice it bought.
+</p>
+
 <script type="text/javascript">
     $(document).ready(function() {
         $('.chart-values').peity('line');

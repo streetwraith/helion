@@ -30,6 +30,7 @@ contracts.py        contract reads, and the active/deadline rules
 orders.py           order-book queries: undercuts, best asks, shopping, ticker
 history.py          market-history queries and the statistics over them
 wallet.py           own-transaction queries and the profit statistics
+ice_stats.py        the ice business as the wallet recorded it, per window
 station_trading.py  the trade hub desk table, one entry per item
 hauling.py          the two hauling deal scans
 mistakes.py         underpriced sell orders in a region
@@ -583,6 +584,60 @@ else, `market_escrow` and the mission and bounty rows included, is ignored):
   first. Only `player_donation` and `corporation_account_withdrawal` collide today and neither
   reaches a metric, so the statistics are unaffected. A per-character wallet view would need one row
   per wallet first.
+
+## The ice profit block
+
+The same idea narrowed to one business. `ice_stats.py` sums six metrics over three cumulative
+windows (0-30, 0-90 and everything) and the ice page renders them below its projection tables. It
+shares no code with `WalletStatistics`, because four of the six metrics differ in source or method.
+
+**Scope is the SDE inventory group, not the page's own table.** `ICE_GROUP_IDS` names the two groups
+that define the business, and the type ids come from `Type.group_id` — never a join to the groups
+table, since a target holds only the entities an operator imported. This is wider than `ICE_TYPES`,
+which fixes the yield table and lists compressed ice only: the group also catches uncompressed ice,
+which the wallet does hold.
+
+**No trader guard here, only the personal one.** The item filter already does what
+`TrackedCharacter.is_trader` does on the index page: a mission alt contributes nothing unless it
+actually traded ice. Applying the trader guard would have kept the revenue of the one tracked trader
+while dropping 41 ice buys worth 16.6G made by three other characters, and lifetime profit would
+have read 85% high.
+
+**Sales tax is measured and allocated by the second.** A `transaction_tax` row carries no
+`context_id`, so it names no item, and the station cannot stand in for one: Amarr and Jita are each
+about half ice by ISK. What does work is the timestamp. The sales a tax row was charged on share its
+second, so the tax splits by the value of the sales in that second. The split is exact rather than an
+estimate, because the sales-tax rate is uniform for one character at one moment. On the stored data
+it never has to divide anything: **no second mixes ice with another item.** A tax row whose sales
+are absent contributes nothing, which is 5 rows and 0.076% of lifetime tax.
+
+The denominator comes from the transaction table and not from the `market_transaction` journal rows,
+although both give the same answer. The transaction table is more complete — 456 sells have no
+journal row — and it avoids `context_id`, which other ref_types populate with order ids.
+
+**The broker fee is the one modelled figure, and it is modelled sell-side.** No `brokers_fee` row
+carries a `context_id`, and the fee is charged when an order is placed, so no transaction exists yet
+to point at. The row is therefore market sells times `get_brokers_fee()`, matching
+`net_sell_proceeds` in `ice_views`. Two caveats belong to it: it understates, because a relisted
+order pays the fee again and the model charges once (across the whole business, real fees run about
+1.33 times a single pass); and the collateral payouts are excluded from the basis, because a payout
+is not a market sale.
+
+**Refining is one facility owner.** `reprocessing_tax` names the corporation that owns the facility
+and never the structure, so `ICE_REFINING_CORPORATION_ID` is the finest filter available. Structure
+granularity is not possible. The row therefore assumes that owner's facilities process ice only.
+
+**Contracts stay out except two pinned payouts.** No contract row names an item, so courier costs
+cannot be told apart from any other contract, and the whole family is excluded — including
+`contract_price`, which the index page does count as a sale. The exception is
+`ICE_COLLATERAL_PAYOUT_JOURNAL_IDS`, two failed ice couriers named by journal id. Pinning rather than
+accepting the ref_type keeps a future payout for something else out of the ice sales, at the cost of
+needing an edit when the next ice one lands.
+
+**A short window misleads by construction.** Ice bought in one month sells as products in the next,
+so a cell holds what happened inside the window and not the margin on the ice that window bought. The
+30d and 90d columns of the live data differ by less than 4% in buys and by a factor of two in sells.
+The page states this under the table.
 
 ## The market browser
 
