@@ -28,7 +28,7 @@ from market.services.history import (
     calculate_market_history_average_volume,
     calculate_market_history_averages,
     calculate_market_history_averages_bulk,
-    get_average_daily_volume_bulk,
+    get_history_levels_bulk,
     get_market_history,
     get_market_history_bulk,
     get_market_history_chart,

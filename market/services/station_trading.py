@@ -38,8 +38,8 @@ class _Books:
     sell_histories: dict
     buy_histories: dict
     undercuts_by_type: dict
-    region_daily_volumes: dict
-    other_daily_volumes: dict
+    region_levels: dict
+    other_levels: dict
     recent_counts: dict
     hub_names_by_station: dict
     region_names: dict
@@ -103,9 +103,8 @@ def _prefetch(region_id, other_region_id, station_id, trade_hubs, type_ids,
             type_ids, location_id=station_id, is_buy=False),
         buy_histories=wallet.get_trade_history_bulk(type_ids, is_buy=True),
         undercuts_by_type=undercuts_by_type,
-        region_daily_volumes=history.get_average_daily_volume_bulk(region_id, type_ids),
-        other_daily_volumes=history.get_average_daily_volume_bulk(
-            other_region_id, type_ids),
+        region_levels=history.get_history_levels_bulk(region_id, type_ids),
+        other_levels=history.get_history_levels_bulk(other_region_id, type_ids),
         recent_counts=_recent_counts(competitor_orders, now),
         hub_names_by_station={hub.station_id: hub.name for hub in trade_hubs},
         region_names=dict(RegionStatus.objects.values_list('region_id', 'region_name')),
@@ -148,6 +147,10 @@ def _item_entry(type_id, books, region_id, other_region_id, now):
     sell_history = books.sell_histories[type_id]
     buy_history = books.buy_histories[type_id]
 
+    region_levels = books.region_levels[type_id]
+    other_levels = books.other_levels[type_id]
+    other_lowest_sell = books.other_lowest_sells.get(type_id)
+
     entry = {
         'in_assets': books.assets.get(type_id, 0),
         'regions': {
@@ -169,15 +172,21 @@ def _item_entry(type_id, books, region_id, other_region_id, now):
                 'station_highest_buy_order': station_highest_buy,
                 'spread': spread,
                 'spread_inverse_rounded': 100 - round(spread / 5) * 5,
-                'history_daily_volume_avg': books.region_daily_volumes[type_id],
+                'history_daily_volume_avg': region_levels.daily_volume_avg,
+                'history_median_high': region_levels.median_high,
+                'history_price_ratio': _price_ratio(station_lowest_sell,
+                                                    region_levels.median_high),
                 'recent_sell_orders_issued': books.recent_counts.get((type_id, False), 0),
                 'recent_buy_orders_issued': books.recent_counts.get((type_id, True), 0),
             },
             # The comparison hub: Jita, or Amarr when already looking at Jita.
             other_region_id: {
-                'station_lowest_sell_order': books.other_lowest_sells.get(type_id),
+                'station_lowest_sell_order': other_lowest_sell,
                 'station_highest_buy_order': books.other_highest_buys.get(type_id),
-                'history_daily_volume_avg': books.other_daily_volumes[type_id],
+                'history_daily_volume_avg': other_levels.daily_volume_avg,
+                'history_median_high': other_levels.median_high,
+                'history_price_ratio': _price_ratio(other_lowest_sell,
+                                                    other_levels.median_high),
             },
         },
     }
@@ -205,6 +214,19 @@ def _add_best_hub_prices(entry, type_id, books):
             'hub': (books.hub_names_by_station.get(highest_buy.location_id)
                     or books.region_names[highest_buy.region_id]),
         }
+
+
+def _price_ratio(station_lowest_sell, median_high):
+    """The station's ask as a multiple of the window's median daily high.
+
+    Above 1 the ask sits over the level the item traded at; below 1 it sits
+    under. The two are not the same measure, so 1.0 is not a fair price: an ask
+    normally stands above the day's trades. Compare a row against itself over
+    time, or against other rows, not against 1.
+    """
+    if station_lowest_sell is None or not median_high:
+        return None
+    return float(station_lowest_sell.price) / median_high
 
 
 def _spread(station_lowest_sell, station_highest_buy):

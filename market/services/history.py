@@ -1,8 +1,9 @@
 """Market history queries and the statistics computed over them."""
 import statistics
+from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 
-from django.db.models import Max, Sum
+from django.db.models import Aggregate, Count, FloatField, Max, Sum
 
 from market.services import wallet
 from marketdata.models import History
@@ -236,20 +237,69 @@ def calculate_market_history_average_volume(history):
         return None
     return statistics.mean([item.volume for item in history])
 
-def get_average_daily_volume_bulk(region_id, type_ids, days_back=90):
-    """Bulk twin of calculate_market_history_average_volume over get_market_history:
-    days without a history row count as zero volume. None for every type when the
-    region has no history at all (the empty-history path of the per-type pair)."""
+# Below this many days with a price, the window gets no median. A median over a
+# handful of days is not a level, and the ratio built on it reads as fact.
+MEDIAN_MIN_DAYS = 30
+
+
+class _Median(Aggregate):
+    """The median of a column. Postgres offers percentile_cont only as an
+    ordered-set aggregate, which needs a template rather than a function name."""
+    function = 'PERCENTILE_CONT'
+    name = 'Median'
+    template = '%(function)s(0.5) WITHIN GROUP (ORDER BY %(expressions)s)'
+    output_field = FloatField()
+
+
+@dataclass(frozen=True)
+class HistoryLevels:
+    """What one item's history window says about volume and about price."""
+    daily_volume_avg: float | None
+    median_high: float | None
+
+
+_NO_HISTORY = HistoryLevels(daily_volume_avg=None, median_high=None)
+
+
+def get_history_levels_bulk(region_id, type_ids, days_back=90):
+    """Average daily volume and the median daily high per type, in one query.
+
+    The two divide differently on purpose. The average spreads the volume over
+    the whole window, so a day without a history row counts as zero traded: it
+    answers how much moves per calendar day. The median ignores those days, so it
+    is the level of the days that did trade.
+
+    The median takes `highest`, the day's top trade, because the callers compare
+    it against an ask. It stays None under MEDIAN_MIN_DAYS days of price.
+
+    Volume is 0 for a type the window does not hold. Every field is None when the
+    region has no history at all (the empty-history path of the per-type pair).
+    """
     latest_date = History.objects.filter(region_id=region_id).aggregate(Max('date'))['date__max']
     if not latest_date:
-        return {type_id: None for type_id in type_ids}
+        return {type_id: _NO_HISTORY for type_id in type_ids}
     window_days = days_back + 1  # cutoff..latest inclusive
-    totals = dict(
-        History.objects.filter(
-            region_id=region_id,
-            type_id__in=type_ids,
-            date__gte=latest_date - timedelta(days=days_back),
-            date__lte=latest_date,
-        ).values('type_id').annotate(total=Sum('volume')).values_list('type_id', 'total')
+
+    rows = History.objects.filter(
+        region_id=region_id,
+        type_id__in=type_ids,
+        date__gte=latest_date - timedelta(days=days_back),
+        date__lte=latest_date,
+    ).values('type_id').annotate(
+        total=Sum('volume'),
+        # A row with no price is a day the median cannot use, but its volume
+        # still traded, so the two counts differ.
+        priced_days=Count('highest'),
+        median_high=_Median('highest'),
     )
-    return {type_id: totals.get(type_id, 0) / window_days for type_id in type_ids}
+
+    levels = {
+        row['type_id']: HistoryLevels(
+            daily_volume_avg=row['total'] / window_days,
+            median_high=(row['median_high']
+                         if row['priced_days'] >= MEDIAN_MIN_DAYS else None),
+        )
+        for row in rows
+    }
+    return {type_id: levels.get(type_id, HistoryLevels(0.0, None))
+            for type_id in type_ids}

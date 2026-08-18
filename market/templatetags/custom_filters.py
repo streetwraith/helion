@@ -72,6 +72,14 @@ def isk_value(value):
         return "{:,.2f}".format(value)
     return "{:,.0f}".format(value)
 
+@register.filter(name='isk_value_blank')
+def isk_value_blank(value):
+    """ISK, but an unknown value stays empty. isk_value prints 0 for None, and
+    "no median" is a different statement from "a median of zero ISK"."""
+    if value is None:
+        return ''
+    return isk_value(value)
+
 @register.filter(name='isk_value_k')
 def isk_value_k(value):
     if(value == 0 or value == None or isinstance(value, dict) or value == ''):

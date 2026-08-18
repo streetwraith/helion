@@ -46,7 +46,7 @@
 <div id="trade-hub-controls">
     <div class="filter-line">
         <label>o48 &le; <input type="number" id="max-o48" class="filter-threshold" min="0" step="1"></label>
-        <label>hvol {% if trade_hub_region.name != 'Jita' %}jita{% else %}amarr{% endif %}
+        <label>{{ trade_hub_other.name|first|lower }}_v
             &ge; <input type="number" id="min-hvol-other" class="filter-threshold" min="0" step="1"></label>
     </div>
 </div>
@@ -58,7 +58,7 @@
             <th colspan="4"></th>
             <th colspan="11">sell</th>
             <th colspan="11">buy</th>
-            <th colspan="2">hvol</th>
+            <th colspan="6">history</th>
         </tr>
         {% include 'market/trade_hub/_fragment_trade_hub_header_row.html' with jita_class=True %}
     </thead>
@@ -71,7 +71,7 @@
             <th colspan="4"></th>
             <th colspan="11">sell</th>
             <th colspan="11">buy</th>
-            <th colspan="2">hvol</th>
+            <th colspan="6">history</th>
         </tr>
     </tfoot>
 </table>
@@ -85,7 +85,7 @@
             <th colspan="4"></th>
             <th colspan="11">sell</th>
             <th colspan="11">buy</th>
-            <th colspan="2">hvol</th>
+            <th colspan="6">history</th>
         </tr>
         {% include 'market/trade_hub/_fragment_trade_hub_header_row.html' with jita_class=True %}
     </thead>
@@ -98,7 +98,7 @@
             <th colspan="4"></th>
             <th colspan="11">sell</th>
             <th colspan="11">buy</th>
-            <th colspan="2">hvol</th>
+            <th colspan="6">history</th>
         </tr>
     </tfoot>
 </table>

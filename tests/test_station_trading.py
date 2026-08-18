@@ -274,7 +274,95 @@ class TestTradeHubTableMarkup:
         # The column toggles shrink a group cell to its visible columns. A group
         # row that declares a width the data rows do not have would put the
         # header out of step with the table.
-        assert set(parser.widths) == {28}
+        assert set(parser.widths) == {32}
+
+
+def add_history_days(region_id, type_id, highs, volume=1):
+    """One history row per day, newest last, ending today."""
+    today = timezone.now().date()
+    for offset, high in enumerate(reversed(highs)):
+        History.objects.create(
+            region_id=region_id, type_id=type_id, date=today - timedelta(days=offset),
+            average=high / 2, highest=high, lowest=1.0,
+            order_count=1, volume=volume)
+
+
+class TestHistoryLevels:
+    """The median daily high and the ask-to-median ratio behind the m and r columns."""
+
+    @pytest.fixture
+    def desk(self, character_client, trade_hubs, monkeypatch):
+        """One item priced in Amarr, with the history days the test asks for."""
+        def build(highs, ask=100.0):
+            monkeypatch.setattr(market_service, "get_character_assets",
+                                lambda *a, **kw: {})
+            add_type(34, "Tritanium")
+            TradeItem.objects.create(type_id=34, name="Tritanium", group_id=18,
+                                     market_group_id=999)
+            amarr_order(1, 34, ask, volume_remain=10)
+            add_history_days(AMARR_REGION, 34, highs)
+            response = character_client.get(
+                reverse("market_trade_hub", kwargs={"region_id": AMARR_REGION}))
+            return response.context["item_data"][34]["regions"][AMARR_REGION]
+        return build
+
+    def test_median_takes_the_daily_high(self, desk):
+        # average is high/2 on every row, so a median of 20 proves the column.
+        region_data = desk([10.0] * 15 + [20.0] + [30.0] * 15)
+        assert region_data["history_median_high"] == pytest.approx(20.0)
+
+    def test_median_needs_thirty_priced_days(self, desk):
+        assert desk([20.0] * 29)["history_median_high"] is None
+
+    def test_median_arrives_on_the_thirtieth_day(self, desk):
+        assert desk([20.0] * 30)["history_median_high"] == pytest.approx(20.0)
+
+    def test_ratio_is_the_station_ask_over_the_median(self, desk):
+        region_data = desk([20.0] * 30, ask=50.0)
+        assert region_data["history_price_ratio"] == pytest.approx(2.5)
+
+    def test_ratio_blank_without_a_median(self, desk):
+        region_data = desk([20.0] * 29, ask=50.0)
+        assert region_data["history_price_ratio"] is None
+
+    def test_ratio_blank_without_a_seller(self, character_client, trade_hubs,
+                                          monkeypatch):
+        # Nothing on sale means no ask to compare, so the ratio stays empty
+        # rather than falling back on the stand-in ask the spread uses.
+        monkeypatch.setattr(market_service, "get_character_assets", lambda *a, **kw: {})
+        add_type(34, "Tritanium")
+        TradeItem.objects.create(type_id=34, name="Tritanium", group_id=18,
+                                 market_group_id=999)
+        add_history_days(AMARR_REGION, 34, [20.0] * 30)
+
+        response = character_client.get(
+            reverse("market_trade_hub", kwargs={"region_id": AMARR_REGION}))
+
+        region_data = response.context["item_data"][34]["regions"][AMARR_REGION]
+        assert region_data["history_median_high"] == pytest.approx(20.0)
+        assert region_data["history_price_ratio"] is None
+
+    def test_volume_average_still_spreads_over_the_whole_window(self, desk):
+        # 30 days of 1 unit over a 91-day window, gap days included.
+        region_data = desk([20.0] * 30)
+        assert region_data["history_daily_volume_avg"] == pytest.approx(30 / 91)
+
+    def test_columns_render_their_values(self, character_client, trade_hubs,
+                                         monkeypatch):
+        monkeypatch.setattr(market_service, "get_character_assets", lambda *a, **kw: {})
+        add_type(34, "Tritanium")
+        TradeItem.objects.create(type_id=34, name="Tritanium", group_id=18,
+                                 market_group_id=999)
+        amarr_order(1, 34, 50.0, volume_remain=10)
+        add_history_days(AMARR_REGION, 34, [20.0] * 30)
+
+        content = character_client.get(
+            reverse("market_trade_hub", kwargs={"region_id": AMARR_REGION})).content.decode()
+
+        assert "<td>20.00</td>" in content  # m, the median daily high
+        assert "<td>2.50</td>" in content  # r, the ask over that median
+        # Jita holds no history here, so both of its cells stay empty.
+        assert "<th>j_m</th>" in content and "<th>j_r</th>" in content
 
 
 class TestMistakes:

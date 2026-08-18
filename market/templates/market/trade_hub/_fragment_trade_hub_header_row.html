@@ -27,6 +27,12 @@
             <!-- <th>hv</th>
             <th>havgp</th> -->
             <th>hlastp</th>
-            <th>curr</th>
-            <th data-col="hvol-other">{% if trade_hub_region.name != 'Jita' %}jita{% else %}amarr{% endif %}</th>
+            {% with other=trade_hub_other.name|first|lower %}
+            <th>v</th>
+            <th data-col="hvol-other">{{ other }}_v</th>
+            <th>m</th>
+            <th>{{ other }}_m</th>
+            <th>r</th>
+            <th>{{ other }}_r</th>
+            {% endwith %}
         </tr>
