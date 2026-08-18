@@ -390,15 +390,25 @@ class TestRequireCharacter:
     the old KeyError 500."""
 
     @pytest.mark.parametrize("url_name,kwargs", [
-        ("market_transactions", {}),
+        # The trade hub is the one page that is still one character's desk.
         ("market_trade_hub", {"region_id": JITA_REGION}),
-        ("market_ice_index", {}),
-        ("transaction_history", {}),
     ])
     def test_redirects_to_character_selection(self, auth_client, trade_hubs, url_name, kwargs):
         response = auth_client.get(reverse(url_name, kwargs=kwargs))
         assert response.status_code == 302
         assert response.url == reverse("characters")
+
+    def test_the_pages_that_show_every_owner_need_no_character(self, auth_client,
+                                                               trade_hubs):
+        # They show what the database holds, so a selected character decides
+        # nothing and the gate would only turn them away.
+        assert auth_client.get(reverse("market_transactions")).status_code == 200
+        # The ice index redirects to itself with its default parameters, never to
+        # the character page.
+        ice = auth_client.get(reverse("market_ice_index"))
+        assert ice.status_code == 302 and ice.url.startswith(reverse("market_ice_index"))
+        # A plain GET of the ajax route is a bad request, not a redirect.
+        assert auth_client.get(reverse("transaction_history")).status_code == 400
 
     def test_characters_page_ignores_show_skills_without_character(self, auth_client, trade_hubs):
         response = auth_client.get(reverse("characters"), {"show_skills": "1"})
@@ -524,7 +534,7 @@ class TestMarketHistoryChart:
         response = auth_client.get(self.URL, {"type_id": 34})
         assert response.context["region_id"] == JITA_REGION
         assert response.context["region_name"] == "The Forge"
-        assert len(response.context["chart"]) == 7
+        assert len(response.context["chart"]) == 11
 
     def test_draws_the_chart_for_both_parameters(self, auth_client, trade_hubs):
         self.add_item_with_history()
@@ -579,19 +589,17 @@ class TestMarketHistoryChart:
         assert response.context["region_id"] == JITA_REGION
         assert response.context["notices"] == ["no ingested region 12345, showing The Forge"]
 
-    def test_no_character_means_no_own_fills(self, auth_client, trade_hubs):
+    def test_the_own_fill_rows_need_no_selected_character(self, auth_client, trade_hubs):
+        # Every transaction the database holds counts, whoever made it, so the
+        # session decided nothing and the switch is gone.
         self.add_item_with_history()
         response = auth_client.get(self.URL, {"type_id": 34})
-        assert response.context["show_transactions"] is False
-        assert len(response.context["chart"]) == 7
-        assert 'data-transactions="0"' in response.content.decode()
+        assert len(response.context["chart"]) == 11
 
-    def test_a_selected_character_adds_the_own_fill_rows(self, character_client, trade_hubs):
+    def test_a_selected_character_changes_nothing(self, character_client, trade_hubs):
         self.add_item_with_history()
         response = character_client.get(self.URL, {"type_id": 34})
-        assert response.context["show_transactions"] is True
         assert len(response.context["chart"]) == 11
-        assert 'data-transactions="1"' in response.content.decode()
 
     def test_item_without_history_in_the_region(self, auth_client, trade_hubs):
         self.add_item_with_history()  # The Forge only

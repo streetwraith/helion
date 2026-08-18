@@ -8,6 +8,7 @@ import pytest
 from django.utils import timezone
 
 from market.models import (
+    CharacterAsset,
     CharacterContract,
     CharacterOrder,
     MarketTransaction,
@@ -114,9 +115,11 @@ class TestUpdateMarketTransactions:
 class TestRefreshCharacterOrders:
     ALT_ID = 900
 
-    def fake_orders_esi(self, monkeypatch, order_ids):
+    def fake_orders_esi(self, monkeypatch, order_ids, corporation_ids=()):
         def get_orders(character_id, token):
-            items = [esi_model({"order_id": oid}) for oid in order_ids]
+            items = [esi_model({"order_id": oid,
+                                "is_corporation": oid in corporation_ids})
+                     for oid in order_ids]
             return SimpleNamespace(results=lambda **kw: (items, esi_response()))
 
         monkeypatch.setattr(esi_sync, "esi", SimpleNamespace(
@@ -134,6 +137,29 @@ class TestRefreshCharacterOrders:
         rows = dict(CharacterOrder.objects.values_list("order_id", "character_id"))
         assert rows == {1: CHARACTER_ID, 2: CHARACTER_ID, 222: self.ALT_ID}
         assert expires == EXPIRES
+
+    def test_an_order_placed_for_the_corporation_is_flagged(self, monkeypatch):
+        # The route reports these, so the table records which they are. They are
+        # still ours: our character placed them.
+        self.fake_orders_esi(monkeypatch, [1, 2], corporation_ids=[2])
+
+        esi_sync.refresh_character_orders(CHARACTER_ID)
+
+        assert dict(CharacterOrder.objects.values_list(
+            "order_id", "is_corporation")) == {1: False, 2: True}
+
+    def test_the_rewrite_keeps_what_the_corporation_feed_owns(self, monkeypatch):
+        # order_id is the primary key, so the same order can arrive from both
+        # routes. The character write must not clear the corporation.
+        CharacterOrder.objects.create(order_id=1, character_id=None,
+                                      corporation_id=98_000_001)
+        self.fake_orders_esi(monkeypatch, [1], corporation_ids=[1])
+
+        esi_sync.refresh_character_orders(CHARACTER_ID)
+
+        row = CharacterOrder.objects.get(order_id=1)
+        assert (row.character_id, row.corporation_id, row.is_corporation) == (
+            CHARACTER_ID, 98_000_001, True)
 
     @pytest.mark.parametrize("bad_header", [
         "not-a-date",
@@ -401,3 +427,189 @@ class TestRefreshCharacterWallet:
 
         assert esi_sync.refresh_character_wallet(CHARACTER_ID) == EXPIRES + timedelta(minutes=1)
         assert set(calls) == {"transactions", "journal"}
+
+
+CORPORATION_ID = 98_000_001
+
+
+def fake_corporation_esi(monkeypatch, group, endpoint, items, response=None):
+    """One corporation route, plus the public affiliation lookup every corporation
+    feed makes first to learn which corporation it is fetching."""
+    affiliation = SimpleNamespace(
+        PostCharactersAffiliation=lambda body: SimpleNamespace(
+            result=lambda **kw: [{"character_id": CHARACTER_ID,
+                                  "corporation_id": CORPORATION_ID}]))
+    route = SimpleNamespace(**{endpoint: lambda **kw: SimpleNamespace(
+        results=lambda **kw2: ([esi_model(item) for item in items],
+                               response or esi_response()))})
+    monkeypatch.setattr(esi_sync, "esi", SimpleNamespace(
+        client=SimpleNamespace(Character=affiliation, **{group: route})))
+    monkeypatch.setattr(esi_sync, "Token", FAKE_TOKEN)
+
+
+class TestCorporationOrders:
+    def test_stores_the_orders_against_the_corporation(self, monkeypatch):
+        fake_corporation_esi(monkeypatch, "Market", "GetCorporationsCorporationIdOrders",
+                             [{"order_id": 1}, {"order_id": 2}])
+
+        expires = esi_sync.refresh_corporation_orders(CHARACTER_ID)
+
+        assert dict(CharacterOrder.objects.values_list("order_id", "corporation_id")) == {
+            1: CORPORATION_ID, 2: CORPORATION_ID}
+        assert expires == EXPIRES
+
+    def test_the_rewrite_keeps_what_the_character_feed_owns(self, monkeypatch):
+        # One order, both routes: our character placed it and the corporation owns
+        # it. Neither feed may clear the other's column.
+        CharacterOrder.objects.create(order_id=1, character_id=CHARACTER_ID,
+                                      is_corporation=True)
+        fake_corporation_esi(monkeypatch, "Market", "GetCorporationsCorporationIdOrders",
+                             [{"order_id": 1}])
+
+        esi_sync.refresh_corporation_orders(CHARACTER_ID)
+
+        row = CharacterOrder.objects.get(order_id=1)
+        assert (row.character_id, row.corporation_id, row.is_corporation) == (
+            CHARACTER_ID, CORPORATION_ID, True)
+
+    def test_an_order_the_corporation_no_longer_holds_goes(self, monkeypatch):
+        CharacterOrder.objects.create(order_id=9, corporation_id=CORPORATION_ID)
+        # Still ours through the character, so this one must survive.
+        CharacterOrder.objects.create(order_id=8, character_id=CHARACTER_ID,
+                                      corporation_id=CORPORATION_ID)
+        fake_corporation_esi(monkeypatch, "Market", "GetCorporationsCorporationIdOrders", [])
+
+        esi_sync.refresh_corporation_orders(CHARACTER_ID)
+
+        assert not CharacterOrder.objects.filter(order_id=9).exists()
+        survivor = CharacterOrder.objects.get(order_id=8)
+        assert (survivor.character_id, survivor.corporation_id) == (CHARACTER_ID, None)
+
+
+class TestCorporationWallet:
+    def transaction(self, transaction_id):
+        return {"transaction_id": transaction_id, "client_id": 5,
+                "date": timezone.now(), "is_buy": False, "journal_ref_id": 7,
+                "location_id": JITA_STATION, "quantity": 2, "type_id": 34,
+                "unit_price": 5.0}
+
+    def fake_wallet(self, monkeypatch, transactions, journal):
+        affiliation = SimpleNamespace(
+            PostCharactersAffiliation=lambda body: SimpleNamespace(
+                result=lambda **kw: [{"character_id": CHARACTER_ID,
+                                      "corporation_id": CORPORATION_ID}]))
+        seen = []
+
+        def transactions_route(corporation_id, division, token):
+            seen.append(("transactions", division))
+            return SimpleNamespace(results=lambda **kw: (
+                [esi_model(row) for row in (transactions if division == 1 else [])],
+                esi_response()))
+
+        def journal_route(corporation_id, division, token):
+            seen.append(("journal", division))
+            return SimpleNamespace(results=lambda **kw: (
+                [esi_model(row) for row in (journal if division == 1 else [])],
+                esi_response()))
+
+        monkeypatch.setattr(esi_sync, "esi", SimpleNamespace(client=SimpleNamespace(
+            Character=affiliation,
+            Wallet=SimpleNamespace(
+                GetCorporationsCorporationIdWalletsDivisionTransactions=transactions_route,
+                GetCorporationsCorporationIdWalletsDivisionJournal=journal_route))))
+        monkeypatch.setattr(esi_sync, "Token", FAKE_TOKEN)
+        return seen
+
+    def test_every_division_is_fetched_on_both_routes(self, monkeypatch):
+        seen = self.fake_wallet(monkeypatch, [], [])
+
+        esi_sync.refresh_corporation_wallet(CHARACTER_ID)
+
+        assert sorted(seen) == sorted(
+            [("journal", division) for division in range(1, 8)]
+            + [("transactions", division) for division in range(1, 8)])
+
+    def test_a_transaction_carries_its_wallet_and_is_not_personal(self, monkeypatch):
+        # The corporation route sends no is_personal, so the feed sets it: the
+        # wallet is the corporation's by definition.
+        self.fake_wallet(monkeypatch, [self.transaction(1)], [])
+
+        esi_sync.refresh_corporation_wallet(CHARACTER_ID)
+
+        row = MarketTransaction.objects.get(transaction_id=1)
+        assert (row.corporation_id, row.division, row.is_personal, row.character_id) == (
+            CORPORATION_ID, 1, False, None)
+
+    def test_it_keeps_the_character_the_other_route_recorded(self, monkeypatch):
+        # The character route reported this one as the corporation's; the
+        # corporation route now names the wallet. One row, both facts.
+        MarketTransaction.objects.create(
+            transaction_id=1, character_id=CHARACTER_ID, client_id=5,
+            date=timezone.now(), is_buy=False, is_personal=False, journal_ref_id=7,
+            location_id=JITA_STATION, quantity=2, type_id=34, unit_price=5.0)
+        self.fake_wallet(monkeypatch, [self.transaction(1)], [])
+
+        esi_sync.refresh_corporation_wallet(CHARACTER_ID)
+
+        row = MarketTransaction.objects.get(transaction_id=1)
+        assert (row.character_id, row.corporation_id, row.division) == (
+            CHARACTER_ID, CORPORATION_ID, 1)
+        assert row.is_personal is False
+
+    def test_a_journal_entry_carries_its_wallet(self, monkeypatch):
+        self.fake_wallet(monkeypatch, [], [{
+            "id": 4, "amount": -10.0, "balance": 90.0, "date": timezone.now(),
+            "ref_type": "brokers_fee"}])
+
+        esi_sync.refresh_corporation_wallet(CHARACTER_ID)
+
+        row = WalletJournal.objects.get(journal_id=4)
+        assert (row.corporation_id, row.division, row.character_id) == (
+            CORPORATION_ID, 1, None)
+
+
+class TestCorporationAssets:
+    def test_rewrites_only_the_corporation_rows(self, monkeypatch):
+        CharacterAsset.objects.create(
+            item_id=99, character_id=CHARACTER_ID, type_id=34, quantity=1,
+            location_id=JITA_STATION, location_type="station", location_flag="Hangar",
+            is_singleton=False)
+        CharacterAsset.objects.create(
+            item_id=98, corporation_id=CORPORATION_ID, type_id=34, quantity=1,
+            location_id=JITA_STATION, location_type="station", location_flag="Hangar",
+            is_singleton=False)
+        fake_corporation_esi(monkeypatch, "Assets", "GetCorporationsCorporationIdAssets",
+                             [{"item_id": 1, "type_id": 34, "quantity": 3,
+                               "location_id": JITA_STATION, "location_type": "station",
+                               "location_flag": "CorpSAG1", "is_singleton": False,
+                               "is_blueprint_copy": None}])
+        esi_sync.refresh_corporation_assets(CHARACTER_ID)
+
+        assert set(CharacterAsset.objects.values_list("item_id", flat=True)) == {1, 99}
+        row = CharacterAsset.objects.get(item_id=1)
+        assert (row.corporation_id, row.character_id, row.location_flag) == (
+            CORPORATION_ID, None, "CorpSAG1")
+
+
+class TestCorporationContracts:
+    def test_upserts_into_the_shared_table(self, monkeypatch):
+        now = timezone.now()
+        fake_corporation_esi(monkeypatch, "Contracts",
+                             "GetCorporationsCorporationIdContracts",
+                             [{"contract_id": 5, "issuer_id": 1, "assignee_id": 2,
+                               "acceptor_id": 0, "issuer_corporation_id": CORPORATION_ID,
+                               "type": "item_exchange", "status": "outstanding",
+                               "availability": "corporation", "for_corporation": True,
+                               "date_issued": now, "date_expired": now,
+                               "date_accepted": None, "date_completed": None,
+                               "days_to_complete": 0, "price": 1.0, "reward": 0.0,
+                               "collateral": 0.0, "buyout": 0.0, "volume": 1.0,
+                               "title": "corp deal", "start_location_id": JITA_STATION,
+                               "end_location_id": None}])
+        monkeypatch.setattr(names, "resolve_contract_names", lambda *a, **kw: None)
+
+        esi_sync.refresh_corporation_contracts(CHARACTER_ID)
+
+        row = CharacterContract.objects.get(contract_id=5)
+        assert (row.for_corporation, row.issuer_corporation_id, row.title) == (
+            True, CORPORATION_ID, "corp deal")

@@ -323,12 +323,24 @@ class TestFeedScopes:
 
         class AnyPath:
             """Any attribute path. The callee expression is evaluated before the
-            arguments, so this keeps the spec load out of the test."""
+            arguments, so this keeps the spec load out of the test.
+
+            Calling one is a failure, except the public affiliation lookup: a
+            corporation feed has to name its corporation before it can ask for a
+            token, and that route needs no token and no scope.
+            """
+            def __init__(self, name=""):
+                self._name = name
+
             def __getattr__(self, name):
-                return AnyPath()
+                return AnyPath(name)
 
             def __call__(self, *args, **kwargs):
-                raise AssertionError("the fetch called ESI before taking a token")
+                if self._name == "PostCharactersAffiliation":
+                    return SimpleNamespace(result=lambda **kw: [
+                        {"character_id": CHARACTER_ID, "corporation_id": 98_000_001}])
+                raise AssertionError(
+                    f"{self._name} was called before a token was taken")
 
         asked = []
 

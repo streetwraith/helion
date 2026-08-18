@@ -1,4 +1,4 @@
-from market.services import market_service
+from market.services import market_service, tracking
 from evesde import services as sde_service
 from django.shortcuts import get_object_or_404
 from django.template.loader import render_to_string
@@ -22,31 +22,31 @@ def _rate_limited_response(exc):
     return JsonResponse(
         {'error': 'ESI rate limited', 'retry_after': int(exc.reset or 60)}, status=429)
 
-@require_character
 def transaction_history(request):
     if request.headers.get('x-requested-with') == 'XMLHttpRequest':
-        character_id = request.session['esi_token']['character_id']
         type_id = request.GET.get('type_id')
-        result = market_service.get_market_transactions(character_id, type_id=type_id, limit=20)
+        result = market_service.get_market_transactions(type_id=type_id, limit=20)
         html = render_to_string('market/_fragment_transaction_history.html', {'data': result, 'trade_hubs': list(TradeHub.objects.all())})
         return JsonResponse({'html': html}, safe=False)
     return JsonResponse({'error': 'bad request'}, status=400)
 
-def _latest_transaction_detail(character_id, after):
+def _latest_transaction_detail(after):
     """The one new transaction, named the way the table names it."""
-    transaction = market_service.get_market_transactions(
-        character_id).filter(transaction_id__gt=after).first()
+    transaction = market_service.get_market_transactions().filter(
+        transaction_id__gt=after).first()
     hub = TradeHub.objects.filter(station_id=transaction.location_id).first()
     type_names = sde_service.get_type_names([transaction.type_id])
+    labels = market_service.owner_labels(
+        {transaction.character_id, transaction.corporation_id})
     return {
         'is_buy': transaction.is_buy,
         'quantity': transaction.quantity,
         'isk': float(transaction.unit_price * transaction.quantity),
         'type_name': type_names.get(transaction.type_id, str(transaction.type_id)),
         'location': hub.name if hub else str(transaction.location_id),
+        'owner': market_service.owner_label(transaction, labels),
     }
 
-@require_character
 def transactions_since(request):
     """New own transactions after a cursor, for the notification poller.
 
@@ -62,9 +62,8 @@ def transactions_since(request):
         return JsonResponse({'error': 'invalid after'}, status=400)
     if after < 0:
         return JsonResponse({'error': 'invalid after'}, status=400)
-    character_id = request.session['esi_token']['character_id']
-    summary = market_service.get_transactions_since(character_id, after=after)
-    summary['latest'] = (_latest_transaction_detail(character_id, after)
+    summary = market_service.get_transactions_since(after=after)
+    summary['latest'] = (_latest_transaction_detail(after)
                          if summary['count'] == 1 else None)
     summary['next_poll_seconds'] = market_service.seconds_until_next_wallet_fetch()
     return JsonResponse(summary)
@@ -110,8 +109,10 @@ def undercuts_since(request, region_id):
     if after < 0:
         return JsonResponse({'error': 'invalid after'}, status=400)
     get_object_or_404(TradeHub, region_id=region_id)
-    character_id = request.session['esi_token']['character_id']
-    summary = market_service.get_undercuts_since(region_id, character_id, after=after)
+    # The same owners the page's my-columns describe: the session character and
+    # every corporation we hold data for.
+    owner_ids = {request.session['esi_token']['character_id']} | tracking.corporation_ids()
+    summary = market_service.get_undercuts_since(region_id, owner_ids, after=after)
     summary['next_poll_seconds'] = MARKET_POLL_SECONDS
     return JsonResponse(summary)
 

@@ -7,7 +7,7 @@ from django.utils import timezone
 from esi.models import Token
 
 from evesde.models import NpcStationName
-from market.models import CharacterContract, EveName
+from market.models import CharacterContract, CharacterOrder, EveName
 from market.services import contracts as contract_service
 
 from .conftest import CHARACTER_ID
@@ -24,13 +24,14 @@ def add_contract(contract_id, contract_type='courier', status='outstanding',
                  issuer_id=CHARACTER_ID, assignee_id=0, acceptor_id=0,
                  issued=None, expired=None, accepted=None, days_to_complete=3,
                  start_location_id=JITA_STATION, end_location_id=STRUCTURE_ID,
+                 issuer_corporation_id=98000001, for_corporation=False,
                  **extra):
     now = timezone.now()
     return CharacterContract.objects.create(
         contract_id=contract_id, type=contract_type, status=status,
-        issuer_id=issuer_id, issuer_corporation_id=98000001,
+        issuer_id=issuer_id, issuer_corporation_id=issuer_corporation_id,
         assignee_id=assignee_id, acceptor_id=acceptor_id,
-        availability='personal', for_corporation=False,
+        availability='personal', for_corporation=for_corporation,
         start_location_id=start_location_id, end_location_id=end_location_id,
         volume=1000.0, collateral=50000000, reward=2000000,
         days_to_complete=days_to_complete,
@@ -95,21 +96,21 @@ class TestBuckets:
         assert ids(contract_service.get_contracts('courier')) == [2, 1]
 
 
-class TestCharacterFilter:
+class TestOwnerFilter:
     def test_every_role_the_route_reports_counts_as_ours(self):
         add_contract(1, issuer_id=CHARACTER_ID)
         add_contract(2, issuer_id=OTHER_CHARACTER_ID, assignee_id=CHARACTER_ID)
         add_contract(3, issuer_id=OTHER_CHARACTER_ID, acceptor_id=CHARACTER_ID,
                      status='in_progress')
 
-        found = contract_service.get_contracts('courier', character_id=CHARACTER_ID)
+        found = contract_service.get_contracts('courier', owner_id=CHARACTER_ID)
 
         assert sorted(ids(found)) == [1, 2, 3]
 
     def test_another_characters_contract_drops_out(self):
         add_contract(1, issuer_id=OTHER_CHARACTER_ID)
 
-        assert ids(contract_service.get_contracts('courier', character_id=CHARACTER_ID)) == []
+        assert ids(contract_service.get_contracts('courier', owner_id=CHARACTER_ID)) == []
 
     def test_no_character_shows_every_character(self):
         add_contract(1, issuer_id=CHARACTER_ID)
@@ -189,19 +190,19 @@ class TestDisplayFields:
         assert contract.acceptor_name is None
 
 
-class TestCharacterOptions:
+class TestOwnerOptions:
     def test_the_options_are_the_token_characters_by_name(self):
         Token.objects.create(character_id=OTHER_CHARACTER_ID, character_name="Zeta")
         Token.objects.create(character_id=CHARACTER_ID, character_name="Alpha")
 
-        assert contract_service.get_character_options() == [
+        assert contract_service.get_owner_options() == [
             (CHARACTER_ID, "Alpha"), (OTHER_CHARACTER_ID, "Zeta")]
 
     def test_two_tokens_for_one_character_give_one_option(self):
         Token.objects.create(character_id=CHARACTER_ID, character_name="Alpha")
         Token.objects.create(character_id=CHARACTER_ID, character_name="Alpha")
 
-        assert contract_service.get_character_options() == [(CHARACTER_ID, "Alpha")]
+        assert contract_service.get_owner_options() == [(CHARACTER_ID, "Alpha")]
 
 
 class TestContractsPage:
@@ -228,8 +229,8 @@ class TestContractsPage:
 
         assert "no contracts" in content
 
-    def test_a_bad_character_id_is_rejected(self, auth_client):
-        response = auth_client.get(reverse('market_contracts'), {'character_id': 'abc'})
+    def test_a_bad_owner_id_is_rejected(self, auth_client):
+        response = auth_client.get(reverse('market_contracts'), {'owner_id': 'abc'})
 
         assert response.status_code == 400
 
@@ -239,8 +240,45 @@ class TestContractsPage:
 
         content = auth_client.get(
             reverse('market_contracts'),
-            {'character_id': CHARACTER_ID, 'include_finished': '1'}).content.decode()
+            {'owner_id': CHARACTER_ID, 'include_finished': '1'}).content.decode()
 
-        assert f"character_id={CHARACTER_ID}" in content
+        assert f"owner_id={CHARACTER_ID}" in content
         assert "include_finished=1" in content
         assert "page=2" in content
+
+
+CORPORATION_ID = 98_000_001
+
+
+class TestCorporationContracts:
+    def test_a_corporation_contract_matches_its_corporation(self, db):
+        # The route names the character who issued it in issuer_id, so a filter
+        # that read only that column would never find a corporation's contract.
+        add_contract(1, issuer_id=CHARACTER_ID,
+                     issuer_corporation_id=CORPORATION_ID, for_corporation=True)
+        add_contract(2, issuer_id=OTHER_CHARACTER_ID,
+                     issuer_corporation_id=777, for_corporation=True)
+
+        found = contract_service.get_contracts('courier', owner_id=CORPORATION_ID)
+
+        assert ids(found) == [1]
+
+    def test_the_corporation_joins_the_filter_options(self, db):
+        # A corporation is ours when one of its feeds wrote a row, not when a
+        # contract carries for_corporation: live data shows a corporation's own
+        # contracts arrive with that flag false.
+        Token.objects.create(character_id=CHARACTER_ID, character_name="Alpha")
+        EveName.objects.create(entity_id=CORPORATION_ID, name="Silk Road",
+                               category="corporation")
+        CharacterOrder.objects.create(order_id=1, corporation_id=CORPORATION_ID)
+
+        assert contract_service.get_owner_options() == [
+            (CHARACTER_ID, "Alpha"), (CORPORATION_ID, "Silk Road")]
+
+    def test_a_corporation_with_no_feed_rows_is_not_offered(self, db):
+        # Every contract names its issuer's corporation, so that column alone
+        # would offer strangers' corporations.
+        Token.objects.create(character_id=CHARACTER_ID, character_name="Alpha")
+        add_contract(1, issuer_id=OTHER_CHARACTER_ID, issuer_corporation_id=777)
+
+        assert contract_service.get_owner_options() == [(CHARACTER_ID, "Alpha")]

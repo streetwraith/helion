@@ -11,8 +11,40 @@ orphans both, and fetching stops with no error anywhere.
 from django.utils import timezone
 
 from esi.models import Token
-from market.models import EsiFetchState, TrackedCharacter
+from market.models import (
+    CharacterAsset, CharacterOrder, EsiFetchState, MarketTransaction,
+    TrackedCharacter, WalletJournal)
 from market.services.esi_scheduler import FEED_SCOPES, FEEDS, reenable
+
+
+# How much of disabled_reason the block shows. Long enough for the status code and
+# the start of the message ESI sent.
+REASON_LENGTH = 120
+
+
+# The tables a corporation feed writes. A corporation is "ours" when one of them
+# names it.
+CORPORATION_TABLES = (CharacterOrder, CharacterAsset, MarketTransaction, WalletJournal)
+
+
+def corporation_ids():
+    """Every corporation the app holds data for.
+
+    Read off the rows rather than from a list of tracked corporations: the
+    corporation feeds are tags on a character, so nothing else records which
+    corporations arrived. One indexed distinct per table, each answering a handful
+    of ids.
+
+    All four tables, not just the two the trade hub reads: the contracts page
+    needs the same answer, and a corporation's contracts arrive with
+    `for_corporation` false - that flag means "issued on behalf of the
+    corporation", not "the corporation is a party" (verified on live data).
+    """
+    ids = set()
+    for model in CORPORATION_TABLES:
+        ids |= set(model.objects.exclude(corporation_id=None)
+                   .values_list('corporation_id', flat=True).distinct())
+    return ids
 
 
 def _authorised_scopes(character_id):
@@ -45,6 +77,10 @@ def get_feed_rows(character_id, character_name):
             'tracked': feed in tracks,
             'state': state,
             'disabled': state is not None and state.disabled_at is not None,
+            # Trimmed: disabled_reason holds a repr of the last error, and the
+            # useful part is at the front. A corporation feed usually dies on a
+            # missing in-corp role, which nothing else on the page would show.
+            'reason': (state.disabled_reason or '')[:REASON_LENGTH] if state else '',
             # A null next_due means "on the next tick", which no duration filter
             # can render.
             'due_now': state is not None and (state.next_due is None

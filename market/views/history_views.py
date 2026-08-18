@@ -86,13 +86,10 @@ def market_history(request):
     type_id, type_name, type_notice = _selected_type(request)
     days = _selected_days(request)
 
-    # Our own fills only render for a selected character. The rows themselves are
-    # not filtered by that character: every transaction we hold counts, whoever
-    # made it. The session is the switch, not the filter.
-    local_station_ids = None
-    if request.session.get('esi_token'):
-        local_station_ids = set(
-            TradeHub.objects.filter(region_id=region_id).values_list('station_id', flat=True))
+    # Our own fills always render: every transaction the database holds counts,
+    # whoever made it, so a selected character decided nothing here.
+    local_station_ids = set(
+        TradeHub.objects.filter(region_id=region_id).values_list('station_id', flat=True))
 
     chart = None
     if type_id is not None:
@@ -108,6 +105,5 @@ def market_history(request):
         'days': days,
         'window_days': WINDOW_DAYS,
         'chart': chart,
-        'show_transactions': local_station_ids is not None,
         'notices': [notice for notice in (region_notice, type_notice) if notice],
     })

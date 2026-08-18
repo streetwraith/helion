@@ -2,17 +2,18 @@ from django.http import HttpResponseBadRequest
 from django.shortcuts import render
 from django.core.paginator import Paginator
 from django.db.models import Max
-from helion.decorators import require_character
 from market.models import TradeItem
 from market.services import market_service
 from evesde import services as sde_service
 
-@require_character
+# No require_character: the page shows every owner the database holds, so a
+# selected character decides nothing here.
 def market_transactions(request):
     page_number = request.GET.get('page')
     is_buy = request.GET.get('is_buy')
     location_id = request.GET.get('location_id')
     type_name = request.GET.get('type_name')
+    owner_id = request.GET.get('owner_id')
 
     # `filters` echoes the active filters back into the search form.
     filters = {}
@@ -27,7 +28,13 @@ def market_transactions(request):
         except ValueError:
             return HttpResponseBadRequest('invalid location_id')
     filters['type_name'] = type_name if type_name else ''
-    market_transactions = market_service.get_market_transactions(request.session['esi_token']['character_id'], location_id=location_id, is_buy=is_buy, type_name=type_name)
+    if owner_id:
+        try:
+            filters['owner_id'] = int(owner_id)
+        except ValueError:
+            return HttpResponseBadRequest('invalid owner_id')
+    market_transactions = market_service.get_market_transactions(
+        filters.get('owner_id'), location_id=location_id, is_buy=is_buy, type_name=type_name)
     paginator = Paginator(market_transactions, 100)
     page_obj = paginator.get_page(page_number)
 
@@ -41,15 +48,23 @@ def market_transactions(request):
 
     unique_type_ids = page_obj.object_list.values_list('type_id', flat=True)
     type_names_dict = sde_service.get_type_names(unique_type_ids)
-    
+
+    # One name lookup for the page, then the cell rule per row.
+    labels = market_service.owner_labels(
+        {row.character_id for row in page_transactions}
+        | {row.corporation_id for row in page_transactions})
+    for row in page_transactions:
+        row.owner = market_service.owner_label(row, labels)
+
     # The notification cursor spans the whole scope, not the filtered page: the
     # poller ignores the display filters, so a filtered max would refire rows.
-    max_transaction_id = market_service.get_market_transactions(
-        request.session['esi_token']['character_id']
-    ).aggregate(newest=Max('transaction_id'))['newest']
+    max_transaction_id = market_service.get_market_transactions().aggregate(
+        newest=Max('transaction_id'))['newest']
 
     context = {
         'page_obj': page_obj,
+        'page_transactions': page_transactions,
+        'owner_options': market_service.get_owner_options(),
         'max_transaction_id': max_transaction_id,
         'history_buy': history_buy,
         'history_sell': history_sell,

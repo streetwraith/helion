@@ -19,10 +19,10 @@
 filters run in the browser.
 {% endcomment %}
 <div id="asset-filters">
-  <label for="character">Character</label>
-  <select id="character">
-    <option value="">all characters</option>
-    {% for option_id, option_name in character_options %}
+  <label for="owner">Owner</label>
+  <select id="owner">
+    <option value="">all owners</option>
+    {% for option_id, option_name in owner_options %}
     <option value="{{ option_id }}">{{ option_name }}</option>
     {% endfor %}
   </select>
@@ -50,12 +50,12 @@ filters run in the browser.
       <th>group</th>
       <th>location</th>
       <th>m3</th>
-      <th>character</th>
+      <th>owner</th>
     </tr>
   </thead>
   <tbody>
     {% for line in assets %}
-    <tr data-character="{{ line.character_id }}" data-category="{{ line.category }}">
+    <tr data-owner="{{ line.owner_id }}" data-category="{{ line.category }}">
       {% comment %}No region: these lines span every region, so the history link
       falls back to the one the component defaults to.
       {% endcomment %}
@@ -66,7 +66,7 @@ filters run in the browser.
       <td class="text">{{ line.group }}</td>
       <td class="text">{{ line.location }}</td>
       <td>{{ line.m3|m3_value }}</td>
-      <td class="text">{{ line.character }}</td>
+      <td class="text">{{ line.owner }}</td>
     </tr>
     {% empty %}
     <tr><td colspan="8">no assets</td></tr>

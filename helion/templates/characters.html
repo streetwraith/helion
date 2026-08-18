@@ -135,7 +135,7 @@ another.
             <td class="text">
                 {% if not row.authorised %}not authorised - log in again to add this scope
                 {% elif not row.state %}not scheduled
-                {% elif row.disabled %}DISABLED ({{ row.state.consecutive_errors }} errors)
+                {% elif row.disabled %}DISABLED ({{ row.state.consecutive_errors }} errors){% if row.reason %}: {{ row.reason }}{% endif %}
                 {% else %}{% if row.state.last_success %}ok {{ row.state.last_success|since_dhms }} ago{% else %}never run{% endif %},
                     {% if row.due_now %}due now{% else %}due in {{ row.state.next_due|until_dhms }}{% endif %}{% if row.state.consecutive_errors %}, {{ row.state.consecutive_errors }} errors{% endif %}
                 {% endif %}

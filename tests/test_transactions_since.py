@@ -73,17 +73,20 @@ class TestAggregates:
         assert data["sells"] == 2
         assert data["sold_isk"] == pytest.approx(10.0)
 
-    def test_corporation_rows_never_count(self, character_client, trade_hubs):
+    def test_corporation_rows_count(self, character_client, trade_hubs):
+        # They are trades and the page lists them, so the poller reports them.
+        # Only the profit statistics leave corporation rows out.
         add_type(34, "Tritanium")
         add_transaction(10, 34, 1, 5.0, is_personal=False)
         data = poll(character_client, 0).json()
-        assert data["count"] == 0
-        assert data["max_id"] is None
+        assert data["count"] == 1
+        assert data["max_id"] == 10
 
 
 class TestLatestDetail:
     def test_named_when_exactly_one_row_is_new(self, character_client, trade_hubs):
         add_type(34, "Tritanium")
+        add_token(User.objects.get(username="tester"), CHARACTER_ID, "Test Character")
         add_transaction(10, 34, quantity=500, unit_price=4.0, location_id=JITA_STATION)
         latest = poll(character_client, 0).json()["latest"]
         assert latest == {
@@ -92,7 +95,16 @@ class TestLatestDetail:
             "isk": pytest.approx(2000.0),
             "type_name": "Tritanium",
             "location": "Jita",
+            "owner": "Test Character",
         }
+
+    def test_an_owner_with_no_name_anywhere_reads_as_its_id(self, character_client,
+                                                            trade_hubs):
+        # No token and no cached name: the card says the id rather than nothing.
+        add_type(34, "Tritanium")
+        add_transaction(10, 34, quantity=1, unit_price=4.0, location_id=JITA_STATION)
+
+        assert poll(character_client, 0).json()["latest"]["owner"] == str(CHARACTER_ID)
 
     def test_absent_for_a_burst(self, character_client, trade_hubs):
         add_type(34, "Tritanium")
@@ -125,9 +137,11 @@ class TestBoundaries:
     def test_a_plain_browser_request_is_refused(self, character_client, trade_hubs):
         assert character_client.get(URL, {"after": 0}).status_code == 400
 
-    def test_no_selected_character_redirects(self, auth_client, trade_hubs):
+    def test_no_selected_character_still_answers(self, auth_client, trade_hubs):
+        # The poller covers every owner, so a selected character decides nothing.
         response = auth_client.get(URL, {"after": 0}, headers=XHR)
-        assert response.status_code == 302
+        assert response.status_code == 200
+        assert response.json()["count"] == 0
 
 
 class TestPacing:
@@ -221,14 +235,13 @@ def add_other_character_transaction(transaction_id, character_id):
 
 
 def test_another_token_holders_transactions_count(character_client, trade_hubs):
-    # get_market_transactions widens to every character that holds a token, and
-    # the poller keeps that scope so its count matches the page (see TODO 33).
     add_other_character_transaction(10, CHARACTER_ID + 1)
     add_token(User.objects.get(username="tester"), CHARACTER_ID + 1, "Alt")
     assert poll(character_client, 0).json()["count"] == 1
 
 
-def test_a_character_without_a_token_stays_out(character_client, trade_hubs):
-    # The page hides those rows too, so the count keeps matching the table.
+def test_a_character_without_a_token_counts_too(character_client, trade_hubs):
+    # Two characters in the real data hold transactions and no token. The rows
+    # are data we hold, so the page lists them and the poller counts them.
     add_other_character_transaction(10, CHARACTER_ID + 1)
-    assert poll(character_client, 0).json()["count"] == 0
+    assert poll(character_client, 0).json()["count"] == 1

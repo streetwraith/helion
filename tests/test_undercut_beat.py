@@ -5,7 +5,7 @@ import pytest
 from django.utils import timezone
 
 from market import tasks
-from market.models import MarketOrderUndercut
+from market.models import CharacterOrder, MarketOrderUndercut
 from marketdata.models import RegionStatus
 
 from .conftest import CHARACTER_ID, FakeCache
@@ -68,3 +68,39 @@ def test_null_refreshed_at_is_not_ready(task_cache, undercut_situation):
 
     assert MarketOrderUndercut.objects.count() == 0
     assert jita_mark(task_cache) is None
+
+
+CORPORATION_ID = 98_000_001
+
+
+def test_a_corporation_order_gets_its_own_undercut_row(task_cache, trade_hubs):
+    # The trade hub counts corporation orders as ours, so losing the book on one
+    # has to produce a row like any other. The row names the corporation, because
+    # no character placed it as far as this table knows.
+    t0 = timezone.now() - timedelta(hours=5)
+    add_order(1, 34, 100.0, issued=t0)
+    # add_order only records ownership for a character, so the corporation claims
+    # this one the way its feed does.
+    CharacterOrder.objects.create(order_id=1, corporation_id=CORPORATION_ID)
+    add_order(2, 34, 95.0, issued=t0 + timedelta(hours=1))
+
+    tasks.compute_undercuts()
+
+    undercut = MarketOrderUndercut.objects.get()
+    assert (undercut.character_id, undercut.corporation_id) == (None, CORPORATION_ID)
+    assert (undercut.order_id, undercut.competitor_order_id) == (1, 2)
+
+
+def test_an_order_owned_by_both_counts_once_per_owner(task_cache, trade_hubs):
+    # A corporation order our character placed is reported by both routes, so both
+    # owners hold it. Each owner asks the question, and the unique constraint on
+    # (order_id, order_issued) keeps the answer to one row.
+    t0 = timezone.now() - timedelta(hours=5)
+    order = add_order(1, 34, 100.0, character_id=CHARACTER_ID, issued=t0)
+    CharacterOrder.objects.filter(order_id=order.order_id).update(
+        corporation_id=CORPORATION_ID)
+    add_order(2, 34, 95.0, issued=t0 + timedelta(hours=1))
+
+    tasks.compute_undercuts()
+
+    assert MarketOrderUndercut.objects.count() == 1

@@ -1,14 +1,24 @@
-"""Queries over the character's own transactions (the wallet side of trading)."""
+"""Queries over our own transactions (the wallet side of trading)."""
 from datetime import datetime, time, timedelta, timezone
 from functools import wraps
 
-from django.db.models import Count, F, Max, Sum
+from django.db.models import Count, F, Max, Q, Sum
 
-from esi.models import Token
 from evesde.models import Type
 from market.models import MarketTransaction
+from market.services.names import owner_labels
 
-def get_market_transactions(*character_ids, type_id=None, type_name=None, location_id=None, is_buy=None, limit=None):
+def get_market_transactions(owner_id=None, *, type_id=None, type_name=None, location_id=None, is_buy=None, limit=None):
+    """Every stored transaction, newest first, narrowed by the display filters.
+
+    No owner filter by default: the pages show what the database holds, whoever
+    made it. That includes characters whose token this app no longer has, and
+    corporation rows - excluding those belongs to the profit statistics, which
+    filter `is_personal` themselves.
+
+    `owner_id` narrows to one character or one corporation, which is what the
+    page's dropdown sends.
+    """
     filters = {}
     if is_buy is not None and is_buy != '':
         filters['is_buy'] = is_buy == 'True'
@@ -22,20 +32,38 @@ def get_market_transactions(*character_ids, type_id=None, type_name=None, locati
             del filters['type_id']
         filters['type_id__in'] = matching_type_ids
 
-    if character_ids:
-        other_chars = Token.objects.exclude(character_id__in=[int(x) for x in character_ids]).values_list("character_id", flat=True)
-        filters['character_id__in'] = [int(x) for x in character_ids] + list(other_chars)
-
-    filters['is_personal'] = True
-
     market_transactions = MarketTransaction.objects.filter(**filters).order_by('-date')
+    if owner_id:
+        market_transactions = market_transactions.filter(
+            Q(character_id=int(owner_id)) | Q(corporation_id=int(owner_id)))
 
     if limit:
         market_transactions = market_transactions[:int(limit)]
 
     return market_transactions
 
-def get_transactions_since(*character_ids, after):
+def get_owner_options():
+    """The owners the transaction table holds, for the page filter."""
+    ids = set(MarketTransaction.objects.values_list('character_id', flat=True).distinct())
+    ids |= set(MarketTransaction.objects.values_list('corporation_id', flat=True).distinct())
+    labels = owner_labels(ids)
+    return sorted(labels.items(), key=lambda option: option[1])
+
+def owner_label(transaction, labels):
+    """What the owner cell shows for one row.
+
+    The corporation wins when the row names one: the division and the wallet are
+    what such a row is about. A row the character route flagged as the
+    corporation's, before any corporation feed named the wallet, says so - it
+    would otherwise read as an ordinary personal trade.
+    """
+    if transaction.corporation_id:
+        name = labels.get(transaction.corporation_id, str(transaction.corporation_id))
+        return f"{name} ({transaction.division})" if transaction.division else name
+    name = labels.get(transaction.character_id, str(transaction.character_id))
+    return name if transaction.is_personal else f"{name} (corp)"
+
+def get_transactions_since(after):
     """Own transactions newer than `after`, counted and summed per side.
 
     The cursor is `transaction_id` rather than `date`: it is the primary key, so
@@ -46,7 +74,7 @@ def get_transactions_since(*character_ids, after):
     assert after >= 0, "the cursor is a transaction id"
     # order_by() clears the inherited '-date' ordering: an ordering field would
     # otherwise join the GROUP BY and split every side into one row per date.
-    rows = get_market_transactions(*character_ids).filter(
+    rows = get_market_transactions().filter(
         transaction_id__gt=after
     ).order_by().values('is_buy').annotate(
         rows=Count('transaction_id'),
@@ -103,8 +131,15 @@ def get_trade_history(type_id, location_id=None, is_buy=False):
     return get_trade_history_bulk([type_id], location_id=location_id, is_buy=is_buy)[type_id]
 
 def get_trade_history_bulk(type_ids, location_id=None, is_buy=False):
-    """Per-type volume, weighted average price and latest price, in two queries."""
-    transactions = MarketTransaction.objects.filter(type_id__in=type_ids, is_buy=is_buy)
+    """Per-type volume, weighted average price and latest price, in two queries.
+
+    Personal rows only. This drives the trade hub's profit column and the history
+    columns of the transactions page, and a corporation wallet paying for a
+    personal purchase is not trade - the same reason the profit statistics and the
+    ice averages exclude those rows.
+    """
+    transactions = MarketTransaction.objects.filter(
+        type_id__in=type_ids, is_buy=is_buy, is_personal=True)
     if location_id is not None:
         transactions = transactions.filter(location_id=location_id)
 

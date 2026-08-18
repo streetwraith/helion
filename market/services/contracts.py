@@ -13,6 +13,7 @@ from esi.models import Token
 from evesde.models import NpcStationName
 from market.constants import FIRST_STRUCTURE_ID
 from market.models import CharacterContract, EveName
+from market.services import names, tracking
 
 COURIER = 'courier'
 
@@ -22,16 +23,19 @@ COURIER = 'courier'
 EXPIRED = 'expired'
 
 
-def get_contracts(contract_type, character_id=None, include_finished=False):
+def get_contracts(contract_type, owner_id=None, include_finished=False):
     """One bucket of contracts, newest first. Courier, or everything else."""
     rows = CharacterContract.objects.all()
     rows = (rows.filter(type=COURIER) if contract_type == COURIER
             else rows.exclude(type=COURIER))
-    if character_id:
+    if owner_id:
         # Every relationship the route reports: we issued it, we took it, or it
-        # was addressed to us.
-        rows = rows.filter(Q(issuer_id=character_id) | Q(assignee_id=character_id)
-                           | Q(acceptor_id=character_id))
+        # was addressed to us. issuer_corporation_id joins them for a corporation:
+        # a contract issued for the corporation still names the character who
+        # issued it in issuer_id, so matching that column alone would miss it.
+        rows = rows.filter(Q(issuer_id=owner_id) | Q(assignee_id=owner_id)
+                           | Q(acceptor_id=owner_id)
+                           | Q(issuer_corporation_id=owner_id))
     if not include_finished:
         rows = rows.filter(Q(status='in_progress')
                            | Q(status='outstanding', date_expired__gt=timezone.now()))
@@ -56,15 +60,19 @@ def add_display_fields(contracts):
     return contracts
 
 
-def get_character_options():
-    """Our characters, for the filter: every one holding an SSO token.
+def get_owner_options():
+    """Our owners, for the filter: every character holding an SSO token, plus
+    every corporation the table names as an issuer.
 
-    Not the tracked characters. The table keeps a contract for ever, so
-    untracking a character must not strand their rows behind a filter that no
-    longer lists them.
+    Characters come from the tokens rather than from TrackedCharacter: the table
+    keeps a contract for ever, so untracking a character must not strand their
+    rows behind a filter that no longer lists them. Corporations come from the
+    rows a corporation feed wrote, because nothing else records which ones
+    arrived, and because a corporation's contracts do not carry `for_corporation`.
     """
-    characters = dict(Token.objects.values_list('character_id', 'character_name'))
-    return sorted(characters.items(), key=lambda option: option[1])
+    owners = dict(Token.objects.values_list('character_id', 'character_name'))
+    owners.update(names.owner_labels(tracking.corporation_ids() - set(owners)))
+    return sorted(owners.items(), key=lambda option: option[1])
 
 
 def _names_for(contracts):

@@ -4,7 +4,6 @@ from django.shortcuts import render, redirect
 from django.urls import reverse
 from django.utils import timezone
 from urllib.parse import urlencode
-from helion.decorators import require_character
 from market.ice_constants import FREIGHTER_HULL_CAPACITY, ICE_PRODUCT_TYPES, ICE_TYPES
 from market.models import TradeHub
 from market.services import market_service
@@ -71,7 +70,8 @@ def _walk_order_book(orders, target_volume):
             break  # We've reached the target
     return total_cost, accumulated_volume
 
-@require_character
+# No require_character: the stock column counts every owner, so a selected
+# character decides nothing here.
 def market_ice_index(request):
     # History.date rows are UTC days (ESI convention); compare date-to-date.
     today = timezone.now().date()
@@ -148,7 +148,8 @@ def market_ice_index(request):
         'gain_percent': {},
     }
 
-    ice_products_stock = market_service.get_character_assets(request.session['esi_token']['character_id'], [hub_station_ids[name] for name in REPROCESS_HUBS], ICE_PRODUCT_TYPES.values())
+    ice_products_stock = market_service.get_character_assets(
+        [hub_station_ids[name] for name in REPROCESS_HUBS], ICE_PRODUCT_TYPES.values())
 
     context['ice_product_data'] = _build_product_data(
         product_books, product_history, ice_products_stock, market_hubs, hub_station_ids, today)

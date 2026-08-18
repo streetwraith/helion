@@ -14,6 +14,14 @@ esi = ESIClientProvider(
         "GetCharactersCharacterIdAssets",
         "PostCharactersCharacterIdAssetsNames",
         "GetCharactersCharacterIdContracts",
+        # The corporation feeds. PostCharactersAffiliation is public and needs no
+        # scope: it is how a feed learns which corporation its character serves.
+        "PostCharactersAffiliation",
+        "GetCorporationsCorporationIdWalletsDivisionTransactions",
+        "GetCorporationsCorporationIdWalletsDivisionJournal",
+        "GetCorporationsCorporationIdAssets",
+        "GetCorporationsCorporationIdContracts",
+        "GetCorporationsCorporationIdOrders",
         "GetCharactersCharacterIdSkills",
         "GetCharactersCharacterIdSkillqueue",
         "GetCharactersCharacterIdAttributes",

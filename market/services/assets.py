@@ -1,10 +1,10 @@
 """Asset reads from the CharacterAsset overlay (written by the assets feed)."""
-from django.db.models import Sum
+from django.db.models import Q, Sum
 
-from esi.models import Token
 from evesde.models import Category, Group, MapSolarSystem, NpcStationName, Type
 from market.constants import FIRST_STRUCTURE_ID
 from market.models import CharacterAsset, EveName
+from market.services.names import owner_labels
 
 # ESI reports a nested item against its container, and the container against
 # the station, so the page has to walk out to the station itself. The walk is
@@ -21,21 +21,28 @@ PLAIN_FLAGS = frozenset({'Hangar', 'Unlocked', 'Locked'})
 IN_SERVICE_BAYS = frozenset({'DroneBay', 'FighterBay', 'FighterTube'})
 
 
-def get_character_assets(character_id, location_ids, trade_items):
-    """Station-asset quantities for a character, from the local overlay.
+def get_character_assets(location_ids, trade_items, owner_ids=None):
+    """Station-asset quantities from the local overlay.
 
-    Same contract as the retired ESI variant: with a list of location_ids the
-    result is {location_id: {type_id: quantity}}, with a single one it is
-    {type_id: quantity}."""
+    With a list of location_ids the result is {location_id: {type_id: quantity}},
+    with a single one it is {type_id: quantity}.
+
+    `owner_ids` names the owners to count, characters or corporations. Without it
+    every owner counts, which is what a page asking "how much do we hold here"
+    wants. The trade hub passes a set instead, because that page is one desk.
+    """
     return_by_location = isinstance(location_ids, list)
     wanted_locations = location_ids if return_by_location else [location_ids]
 
     rows = CharacterAsset.objects.filter(
-        character_id=character_id,
         location_type='station',
         location_id__in=wanted_locations,
         type_id__in=trade_items,
-    ).values('location_id', 'type_id').annotate(quantity=Sum('quantity'))
+    )
+    if owner_ids is not None:
+        rows = rows.filter(Q(character_id__in=owner_ids)
+                           | Q(corporation_id__in=owner_ids))
+    rows = rows.values('location_id', 'type_id').annotate(quantity=Sum('quantity'))
 
     if return_by_location:
         character_assets = {}
@@ -46,33 +53,36 @@ def get_character_assets(character_id, location_ids, trade_items):
 
 
 def get_asset_list():
-    """Every asset row of every character, as one line per item and place.
+    """Every asset row of every owner, as one line per item and place.
+
+    An owner is a character or a corporation: a corporation hangar is fetched by
+    its own feed and lands in the same table.
 
     The whole table renders into the page, so the queries are counted rather
-    than the rows: four, whatever the character holds.
+    than the rows: four, whatever the owners hold.
 
-    Lines merge on what the page shows - character, place, holder, type and
-    whether the item is assembled. Two Station Containers in one station carry
-    no name here, so their contents merge into one line: the reader cannot tell
-    the containers apart, and two identical lines would only puzzle them.
+    Lines merge on what the page shows - owner, place, holder, type and whether
+    the item is assembled. Two Station Containers in one station carry no name
+    here, so their contents merge into one line: the reader cannot tell the
+    containers apart, and two identical lines would only puzzle them.
     """
     rows = list(CharacterAsset.objects.all())
     by_item = {row.item_id: row for row in rows}
     types = _type_data(rows)
     entries = [_entry(row, by_item, types) for row in rows]
     return _merge(entries, _place_names(entries),
-                  dict(Token.objects.values_list('character_id', 'character_name')))
+                  owner_labels({entry['owner_id'] for entry in entries}))
 
 
-def get_character_options(lines):
-    """The characters the page actually shows, for the filter.
+def get_owner_options(lines):
+    """The owners the page actually shows, for the filter.
 
     Taken from the lines, not from the tokens: the filter runs in the browser
     over rendered rows, so an option that can only ever empty the table is
     noise.
     """
-    characters = {line['character_id']: line['character'] for line in lines}
-    return sorted(characters.items(), key=lambda option: option[1])
+    owners = {line['owner_id']: line['owner'] for line in lines}
+    return sorted(owners.items(), key=lambda option: option[1])
 
 
 def get_category_options(lines):
@@ -110,7 +120,8 @@ def _entry(row, by_item, types):
     type_row = types.get(row.type_id, {})
     place = _place_row(row, by_item)
     return {
-        'character_id': row.character_id,
+        # A row carries one owner or the other, never both.
+        'owner_id': row.corporation_id or row.character_id,
         'type_id': row.type_id,
         'item': _item_label(row, type_row),
         'category': type_row.get('category', ''),
@@ -216,20 +227,20 @@ def _place_names(entries):
     return names
 
 
-def _merge(entries, places, characters):
+def _merge(entries, places, owners):
     lines = {}
     for entry in entries:
         # The item label, not only the type: two containers with different names
         # are different things, and their contents belong on separate lines.
-        key = (entry['character_id'], entry['place_id'], entry['holder'],
+        key = (entry['owner_id'], entry['place_id'], entry['holder'],
                entry['item'], entry['assembled'])
         line = lines.get(key)
         if line is None:
             # A raw id beats an invented label: you can paste it into the game
             # client, and an unresolved place is rare enough to read as a flaw.
             lines[key] = dict(entry, quantity=0, m3=None,
-                              character=characters.get(entry['character_id'],
-                                                       str(entry['character_id'])),
+                              owner=owners.get(entry['owner_id'],
+                                               str(entry['owner_id'])),
                               location=places.get(entry['place_id'],
                                                   str(entry['place_id'])))
             line = lines[key]

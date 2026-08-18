@@ -20,7 +20,8 @@ $(document).ready(function () {
         if (total.count === 1 && total.latest) {
             var row = total.latest;
             return {
-                title: (row.is_buy ? 'Bought ' : 'Sold ') + row.quantity + 'x ' + row.type_name,
+                title: (row.is_buy ? 'Bought ' : 'Sold ') + row.quantity + 'x '
+                    + row.type_name + ' - ' + row.owner,
                 body: formatIsk(row.isk) + ' ISK - ' + row.location
             };
         }

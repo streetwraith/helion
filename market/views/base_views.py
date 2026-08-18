@@ -35,7 +35,18 @@ def index(request):
     # are outside helion's trading scope.
     market_regions = list(RegionStatus.objects.filter(
         region_id__in=hubs_by_region.keys()).order_by('region_name'))
-    wallet_statistics = market_service.WalletStatistics(WalletJournal.objects.filter(ref_type__in=['transaction_tax', 'brokers_fee', 'contract_brokers_fee', 'market_transaction', 'contract_collateral_payout', 'contract_price', 'contract_reward_deposited', 'contract_reward_refund', 'contract_sales_tax']), market_service.get_market_transactions())
+    # Personal rows only, on both sides. A corporation wallet pays for personal
+    # purchases, so its rows are not trade - the reason this app has always
+    # hardcoded is_personal here. get_market_transactions no longer filters that
+    # itself, because the transactions page shows both.
+    wallet_statistics = market_service.WalletStatistics(
+        WalletJournal.objects.filter(
+            corporation_id__isnull=True,
+            ref_type__in=['transaction_tax', 'brokers_fee', 'contract_brokers_fee',
+                          'market_transaction', 'contract_collateral_payout',
+                          'contract_price', 'contract_reward_deposited',
+                          'contract_reward_refund', 'contract_sales_tax']),
+        market_service.get_market_transactions().filter(is_personal=True))
     context = {
         "market_regions": market_regions,
         'wallet_windows': WALLET_WINDOWS,

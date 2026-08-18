@@ -119,8 +119,11 @@ The ingestion service holds no authed ESI token, so anything character-scoped st
 fetched per character and stored in small owned tables that join onto the external data at read
 time:
 
-- **`CharacterOrder(order_id, character_id)`** — which live orders are ours. "My orders" is a
-  join; "competitor" is `NOT EXISTS`. Rewritten wholesale per character on each fetch.
+- **`CharacterOrder(order_id, character_id, corporation_id, is_corporation)`** — which live
+  orders are ours. "My orders" is a join; "competitor" is `NOT EXISTS`. `is_corporation` is what
+  the character route reports: an order that character placed on behalf of the corporation. Those
+  have always landed here, so the trade hub has always counted them as ours - the flag only
+  records the fact.
 - **`CharacterAsset`** — the assets route payload stored as ESI sends it (station filtering
   happens at read time). Pages read this table instead of calling ESI during render; the route is
   server-cached for an hour anyway, so the table is exactly as fresh as the "live" call was. The
@@ -129,7 +132,24 @@ time:
 - **`CharacterContract`** — the contracts route payload, keyed on `contract_id` and never
   deleted. See "The contracts page" for why this one accumulates where the others rewrite.
 - **`EveName`** — names for the ids a contract carries, so no page resolves an id over the wire
-  while it renders.
+  while it renders. It answers for a corporation too, and for a character whose token this app no
+  longer holds.
+
+**Every one of these tables carries an owner, and an owner is a character or a corporation.**
+`corporation_id` is nullable beside `character_id`, and the wallet tables add the `division` of
+the corporation wallet. Two rules make the pair safe:
+
+- **A row can name both owners, and neither feed may clear the other's columns.** One order can be
+  reported by the character route (this character placed it) and by the corporation route (the
+  corporation owns it), and one transaction the same way. So a feed gives up only its own columns,
+  drops the rows nobody owns any more, and claims its current set - three statements instead of
+  delete-then-insert, in one transaction. The corporation route sends no `is_personal`, so the
+  corporation write sets it on insert only and never updates it.
+- **Nothing records which corporations are tracked**, because a corporation feed is a tag on the
+  character whose token serves it. `tracking.corporation_ids()` therefore reads the corporation
+  ids off the four tables a corporation feed writes. That is also why the contracts filter cannot
+  use `for_corporation`: on live data a corporation's own contracts arrive with that flag false -
+  it means "issued on behalf of the corporation", not "the corporation is a party".
 
 Per-character rewrites make an HTTP 304 a correct no-op: unchanged upstream data means the rows
 are already right. This assumes the ETag cache and the database move together — restoring one
@@ -242,6 +262,10 @@ The feeds and their routes:
 | wallet | `/characters/{id}/wallet/transactions` + `/wallet/journal` | 3600 s | char-wallet, 150/15 min |
 | assets | `/characters/{id}/assets` | 3600 s | char-asset, 1800/15 min |
 | contracts | `/characters/{id}/contracts` | 300 s | not measured |
+| corp_wallet | `/corporations/{id}/wallets/{1..7}/journal` + `/transactions` | 3600 s | corp-wallet |
+| corp_assets | `/corporations/{id}/assets` | 3600 s | corp-asset |
+| corp_contracts | `/corporations/{id}/contracts` | 300 s | not measured |
+| corp_orders | `/corporations/{id}/orders` | 1200 s | not measured |
 
 A full hourly cycle for a handful of characters spends under 2% of any bucket; the failure
 policy, not the budget, is the binding constraint.
@@ -272,6 +296,30 @@ to do with the sheet. `market/services/tracking.py` holds the read model and the
 - **The row is keyed by `character_name`, as `EsiFetchState` is.** An EVE rename orphans both rows
   and fetching stops with no error anywhere. The page cannot fix that, and moving both tables to
   `character_id` is a job of its own.
+
+### The corporation feeds
+
+`corp_wallet`, `corp_assets`, `corp_contracts` and `corp_orders` are tags on a character, and they
+mean "fetch that character's corporation with that character's token". No corporation table and no
+second key shape: the corporation comes from `POST /characters/affiliation/` on every run, which
+is public, needs no scope, and follows a character who changes corporation without being told.
+
+- **The routes want in-corp roles as well as scopes** - Accountant or Junior Accountant for the
+  wallets, Director for the assets, Trader or Accountant for the orders. A missing role answers
+  403, which the failure policy reads as a client error, so the row disables itself after three
+  tries and the block shows the reason.
+- **All seven wallet divisions are fetched**, journal and transactions, so a division that starts
+  trading cannot go quiet. That is 14 requests against a 3600 s cache. The division lands in the
+  column and the owner cell shows it, as `Silk Road (1)`.
+- **Two characters of one corporation tagged with the same feed fetch the same data twice.** That
+  wastes requests and cannot corrupt a row, because every corporation write is keyed on the
+  corporation.
+- **Corporation assets get no names.** The corporation names route answers 404 "Invalid IDs in the
+  request" unless *every* id in the batch is a nameable item, where the character route answers
+  "None" for the rest. A fitted module fails, a stack fails, and the corporation office fails,
+  while a ship in a hangar division succeeds - so no cheap rule picks the valid ids, and sorting
+  them out needs a type taxonomy the feed has no other use for. Verified against live ESI on
+  2026-08-17. The type, the hangar division and the location all still render.
 
 ## The trade-hub jump table
 
@@ -451,6 +499,31 @@ the affected rows through `data-type-id` and leaves every cell as rendered. The 
 carry the fresh prices; the table stays honest as one snapshot. A poll returns at most 50 rows, and
 the cursor advances to the last of them, so a longer burst drains over the following polls.
 
+## Every page shows every owner
+
+One rule across the app: **a page shows what the database holds, and a dropdown narrows it.** Not
+what a selected character owns. The stats index, the market browser, the contracts page and the
+history chart already worked that way; the transactions page, the assets page and the ice stock
+column now do too.
+
+- **The owner column names a character or a corporation**, resolved through `Token`, then
+  `EveName`, then the raw id. The raw id is not a defect: two characters in the data hold
+  transactions and no token, and their 35 rows used to be invisible. An id pastes into the game
+  client, which a blank does not.
+- **A transaction the character route flagged as the corporation's, before any corporation feed
+  named the wallet, reads as `Main (corp)`.** It would otherwise pass for an ordinary personal
+  trade. Once the corporation feed names the wallet the cell becomes the corporation and its
+  division.
+- **`require_character` is left on three places only**: the trade hub, because that page is one
+  character's desk; `undercuts_since`, which follows it; and `market_open_in_game`, which needs the
+  session character's token to act on that client. Everywhere else the gate could only turn a
+  visitor away from data the page would show anyway.
+- **The profit statistics are the exception, and they filter for themselves.** `is_personal` is no
+  longer hardcoded in `get_market_transactions`; the index page adds it, and excludes corporation
+  journal rows the same way. A corporation wallet pays for personal purchases, so those rows are
+  not trade. `get_trade_history_bulk` had no such filter at all until 2026-08-17, which put
+  corporation rows inside the trade hub's profit column while the index excluded them.
+
 ## The market browser
 
 `/market/browse?type_id=` shows one item's live order book across every ingested
@@ -576,10 +649,14 @@ other scopes: a token issued before it exists cannot serve this feed, and
 
 ## The assets page
 
-`/market/assets` lists the assets of every character from `CharacterAsset`, in one table
-with no pagination and no character gate. All three filters — the character dropdown, the
-category dropdown and the item name box — run in the browser over the rendered rows, so
-narrowing costs no request.
+`/market/assets` lists the assets of every owner from `CharacterAsset`, in one table with no
+pagination and no character gate. All three filters — the owner dropdown, the category dropdown
+and the item name box — run in the browser over the rendered rows, so narrowing costs no request.
+
+An owner is a character or a corporation: a corporation hangar arrives through its own feed and
+lands in the same table, so its rows merge, walk out of their containers and take the `in` column
+exactly like a character's. The hangar division shows there, as `CorpSAG1`, because the flag is not
+one of the three that say no more than "loose in this place".
 
 - **A row resolves to a place, not to a parent id.** ESI reports a nested item against its
   container and the container against the station, so most rows carry another row's
@@ -687,6 +764,22 @@ changes, so a repriced order counts again. Two limits are worth knowing:
 The column label carries the number, so the constant and the header must change together. In dev the
 count reads 0 on every row whenever the market snapshot is older than the window, which the restored
 prod dump usually is.
+
+### The desk is one character plus its corporations
+
+The my-columns - `v`, `p`, `u`, `stock`, ISK in escrow and ISK in sell orders - take the session
+character **and every corporation the app holds data for**. A corporation order is ours as much as
+a personal one, and the competitor query needed no change for that: `NOT EXISTS` over
+`market_characterorder` already excluded every row of ours, corporation ones included.
+
+`uc` matches the undercut row on `order_id` **and** `order_issued`, which is the pair the unique
+constraint uses. Matching the time alone could take another owner's row if two orders shared a
+second; matching the id alone would report the undercut of a price the order no longer carries.
+`uca`, the 30-day average, deliberately stays pooled across owners: it reads as a market signal -
+how fast does this item get undercut - and more samples make it better.
+
+The undercut beat iterates corporations as well as characters, and `MarketOrderUndercut` carries a
+nullable `corporation_id` for the rows they produce.
 
 ### The browser filters and the column toggles
 
@@ -816,11 +909,12 @@ rows and measures a few milliseconds.
 
 ### Our own fills
 
-With a character selected the payload carries four more rows: buy and sell, each split into this
+The payload always carries four more rows than the market data: buy and sell, each split into this
 region and the others.
 
-- **The selected character is the switch, not the filter.** Every transaction the database holds
-  counts, whoever made it. A per-character filter can come later.
+- **There is no switch any more.** Every transaction the database holds counts, whoever made it, so
+  a selected character decided nothing but whether four series rendered. The rows, the
+  `show_transactions` flag and the `data-transactions` attribute all went with it.
 - **One dot per day per side, volume-weighted** (`sum(price x quantity) / sum(quantity)`), so the
   dot is the price actually paid rather than the mean of the tickets.
 - **The bucket is the UTC date**, for the same reason the x axis is.

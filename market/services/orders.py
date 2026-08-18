@@ -3,7 +3,7 @@ from datetime import timedelta
 
 from django.core.cache import cache
 from django.db import connection
-from django.db.models import Max, Min
+from django.db.models import Max, Min, Q
 from esi.models import Token
 
 from evesde import services as sde_service
@@ -71,13 +71,19 @@ def trade_item_del(type_id):
     trade_item.delete()
     return name
 
-def save_market_order_undercuts(region_id, character_id, is_buy, market_order_undercut_data=None):
+# The owner columns of market_characterorder, and the only values the undercut
+# query interpolates. Not user input, and whitelisted here so it cannot become so.
+OWNER_COLUMNS = {False: 'character_id', True: 'corporation_id'}
+
+def save_market_order_undercuts(region_id, owner_id, is_buy, market_order_undercut_data=None,
+                                is_corporation=False):
     market_order_undercut_data = market_order_undercut_data or []
+    owner = {OWNER_COLUMNS[is_corporation]: owner_id}
     new_market_order_undercuts = [
         MarketOrderUndercut(
             type_id=market_order_undercut[0],
             region_id=region_id,
-            character_id=character_id,
+            **owner,
             is_buy_order=is_buy,
             order_id=market_order_undercut[1],
             order_price=market_order_undercut[2],
@@ -91,11 +97,16 @@ def save_market_order_undercuts(region_id, character_id, is_buy, market_order_un
 
     MarketOrderUndercut.objects.bulk_create(new_market_order_undercuts, ignore_conflicts=True)
 
-def _find_undercut_orders(region_id, character_id, is_buy):
+def _find_undercut_orders(region_id, owner_id, is_buy, is_corporation=False):
     # A sell order is undercut by a newer, cheaper competitor; a buy order by a
     # newer, higher bidder. The closest competing price wins in both cases.
+    #
+    # The owner is a character or a corporation. The competitor side needs no such
+    # distinction: NOT EXISTS over market_characterorder already excludes every
+    # order of ours, so our own corporation can never read as competition.
     price_comparison = '>' if is_buy else '<'
     closest_first = 'ASC' if is_buy else 'DESC'
+    owner_column = OWNER_COLUMNS[is_corporation]
     query = f"""
     SELECT my_orders.type_id,
        my_orders.order_id,
@@ -106,7 +117,7 @@ def _find_undercut_orders(region_id, character_id, is_buy):
        competing.competitor_price
     FROM orders_hub AS my_orders
     JOIN market_characterorder AS mine
-        ON mine.order_id = my_orders.order_id AND mine.character_id = %s
+        ON mine.order_id = my_orders.order_id AND mine.{owner_column} = %s
     JOIN LATERAL (
         SELECT competitor.order_id AS competitor_order_id,
             competitor.issued AS competitor_issued,
@@ -129,28 +140,31 @@ def _find_undercut_orders(region_id, character_id, is_buy):
     """
 
     with connection.cursor() as cursor:
-        cursor.execute(query, [character_id, region_id, is_buy])
+        cursor.execute(query, [owner_id, region_id, is_buy])
         return cursor.fetchall()
 
-def find_undercut_sell_orders(region_id, character_id):
-    return _find_undercut_orders(region_id, character_id, is_buy=False)
+def find_undercut_sell_orders(region_id, owner_id, is_corporation=False):
+    return _find_undercut_orders(region_id, owner_id, is_buy=False,
+                                 is_corporation=is_corporation)
 
-def find_undercut_buy_orders(region_id, character_id):
-    return _find_undercut_orders(region_id, character_id, is_buy=True)
+def find_undercut_buy_orders(region_id, owner_id, is_corporation=False):
+    return _find_undercut_orders(region_id, owner_id, is_buy=True,
+                                 is_corporation=is_corporation)
 
 # One poll never carries more than this. The cursor advances to the last row
 # returned, so a longer burst drains over the following polls instead of
 # arriving as one unbounded payload.
 UNDERCUT_POLL_LIMIT = 50
 
-def latest_undercut_id(region_id, character_id):
+def latest_undercut_id(region_id, owner_ids):
     """The newest undercut row id, as a browser poller's start cursor."""
     newest = MarketOrderUndercut.objects.filter(
-        region_id=region_id, character_id=character_id
+        Q(character_id__in=owner_ids) | Q(corporation_id__in=owner_ids),
+        region_id=region_id,
     ).aggregate(newest=Max('id'))['newest']
     return newest or 0
 
-def get_undercuts_since(region_id, character_id, after):
+def get_undercuts_since(region_id, owner_ids, after):
     """Own orders newly undercut or outbid in the region, after a cursor.
 
     A sell order is undercut and a buy order is outbid. One MarketOrderUndercut
@@ -160,7 +174,8 @@ def get_undercuts_since(region_id, character_id, after):
     """
     assert after >= 0, "the cursor is a MarketOrderUndercut id"
     rows = list(MarketOrderUndercut.objects.filter(
-        region_id=region_id, character_id=character_id, id__gt=after
+        Q(character_id__in=owner_ids) | Q(corporation_id__in=owner_ids),
+        region_id=region_id, id__gt=after,
     ).order_by('id').values(
         'id', 'type_id', 'is_buy_order', 'order_price', 'competitor_price'
     )[:UNDERCUT_POLL_LIMIT])

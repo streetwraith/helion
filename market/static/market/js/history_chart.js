@@ -184,7 +184,7 @@ const dateSeries = {
         : new Date(timestamp * 1000).toISOString().slice(0, 10),
 };
 
-function chartOptions(size, theme, withTransactions) {
+function chartOptions(size, theme) {
     const axisStyle = {
         stroke: theme.axis,
         grid: {stroke: theme.grid, width: 1},
@@ -252,7 +252,7 @@ function chartOptions(size, theme, withTransactions) {
             averageSeries('mavg5', theme.maShort),
             averageSeries('mavg30', theme.maLong),
             // Last, so our own fills draw over the history behind them.
-            ...(withTransactions ? transactionSeries(theme) : []),
+            ...transactionSeries(theme),
         ],
     };
 }
@@ -272,9 +272,6 @@ function drawChart() {
     }
     const target = document.getElementById('history-chart');
     const data = JSON.parse(dataElement.textContent);
-    // The view decides whether our own fills are in the payload, so the series
-    // list is never guessed from the row count.
-    const withTransactions = target.dataset.transactions === '1';
     let chart = null;
 
     function build() {
@@ -282,7 +279,7 @@ function drawChart() {
             chart.destroy();
         }
         chart = new uPlot(
-            chartOptions(chartSize(target), currentTheme(), withTransactions), data, target);
+            chartOptions(chartSize(target), currentTheme()), data, target);
     }
 
     build();

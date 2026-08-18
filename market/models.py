@@ -2,7 +2,14 @@ from django.db import models
 
 class MarketTransaction(models.Model):
     transaction_id = models.BigIntegerField(primary_key=True)
-    character_id = models.BigIntegerField(db_index=True)
+    # Null on a row only the corporation wallet route reported.
+    character_id = models.BigIntegerField(db_index=True, blank=True, null=True)
+    # Set on a row the corporation feeds own. A row can carry both: the
+    # character route names who executed the trade, the corporation route
+    # names the wallet that paid, and neither write clears the other.
+    corporation_id = models.BigIntegerField(db_index=True, blank=True, null=True)
+    # Which of the seven corporation wallets. Null on a character row.
+    division = models.IntegerField(blank=True, null=True)
     client_id = models.BigIntegerField()
     date = models.DateTimeField()
     is_buy = models.BooleanField()
@@ -37,7 +44,13 @@ class TradeItem(models.Model):
 
 class WalletJournal(models.Model):
     journal_id = models.BigIntegerField(primary_key=True)
-    character_id = models.BigIntegerField(db_index=True)
+    character_id = models.BigIntegerField(db_index=True, blank=True, null=True)
+    # Set on a row the corporation feeds own. A row can carry both: the
+    # character route names who executed the trade, the corporation route
+    # names the wallet that paid, and neither write clears the other.
+    corporation_id = models.BigIntegerField(db_index=True, blank=True, null=True)
+    # Which of the seven corporation wallets. Null on a character row.
+    division = models.IntegerField(blank=True, null=True)
     # Four decimals: transaction_tax journal amounts really carry them
     # (verified against prod data), so numeric(20,4) loses nothing.
     amount = models.DecimalField(max_digits=20, decimal_places=4)
@@ -56,7 +69,11 @@ class WalletJournal(models.Model):
 class MarketOrderUndercut(models.Model):
     type_id = models.BigIntegerField(db_index=True)
     region_id = models.BigIntegerField(db_index=True)
-    character_id = models.BigIntegerField(db_index=True)
+    character_id = models.BigIntegerField(db_index=True, blank=True, null=True)
+    # Set on a row the corporation feeds own. A row can carry both: the
+    # character route names who executed the trade, the corporation route
+    # names the wallet that paid, and neither write clears the other.
+    corporation_id = models.BigIntegerField(db_index=True, blank=True, null=True)
     order_id = models.BigIntegerField()
     order_price = models.DecimalField(max_digits=20, decimal_places=2)
     order_issued = models.DateTimeField()
@@ -87,14 +104,26 @@ class CharacterOrder(models.Model):
     # Which live market orders are ours, joined onto market.orders at read
     # time. Marketmanager holds no authed token, so ownership stays helion's.
     order_id = models.BigIntegerField(primary_key=True)
-    character_id = models.BigIntegerField(db_index=True)
+    character_id = models.BigIntegerField(db_index=True, blank=True, null=True)
+    # Set on a row the corporation feeds own. A row can carry both: the
+    # character route names who executed the trade, the corporation route
+    # names the wallet that paid, and neither write clears the other.
+    corporation_id = models.BigIntegerField(db_index=True, blank=True, null=True)
+    # The character orders route reports whether the order was placed on
+    # behalf of the corporation. Null on a row only the corporation route
+    # reported, where every order is the corporation's by definition.
+    is_corporation = models.BooleanField(blank=True, null=True)
 
 class CharacterAsset(models.Model):
     # The assets route payload as ESI sends it, rewritten wholesale per
     # character by the assets feed. Views read only station rows today; the
     # rest is stored for future use.
     item_id = models.BigIntegerField(primary_key=True)
-    character_id = models.BigIntegerField(db_index=True)
+    character_id = models.BigIntegerField(db_index=True, blank=True, null=True)
+    # Set on a row the corporation feeds own. A row can carry both: the
+    # character route names who executed the trade, the corporation route
+    # names the wallet that paid, and neither write clears the other.
+    corporation_id = models.BigIntegerField(db_index=True, blank=True, null=True)
     type_id = models.BigIntegerField()
     quantity = models.BigIntegerField()
     location_id = models.BigIntegerField()

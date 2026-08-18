@@ -1,6 +1,6 @@
 from datetime import datetime, timedelta, timezone
 
-from django.db.models import Count
+from django.db.models import Count, Q
 from django.shortcuts import render
 
 from evesde import services as sde_service
@@ -12,7 +12,7 @@ from market.constants import (
 )
 from market.models import CharacterOrder, MarketOrderUndercut, TradeHub, TradeItem
 from marketdata.models import OrdersHub, RegionStatus
-from market.services import market_service
+from market.services import market_service, tracking
 
 # The window behind the o48 columns. The column label carries the number, so the
 # two must change together.
@@ -55,7 +55,14 @@ def _undercut_times(undercut_rows, my_order, now):
     """Hours until the current order was undercut, and the 30-day average."""
     current_time = None
     if undercut_rows and my_order:
-        matching = [u for u in undercut_rows if u.order_issued == my_order.issued]
+        # Both fields: order_id names the order and order_issued names the
+        # pricing, which is what the unique constraint pairs. Matching the time
+        # alone would take another owner's row if two orders shared a second,
+        # and matching the id alone would report the undercut of a price this
+        # order no longer carries.
+        matching = [u for u in undercut_rows
+                    if u.order_id == my_order.order_id
+                    and u.order_issued == my_order.issued]
         if matching:
             current = max(matching, key=lambda u: u.created_at)
             current_time = (current.competitor_issued - current.order_issued).total_seconds() / 3600
@@ -82,12 +89,17 @@ def market_trade_hub(request, region_id):
     trade_hub_other = trade_hub_jita if region_id != REGION_ID_FORGE else trade_hub_amarr
     other_region_id = REGION_ID_FORGE if region_id != REGION_ID_FORGE else REGION_ID_DOMAIN
     character_id = request.session['esi_token']['character_id']
+    # One desk: the session character and every corporation we hold data for. A
+    # corporation order is ours as much as a personal one, and the competitor
+    # query already excludes every CharacterOrder row, corporation ones included.
+    owner_ids = {character_id} | tracking.corporation_ids()
 
     character_order_list = list(OrdersHub.objects.filter(
         region_id=region_id,
         is_in_trade_hub_range=True,
         order_id__in=CharacterOrder.objects.filter(
-            character_id=character_id).values('order_id'),
+            Q(character_id=character_id) | Q(corporation_id__in=owner_ids)
+        ).values('order_id'),
     ))
 
     context_extras, trade_items, extra_items = _resolve_item_sets(
@@ -102,9 +114,9 @@ def market_trade_hub(request, region_id):
     type_ids = [item.type_id for item in items_to_process]
 
     character_assets = market_service.get_character_assets(
-        character_id=character_id,
-        trade_items=list(trade_items.values_list('type_id', flat=True)),
-        location_ids=trade_hub_region.station_id
+        trade_hub_region.station_id,
+        list(trade_items.values_list('type_id', flat=True)),
+        owner_ids=owner_ids,
     )
 
     # Everything the per-item loop needs, prefetched in bulk: the loop itself
@@ -164,7 +176,7 @@ def market_trade_hub(request, region_id):
     context["item_dict_extra"] = item_dict_extra
     # The notification poller's start cursor, so a reload never reports
     # undercuts that happened while the page was closed.
-    context["max_undercut_id"] = market_service.latest_undercut_id(region_id, character_id)
+    context["max_undercut_id"] = market_service.latest_undercut_id(region_id, owner_ids)
 
     isk_in_escrow = 0
     isk_in_sell_orders = 0

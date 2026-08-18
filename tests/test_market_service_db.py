@@ -89,12 +89,25 @@ class TestGetMarketTransactions:
         add_transaction(3, 35, 10, 6.0, is_buy=False)
         add_transaction(4, 34, 10, 4.5, is_buy=True, is_personal=False)
 
-    def test_only_personal_transactions(self):
-        assert market_service.get_market_transactions().count() == 3
+    def test_every_row_including_the_corporation_ones(self):
+        # No owner filter and no is_personal filter: the pages show what the
+        # table holds. Excluding corporation rows belongs to the profit
+        # statistics, which filter them out themselves.
+        assert market_service.get_market_transactions().count() == 4
+
+    def test_owner_id_narrows_to_one_character_or_corporation(self):
+        MarketTransaction.objects.filter(transaction_id=4).update(
+            character_id=None, corporation_id=98_000_001)
+
+        mine = market_service.get_market_transactions(CHARACTER_ID)
+        theirs = market_service.get_market_transactions(98_000_001)
+
+        assert {row.transaction_id for row in mine} == {1, 2, 3}
+        assert {row.transaction_id for row in theirs} == {4}
 
     def test_is_buy_string_filter(self):
         buys = market_service.get_market_transactions(is_buy="True")
-        assert [t.transaction_id for t in buys] == [1]
+        assert [t.transaction_id for t in buys] == [4, 1]
 
     def test_type_name_fuzzy_filter(self):
         got = market_service.get_market_transactions(type_name="trit")
@@ -221,15 +234,26 @@ class TestCharacterAssetReads:
         self.add_asset(6, 34, 9, character_id=42)  # other character
 
         got = market_service.get_character_assets(
-            CHARACTER_ID, location_ids=JITA_STATION, trade_items=[34])
+            JITA_STATION, [34], owner_ids={CHARACTER_ID})
 
         assert got == {34: 7}
+
+    def test_without_owners_every_owner_counts(self):
+        # What the ice page asks: how much do we hold in this station at all.
+        self.add_asset(1, 34, 5)
+        self.add_asset(2, 34, 2, character_id=42)
+        CharacterAsset.objects.create(
+            item_id=3, character_id=None, corporation_id=98_000_001, type_id=34,
+            quantity=10, location_id=JITA_STATION, location_type="station",
+            location_flag="Hangar", is_singleton=False)
+
+        assert market_service.get_character_assets(JITA_STATION, [34]) == {34: 17}
 
     def test_by_location_shape_for_location_list(self):
         self.add_asset(1, 34, 5)
         self.add_asset(2, 34, 9, location_id=60008494)
 
         got = market_service.get_character_assets(
-            CHARACTER_ID, location_ids=[JITA_STATION, 60008494], trade_items=[34])
+            [JITA_STATION, 60008494], [34], owner_ids={CHARACTER_ID})
 
         assert got == {JITA_STATION: {34: 5}, 60008494: {34: 9}}

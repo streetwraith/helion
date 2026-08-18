@@ -13,6 +13,7 @@ from market.services import assets as asset_service
 pytestmark = pytest.mark.django_db
 
 MAIN, ALT = 900001, 900002
+CORPORATION = 98_000_001
 JITA_STATION = 60003760
 JITA_SYSTEM = 30000142
 STRUCTURE = 1_035_000_000_001
@@ -327,14 +328,27 @@ class TestMerge:
 
         assert [line['quantity'] for line in lines] == [50, 100]  # Amarr sorts first
 
-    def test_each_character_keeps_its_own_line(self, jita):
+    def test_each_owner_keeps_its_own_line(self, jita):
         add_token(ALT, "Alt")
         add_asset(1, TRITANIUM, quantity=100)
         add_asset(2, TRITANIUM, quantity=50, character_id=ALT)
 
         lines = asset_service.get_asset_list()
 
-        assert {line['character'] for line in lines} == {"Main", "Alt"}
+        assert {line['owner'] for line in lines} == {"Main", "Alt"}
+
+    def test_a_corporation_hangar_is_its_own_owner(self, jita):
+        EveName.objects.create(entity_id=CORPORATION, name="Silk Road",
+                               category="corporation")
+        add_asset(1, TRITANIUM, quantity=100)
+        CharacterAsset.objects.create(
+            item_id=2, character_id=None, corporation_id=CORPORATION,
+            type_id=TRITANIUM, quantity=50, location_id=JITA_STATION,
+            location_type="station", location_flag="CorpSAG1", is_singleton=False)
+
+        lines = asset_service.get_asset_list()
+
+        assert {line['owner'] for line in lines} == {"Main", "Silk Road"}
 
 
 class TestTaxonomy:
@@ -382,19 +396,19 @@ class TestCategoryOptions:
         assert asset_service.get_category_options(asset_service.get_asset_list()) == []
 
 
-class TestCharacterOptions:
-    def test_only_characters_holding_assets_are_offered(self, jita):
+class TestOwnerOptions:
+    def test_only_owners_holding_assets_are_offered(self, jita):
         add_token(ALT, "Alt")  # a token, but no assets feed
         add_asset(1, TRITANIUM, quantity=5)
 
-        options = asset_service.get_character_options(asset_service.get_asset_list())
+        options = asset_service.get_owner_options(asset_service.get_asset_list())
 
         assert options == [(MAIN, "Main")]
 
-    def test_a_character_without_a_token_falls_back_to_its_id(self, jita):
+    def test_an_owner_without_a_name_falls_back_to_its_id(self, jita):
         add_asset(1, TRITANIUM, quantity=5, character_id=ALT)
 
-        options = asset_service.get_character_options(asset_service.get_asset_list())
+        options = asset_service.get_owner_options(asset_service.get_asset_list())
 
         assert options == [(ALT, str(ALT))]
 
@@ -407,22 +421,22 @@ class TestPage:
 
         content = auth_client.get("/market/assets").content.decode()
 
-        assert 'data-character="900001"' in content
+        assert 'data-owner="900001"' in content
         assert 'data-category="Commodity"' in content
         assert "Tritanium" in content
         assert "Mineral" in content
         assert "Jita IV - Moon 4" in content
         assert "<td>120</td>" in content  # 12,000 x 0.01 m3
 
-    def test_the_columns_read_item_first_and_character_last(self, auth_client,
-                                                            trade_hubs, jita):
+    def test_the_columns_read_item_first_and_owner_last(self, auth_client,
+                                                       trade_hubs, jita):
         add_asset(1, TRITANIUM, quantity=5)
 
         content = auth_client.get("/market/assets").content.decode()
         header = re.search(r"<thead>.*?</thead>", content, re.S).group()
 
         assert re.findall(r"<th>(\w+)</th>", header) == [
-            "item", "qty", "in", "category", "group", "location", "m3", "character"]
+            "item", "qty", "in", "category", "group", "location", "m3", "owner"]
 
     def test_the_item_name_carries_the_shared_links(self, auth_client, trade_hubs, jita):
         add_asset(1, TRITANIUM, quantity=5)

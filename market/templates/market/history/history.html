@@ -50,7 +50,7 @@
   {# No history link: this page is the chart that link leads to. #}
   {% item_name type_id type_name show_history=False %} &mdash; {{ region_name }} &mdash; {{ days }} days
 </h1>
-<div id="history-chart" data-transactions="{{ show_transactions|yesno:'1,0' }}"></div>
+<div id="history-chart"></div>
 {{ chart|json_script:"chart-data" }}
 {% elif type_id %}
 <p class="history-notice">No history for this item in {{ region_name }}.</p>

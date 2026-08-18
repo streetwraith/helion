@@ -41,6 +41,20 @@ MAX_STRUCTURES_PER_RUN = 20
 UNRESOLVABLE_STATUS = (403, 404)
 
 
+def owner_labels(owner_ids):
+    """id -> display name for an owner column, character or corporation.
+
+    Our own tokens answer first, then this cache. An id with no name anywhere
+    reads as itself: two characters in the data hold transactions but no token,
+    and a raw id at least pastes into the game client.
+    """
+    owner_ids = {owner_id for owner_id in owner_ids if owner_id}
+    names = dict(Token.objects.values_list('character_id', 'character_name'))
+    names.update(EveName.objects.filter(entity_id__in=owner_ids).exclude(name=None)
+                 .values_list('entity_id', 'name'))
+    return {owner_id: names.get(owner_id, str(owner_id)) for owner_id in owner_ids}
+
+
 def resolve_contract_names(contracts, character_id):
     """Cache a name for every id in `contracts` the cache does not hold yet."""
     party_ids = set()

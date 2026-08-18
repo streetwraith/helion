@@ -18,11 +18,11 @@
     <option value="courier" {% if is_courier %}selected{% endif %}>courier</option>
     <option value="others" {% if not is_courier %}selected{% endif %}>others</option>
   </select>
-  <label for="character_id">Character</label>
-  <select id="character_id" name="character_id">
-    <option value="">all characters</option>
-    {% for option_id, option_name in character_options %}
-    <option value="{{ option_id }}" {% if option_id == character_id %}selected{% endif %}>{{ option_name }}</option>
+  <label for="owner_id">Owner</label>
+  <select id="owner_id" name="owner_id">
+    <option value="">all owners</option>
+    {% for option_id, option_name in owner_options %}
+    <option value="{{ option_id }}" {% if option_id == owner_id %}selected{% endif %}>{{ option_name }}</option>
     {% endfor %}
   </select>
   <label><input type="checkbox" name="include_finished" value="1"

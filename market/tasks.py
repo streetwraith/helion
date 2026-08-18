@@ -50,8 +50,17 @@ def compute_undercuts(self):
             return
         statuses = RegionStatus.objects.filter(
             region_id__in=TradeHub.objects.values_list("region_id", flat=True))
-        character_ids = list(
-            CharacterOrder.objects.values_list("character_id", flat=True).distinct())
+        # Every owner holding orders, characters and corporations alike. A
+        # corporation order is ours, so losing the book on one is worth a row.
+        owners = [
+            (owner_id, False) for owner_id in
+            CharacterOrder.objects.exclude(character_id=None)
+            .values_list("character_id", flat=True).distinct()
+        ] + [
+            (owner_id, True) for owner_id in
+            CharacterOrder.objects.exclude(corporation_id=None)
+            .values_list("corporation_id", flat=True).distinct()
+        ]
         for status in statuses:
             if status.refreshed_at is None:
                 # Never ingested yet; a NULL must not count as "new".
@@ -60,15 +69,17 @@ def compute_undercuts(self):
             mark = cache.get(mark_key)
             if mark is not None and status.refreshed_at <= mark:
                 continue
-            for character_id in character_ids:
+            for owner_id, is_corporation in owners:
                 for is_buy, find_undercuts in (
                         (False, market_service.find_undercut_sell_orders),
                         (True, market_service.find_undercut_buy_orders)):
                     undercuts = find_undercuts(
-                        region_id=status.region_id, character_id=character_id)
+                        region_id=status.region_id, owner_id=owner_id,
+                        is_corporation=is_corporation)
                     market_service.save_market_order_undercuts(
-                        region_id=status.region_id, character_id=character_id,
-                        is_buy=is_buy, market_order_undercut_data=undercuts)
+                        region_id=status.region_id, owner_id=owner_id,
+                        is_buy=is_buy, market_order_undercut_data=undercuts,
+                        is_corporation=is_corporation)
             # Advance only after a successful compute, so a failure retries
             # on the next beat. A lost mark costs one deduped recompute.
             cache.set(mark_key, status.refreshed_at, timeout=None)

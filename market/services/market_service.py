@@ -10,6 +10,9 @@ from market.constants import (
 from market.services.assets import (
     get_character_assets,
 )
+from market.services.names import (
+    owner_labels,
+)
 from market.services.esi_scheduler import (
     seconds_until_next_wallet_fetch,
 )
@@ -61,6 +64,8 @@ from market.services.orders import (
 )
 from market.services.wallet import (
     WalletStatistics,
+    get_owner_options,
+    owner_label,
     get_average_transaction_price,
     get_average_transaction_price_bulk,
     get_daily_transaction_prices,

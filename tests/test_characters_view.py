@@ -235,6 +235,9 @@ class TestTracking:
 
         content = tracked.get("/characters/", {"character": 900001}).content.decode()
         assert "DISABLED (3 errors)" in content
+        # The reason is the only thing that tells a missing corporation role from
+        # a dead token, and corporation feeds fail that way.
+        assert "3 consecutive client/token errors" in content
         assert 'name="_reenable" value="assets"' in content
 
         self.post(tracked, _reenable="assets")

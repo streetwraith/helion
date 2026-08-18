@@ -56,6 +56,16 @@ FEEDS = {
     "wallet": (esi_sync.refresh_character_wallet, 3600),
     "assets": (esi_sync.refresh_character_assets, 3600),
     "contracts": (esi_sync.refresh_character_contracts, 300),
+    # A corporation feed is a tag on the character whose token serves it: the
+    # corporation comes from that character's affiliation, so nothing else has to
+    # record which corporation is tracked. Two characters of one corporation
+    # tagged with the same feed fetch the same data twice, which wastes requests
+    # but cannot corrupt a row - every corporation write is keyed on the
+    # corporation.
+    "corp_wallet": (esi_sync.refresh_corporation_wallet, 3600),
+    "corp_assets": (esi_sync.refresh_corporation_assets, 3600),
+    "corp_contracts": (esi_sync.refresh_corporation_contracts, 300),
+    "corp_orders": (esi_sync.refresh_corporation_orders, 1200),
 }
 
 # The one scope each feed asks of Token.get_token. The tracking page greys out a
@@ -66,6 +76,15 @@ FEED_SCOPES = {
     "wallet": "esi-wallet.read_character_wallet.v1",
     "assets": "esi-assets.read_assets.v1",
     "contracts": "esi-contracts.read_character_contracts.v1",
+    # The corporation routes also want in-corp roles - Accountant or Junior
+    # Accountant for the wallets, Director for the assets, Trader or Accountant
+    # for the orders. A missing role answers 403, which the failure policy treats
+    # as a client error, so the row disables itself after three tries and the
+    # tracking block shows the reason.
+    "corp_wallet": "esi-wallet.read_corporation_wallets.v1",
+    "corp_assets": "esi-assets.read_corporation_assets.v1",
+    "corp_contracts": "esi-contracts.read_corporation_contracts.v1",
+    "corp_orders": "esi-markets.read_corporation_orders.v1",
 }
 
 
