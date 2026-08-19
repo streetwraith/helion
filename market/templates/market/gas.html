@@ -1,0 +1,93 @@
+{% extends "market_base.html" %}
+
+{% load custom_filters item_tags %}
+
+{% block title %}gas | Helion{% endblock %}
+
+{% block content %}
+<h1>{{ family.name }} Calculator</h1>
+
+<form action="{% url 'market_gas_index' %}" method="GET">
+    <div id="gas_fleet">
+        {% for field in form %}
+        <label for="{{ field.id_for_label }}">{{ field.label }}</label>
+        {{ field }}
+        {% endfor %}
+        <button type="submit">calculate</button>
+    </div>
+    {% if form.errors %}
+    <ul class="form-errors">
+        {% for field in form %}
+        {% for error in field.errors %}<li>{{ field.label }}: {{ error }}</li>{% endfor %}
+        {% endfor %}
+        {% for error in form.non_field_errors %}<li>{{ error }}</li>{% endfor %}
+    </ul>
+    {% endif %}
+</form>
+
+{% if setup %}
+<table style="width: auto;">
+    <tbody>
+        <tr><td>Harvest rate (m3/s):</td><td>{{ setup.harvest_rate|floatformat:2 }}</td></tr>
+        <tr><td>Hourly harvest (m3):</td><td>{{ setup.hourly_harvest|isk_value_k }}</td></tr>
+        <tr><td>Trip duration (minutes):</td><td>{{ setup.trip_minutes|floatformat:2 }}</td></tr>
+        <tr><td>Estimated efficiency:</td><td>{{ setup.efficiency|floatformat:4 }}</td></tr>
+    </tbody>
+</table>
+
+{% comment %}
+No class="market": market.js runs tablesorter on that class, and a sort would
+split the two cloud rows that make up one site.
+{% endcomment %}
+<table style="width: auto;">
+    <thead>
+        <tr>
+            <th>class</th>
+            {% for header, key in family.leading_columns %}<th>{{ header }}</th>{% endfor %}
+            <th>site</th>
+            <th>ISK/site</th>
+            <th>ISK/hr</th>
+            <th>min</th>
+            <th>trips</th>
+            <th>type</th>
+            <th>ISK/m3</th>
+            <th>m3</th>
+            {% for header, key in family.cloud_columns %}<th>{{ header }}</th>{% endfor %}
+            {% for header, key in family.trailing_columns %}<th>{{ header }}</th>{% endfor %}
+        </tr>
+    </thead>
+    <tbody>
+        {% for site in sites %}
+        {% for cloud in site.clouds %}
+        <tr>
+            {% if forloop.first %}
+            <td rowspan="{{ site.clouds|length }}">{{ site.group }}</td>
+            {% for header, key in family.leading_columns %}
+            <td rowspan="{{ site.clouds|length }}">{{ site.extra|get_by_key:key }}</td>
+            {% endfor %}
+            <td rowspan="{{ site.clouds|length }}">{{ site.name }}</td>
+            {# A priced site is never worth zero ISK, so falsy means unpriced. #}
+            <td rowspan="{{ site.clouds|length }}">{% if site.value %}{{ site.value|isk_value_mil }}{% else %}-{% endif %}</td>
+            <td rowspan="{{ site.clouds|length }}">{% if site.isk_per_hour %}{{ site.isk_per_hour|isk_value_mil }}{% else %}-{% endif %}</td>
+            <td rowspan="{{ site.clouds|length }}">{{ site.minutes|floatformat:0 }}</td>
+            <td rowspan="{{ site.clouds|length }}">{{ site.trips|floatformat:1 }}</td>
+            {% endif %}
+            <td class="item-name">{% item_name cloud.type_id cloud.label region_id=region_id %}</td>
+            <td>{% if cloud.isk_per_m3 %}{{ cloud.isk_per_m3|isk_value }}{% else %}-{% endif %}</td>
+            <td>{{ cloud.m3|m3_value }}</td>
+            {% for header, key in family.cloud_columns %}
+            <td>{{ cloud.extra|get_by_key:key }}</td>
+            {% endfor %}
+            {% if forloop.first %}
+            {% for header, key in family.trailing_columns %}
+            <td rowspan="{{ site.clouds|length }}">{{ site.extra|get_by_key:key }}</td>
+            {% endfor %}
+            {% endif %}
+        </tr>
+        {% endfor %}
+        {% endfor %}
+    </tbody>
+</table>
+{% endif %}
+
+{% endblock %}

@@ -1111,6 +1111,96 @@ region and the others.
   to two regions. The five hub stations cover 97.5% of the transactions exactly; everything else
   reads as another region, which is the conservative error.
 
+## The gas calculator
+
+`/market/gas` answers one question: which wormhole gas site pays best for the fleet you fly. It
+replaces a spreadsheet, and it reproduces that spreadsheet's geometry exactly — `tests/test_gas.py`
+pins the m3, the clear time, the trip count and the site value of all nine fullerite sites against
+the figures the spreadsheet produced.
+
+One column reads differently on purpose. The spreadsheet rounds the trip count up; this page keeps
+the exact ratio of the site's m3 to the hold and prints one decimal. A whole number hides the part
+that decides whether to bring another ship: 0.9 says one hold nearly fills, and 2.1 says two holds
+and a little. The reproduction test rounds ours up before it compares.
+
+### The static data is unit counts, not volumes
+
+`gas_constants.py` holds what a site contains. A cloud carries a **unit count**, and the m3 comes
+from `sde.types.volume` at read time. The spreadsheet hardcodes m3 instead, which silently bakes a
+packaged volume into every number and cannot express the compressed comparison below. Unit counts
+reproduce every one of its m3 figures and survive a repackaging by CCP.
+
+The site contents are the one thing here with no authoritative source in the stack: the SDE exports
+no cosmic signature, so they come from the UniWiki site pages, read 4 August 2026. Nothing can
+verify them from the database.
+
+The spreadsheet also swaps the type ids of Fullerite-C50 and Fullerite-C60 in its price lookup.
+This app resolves the ids itself, so it does not carry that bug. The two prices sit within 0.1% of
+each other, which is why nobody noticed.
+
+### One fleet has one harvest rate
+
+The spreadsheet divides the mining hold by the frigate harvest rate, while its clear times divide by
+the frigate rate plus the boosting ship's. The hold cannot belong to two different fleets, so
+`fleet_setup` treats it as the whole fleet's and every figure divides by the combined rate. The trip
+duration therefore reads lower here than in the spreadsheet whenever a boosting ship also harvests,
+and identical when it does not.
+
+Residue needs one factor, not two. `efficiency = 100 / (100 + residue_chance)` scales the gas the
+fleet banks and the time it takes to bank it by the same amount, so a residue chance moves the m3
+and the clear time and leaves ISK/hr alone.
+
+### A family is data, not code
+
+`GasFamily` carries its sites, its raw-to-compressed type id map, and three ordered lists of extra
+columns. The calculator reads only `(type_id, units)`, so it is blind to the family. Everything
+family-specific — the wormhole class range, the cloud radius, the rats and their speed — rides in an
+opaque `extra` dict that the template prints and no code reads. A second gas family is therefore a
+data addition. Only fullerite exists today.
+
+### Three deliberate limits
+
+These are decisions, not oversights. Each one trades accuracy for a narrower page.
+
+- **The site value takes the better of the raw and the compressed price, per gas, and does not say
+  which.** One raw unit compresses to one compressed unit, so both forms divide by the raw volume
+  and compare directly. On the data measured, compressing pays 7.3% more for C70 and 8.9% less for
+  C320, and choosing per gas is worth 0-5% per site. The page shows the winning price and no
+  indication of which form produced it, so a figure cannot be traced to a market from the UI alone.
+  The value also assumes access to a compression service, which a wormhole huffer may not have.
+- **Prices are top of book, and the hub is selectable.** No order-book walking. At Jita the error is
+  small: filling a Vital Core Reservoir's 24,000 units of C540 realises 98.2% of the best bid, and
+  every other gas fills at 100%. Away from Jita it is not small. On the data measured, Hek's best
+  bid for C540 was 99.9% of Jita's while the actual fill was **8.6%** of that quote, because the top
+  order is a token and the book collapses under it. A non-Jita reading can therefore overstate a
+  site by more than tenfold, and nothing on the page marks it.
+- **ISK/hr counts harvesting time only.** No travel, no scanning, no hauling out, no rolling. It is
+  an upper bound, not income. Sleepers also spawn roughly 15-20 minutes after the first pilot enters
+  a site, so every Core site clear time commits to that fight.
+
+A gas with no order on the chosen side falls back to the other form, and only an unpriced pair
+blanks the cell. An unpriced cloud makes the whole site value `None` rather than a smaller number:
+counting a missing cloud as zero would read as a real site that happens to be cheap.
+
+### The table must not carry `class="market"`
+
+`market.js` runs `tablesorter()` on every table with that class. This table spends two rows on each
+site — one per gas cloud, joined by `rowspan` — so a sort would split the pairs and pair each site's
+first cloud with another site's second. The paired layout is deliberate, it mirrors the spreadsheet,
+and it costs the free sorter. A test asserts the class is absent.
+
+### The form validates because three inputs are divisors
+
+`GasFleetForm` is the only `django.forms` class in the app. A zero harvest rate, a zero hold and a
+residue chance of -100 each divide by zero, so every field carries bounds and the cross-field rule
+rejects a total harvest rate of zero. The elsewhere-used pattern — parse in a `try/except ValueError`
+and fall back to a default — cannot express a range, and the ice page shows the consequence: it
+accepts `rig_modifier=-1000`.
+
+The form always binds, filling any absent field from `DEFAULTS`, so a bare `/market/gas` renders the
+full table while a present-but-invalid parameter still errors. State lives entirely in the query
+string: the URL describes what you see and a bookmark saves your fleet.
+
 ## Dark mode
 
 The theme follows `prefers-color-scheme`. There is no toggle, so no state to store and no flash of

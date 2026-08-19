@@ -18,6 +18,7 @@ from .views import (
     market_transactions,
     market_trade_hub_mistakes,
     market_ice_index,
+    market_gas_index,
     market_history,
     type_search,
     transactions_since,
@@ -56,6 +57,9 @@ urlpatterns = [
 
     # ice
     path("ice", market_ice_index, name="market_ice_index"),
+
+    # gas
+    path("gas", market_gas_index, name="market_gas_index"),
 
     # loyalty points
     path("lp", lp_index, name="lp_index"),
