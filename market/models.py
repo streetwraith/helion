@@ -217,3 +217,62 @@ class SystemHubJumps(models.Model):
 
     def __str__(self):
         return str(self.system_id) + ': ' + str(self.jumps_to_trade_hub) + ' jumps'
+
+class PriceAlert(models.Model):
+    """One price condition on one item, watched by the check_price_alerts beat task.
+
+    A row holds exactly one condition. The form offers "both", which saves two
+    rows, so nothing here ever carries two sides or two operators.
+
+    The four state columns are the whole notification mechanism: the bar shows
+    every row with is_triggered set, and the beat task flips that flag on the
+    crossing. There is no event table, because the bar shows the live condition
+    rather than a history of fires.
+    """
+    class Side(models.TextChoices):
+        ASK = 'ask', 'ask'
+        BID = 'bid', 'bid'
+
+    # Stored as the symbol so a row reads as its own sentence in psql. The two
+    # operators are exact complements, which is what makes the re-arm rule
+    # trivial: "the condition is false" is literally the other one.
+    class Operator(models.TextChoices):
+        GTE = '>=', '>='
+        LT = '<', '<'
+
+    type_id = models.BigIntegerField(db_index=True)
+    # Null covers every ingested region. The item name is never stored: it comes
+    # from sde.types at render time and cannot drift there.
+    region_id = models.BigIntegerField(blank=True, null=True)
+    # Reads orders_hub instead of market.orders, so a buy order counts when its
+    # range reaches the hub. That view holds the trade-hub regions only, so this
+    # box with a hubless region, or with PLEX, matches nothing by design.
+    hubs_only = models.BooleanField(default=False)
+    # ask compares the lowest sell price, bid the highest buy price.
+    side = models.CharField(max_length=3, choices=Side.choices)
+    operator = models.CharField(max_length=2, choices=Operator.choices)
+    threshold = models.DecimalField(max_digits=20, decimal_places=2)
+
+    is_triggered = models.BooleanField(default=False)
+    # The live best price while triggered, not the price at the crossing: the bar
+    # states what the market does now. triggered_at keeps naming the crossing, so
+    # a moving price never reads as a new fire.
+    triggered_price = models.DecimalField(max_digits=20, decimal_places=2,
+                                          blank=True, null=True)
+    triggered_region_id = models.BigIntegerField(blank=True, null=True)
+    triggered_at = models.DateTimeField(blank=True, null=True)
+
+    class Meta:
+        constraints = [
+            # The operator belongs in the key: `ask < 10` and `ask >= 10` on one
+            # item are a band monitor, not a duplicate. nulls_distinct is off
+            # because a null region_id means "everywhere", and two of those are
+            # the same alert.
+            models.UniqueConstraint(
+                fields=['type_id', 'region_id', 'hubs_only', 'side', 'operator', 'threshold'],
+                name='uc_price_alert', nulls_distinct=False)
+        ]
+
+    def __str__(self):
+        scope = str(self.region_id) if self.region_id else 'any region'
+        return f'{self.type_id} {self.side} {self.operator} {self.threshold} in {scope}'

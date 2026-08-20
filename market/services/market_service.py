@@ -61,6 +61,11 @@ from market.services.orders import (
     trade_item_add,
     trade_item_del,
 )
+from market.services.regions import (
+    filed_region_name,
+    region_names,
+    region_options,
+)
 from market.services.wallet import (
     WalletStatistics,
     owner_label,

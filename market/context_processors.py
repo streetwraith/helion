@@ -3,7 +3,7 @@ from django.db.models import Q
 
 from esi.models import Token
 from market.models import EsiFetchState, TradeHub
-from market.services import balances, market_service, tracking
+from market.services import alerts, balances, market_service, tracking
 
 # Matches the watchdog tick, so the bar is at most one tick behind.
 FETCH_WARNINGS_CACHE_SECONDS = 60
@@ -72,4 +72,7 @@ def global_site_data(request):
         context["esi_fetch_warnings"] = _fetch_warnings()
         context["header_characters"] = _header_characters(request)
         context["wallet_balance"] = _wallet_balance()
+        # The alert bar draws on the first paint of every page, so a standing
+        # trigger is on screen before the poller runs.
+        context.update(alerts.bar_context())
     return context

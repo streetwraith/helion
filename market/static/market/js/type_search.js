@@ -1,15 +1,22 @@
-// The item search box, shared by the history chart and the market browser.
+// The item search box, shared by the history chart, the market browser and the
+// price alerts page.
 //
 // A page carries one box, so the ids are fixed. The form is read from the
-// input rather than named, because the two pages name their forms differently
-// and both submit the same hidden type_id.
+// input rather than named, because the pages name their forms differently
+// and all submit the same hidden type_id.
+//
+// Picking an item submits the form, because on the two browsing pages the item
+// is the whole query. A page whose form still needs other fields sets
+// data-submit-on-pick="false" on the box and submits when the user says so.
 const SEARCH_MIN_CHARS = 3;
 const SEARCH_DEBOUNCE_MS = 200;
 
 function bindTypeSearch() {
+    const box = $('#type-search-box');
     const input = $('#type_search');
     const results = $('#type-search-results');
     const form = input.closest('form');
+    const submitOnPick = box.data('submit-on-pick') !== false;
     let searchTimer = null;
     let request = null;
 
@@ -17,9 +24,15 @@ function bindTypeSearch() {
         results.empty().hide();
     }
 
-    function choose(typeId) {
+    function choose(typeId, name) {
         $('#type_id').val(typeId);
-        form[0].submit();
+        if (submitOnPick) {
+            form[0].submit();
+            return;
+        }
+        // No navigation follows, so the box has to show the choice itself.
+        input.val(name);
+        hide();
     }
 
     function render(matches) {
@@ -64,7 +77,7 @@ function bindTypeSearch() {
             const active = items.filter('.active');
             const chosen = active.length ? active : items.first();
             if (chosen.length) {
-                choose(chosen.data('type-id'));
+                choose(chosen.data('type-id'), chosen.text());
             }
             return;
         }
@@ -87,7 +100,7 @@ function bindTypeSearch() {
     });
 
     results.on('click', 'li', function() {
-        choose($(this).data('type-id'));
+        choose($(this).data('type-id'), $(this).text());
     });
 
     $(document).on('click', function(event) {

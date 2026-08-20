@@ -1,0 +1,102 @@
+{% extends "market_base.html" %}
+
+{% load static custom_filters item_tags %}
+
+{% block title %}alerts | Helion{% endblock %}
+
+{% block css %}
+<link rel="stylesheet" href="{% static 'market/css/alerts.css' %}">
+{% endblock %}
+
+{% block js %}
+<script src="{% static 'market/js/type_search.js' %}"></script>
+<script src="{% static 'market/js/alert_permission.js' %}"></script>
+{% endblock %}
+
+{% block content %}
+<h1>Price alerts</h1>
+
+<p id="alert-permission">
+  <button type="button" id="alert-permission-ask">enable desktop notifications</button>
+  <span id="alert-permission-status"></span>
+</p>
+
+<form id="alert-form" action="{% url 'market_alerts' %}" method="POST">
+  {% csrf_token %}
+  {% if editing %}<input type="hidden" name="alert_id" value="{{ editing.pk }}">{% endif %}
+
+  <label for="type_search">Item</label>
+  {% comment %}
+  data-submit-on-pick keeps the shared search box from submitting: this form
+  still needs a region, a condition and a price.
+  {% endcomment %}
+  <span id="type-search-box" data-submit-on-pick="false">
+    <input type="text" id="type_search" autocomplete="off" placeholder="item name"
+           value="{{ editing_type_name|default_if_none:'' }}">
+    <ul id="type-search-results"></ul>
+  </span>
+  {{ form.type_id }}
+
+  <label for="{{ form.region_id.id_for_label }}">Region</label>
+  {{ form.region_id }}
+
+  <label for="{{ form.hubs_only.id_for_label }}">{{ form.hubs_only }} trade hubs only</label>
+
+  <label for="{{ form.condition.id_for_label }}">Condition</label>
+  {{ form.condition }}
+
+  <label for="{{ form.threshold.id_for_label }}">Price</label>
+  {{ form.threshold }}
+
+  <button type="submit">{% if editing %}save{% else %}add{% endif %}</button>
+  {% if editing %}<a href="{% url 'market_alerts' %}">cancel</a>{% endif %}
+</form>
+
+{% if form.errors %}
+<ul class="alert-errors">
+  {% for field, errors in form.errors.items %}{% for error in errors %}
+  <li>{{ error }}</li>
+  {% endfor %}{% endfor %}
+</ul>
+{% endif %}
+
+<table class="sticky-head">
+  <thead>
+    <tr>
+      <th>item</th>
+      <th>region</th>
+      <th>hubs only</th>
+      <th>condition</th>
+      <th>price</th>
+      <th>state</th>
+      <th></th>
+    </tr>
+  </thead>
+  <tbody>
+    {% for row in page_alerts %}
+    <tr data-type-id="{{ row.alert.type_id }}">
+      <td class="item-name">{% item_name row.alert.type_id row.name region_id=row.alert.region_id %}</td>
+      <td>{{ row.region_name }}</td>
+      <td>{% if row.alert.hubs_only %}yes{% endif %}</td>
+      <td>{{ row.alert.side }} {{ row.alert.operator }}</td>
+      <td class="number">{{ row.alert.threshold|isk_value }}</td>
+      <td>
+        {% if row.alert.is_triggered %}
+        triggered {{ row.alert.triggered_price|isk_value }} in {{ row.triggered_region_name }},
+        {{ row.alert.triggered_at|since_dhms }} ago
+        {% else %}armed{% endif %}
+      </td>
+      <td class="alert-actions">
+        <a href="?edit={{ row.alert.pk }}">edit</a>
+        <form action="{% url 'market_alert_delete' alert_id=row.alert.pk %}" method="POST">
+          {% csrf_token %}
+          <button type="submit">delete</button>
+        </form>
+      </td>
+    </tr>
+    {% empty %}
+    <tr><td colspan="7">No alerts yet.</td></tr>
+    {% endfor %}
+  </tbody>
+</table>
+{% endblock %}

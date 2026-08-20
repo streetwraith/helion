@@ -550,6 +550,112 @@ the affected rows through `data-type-id` and leaves every cell as rendered. The 
 carry the fresh prices; the table stays honest as one snapshot. A poll returns at most 50 rows, and
 the cursor advances to the last of them, so a longer burst drains over the following polls.
 
+## Price alerts
+
+`/market/alerts` configures price conditions on single items, and a bar on every page shows the ones
+that hold. One alert is one condition: an item, an optional region, a trade-hubs-only flag, a side,
+an operator and a threshold. The form offers four conditions — `bid >=`, `bid <`, `ask <`,
+`ask >=` — as one select, because a trader reads "ask < 4.00" as one statement.
+
+**The two operators are exact complements, and that is what carries the design.** `>=` is inclusive
+and `<` is strict, so at a price exactly on the threshold precisely one of them holds. "The condition
+is false" is therefore literally the other operator: the re-arm rule needs no hysteresis band and no
+boundary case. A pair of alerts on one item and one threshold is a legal band monitor, which is why
+the operator sits in the unique constraint beside the side and the price.
+
+**A row always holds one side.** The form's `both` was dropped in favour of the operator, so nothing
+in the schema ever carries two conditions. The state — `is_triggered` and the price, region and
+timestamp behind it — sits on the alert row, with no child table and no event log.
+
+**The scope is the whole book, not one region.** Best ask is the lowest sell price over every region
+the alert covers, best bid the highest buy price. An empty `region_id` means all 25 ingested
+regions, and the trigger records which region produced the price, so the bar's history link points
+at that region. Two of the four conditions are therefore statements about the whole book: `ask >= 10`
+says the cheapest offer anywhere in scope is now 10 or above.
+
+**A missing price is not a crossing.** A scope with no order on that side leaves the alert armed
+under every operator. Reading `ask >= 10` as vacuously true over an empty book would put a row in
+the bar with no price and no region to print.
+
+**`hubs_only` reads `orders_hub`,** so a buy order counts when its range reaches the hub — the same
+rule the market browser's "market hubs only" filter uses. That view holds the trade-hub regions
+only, so the box with a hubless region matches nothing, and so does the box on PLEX, whose pseudo
+region sits outside it. Both are saveable and both stay silent forever. The form does not block
+them: the scope is visible in the row, and a scope that matches nothing behaves like a market that
+never crosses.
+
+### The beat task carries no cache marks
+
+`check_price_alerts` runs every minute and re-evaluates every alert, unlike `compute_undercuts`
+beside it. One best-price lookup measures 5.5 ms warm across all 25 regions and under 1 ms for a
+single region: `market.orders` is partitioned per region and carries a
+`(type_id, region_id, is_buy_order, price)` index, so a mark would guard nothing worth guarding.
+Four alerts over the real dev data cost 140 ms for the whole run.
+
+Edge-triggering is what makes the re-read harmless: an unchanged snapshot writes the same state and
+crosses nothing. So the task is idempotent, the lag stays under a minute after ingestion publishes,
+and there is no cache key to lose.
+
+### The bar is ambient, and it shows the live condition
+
+The bar has no close button, exactly like the `#fetch-warning-bar` above it. It leaves when the price
+recovers, and a bar that will not leave means the threshold is wrong — the alerts page is where that
+gets fixed or deleted. There is no dismissal state anywhere, client or server.
+
+- **A standing trigger tracks the price.** `triggered_price` and `triggered_region_id` follow each
+  snapshot while the condition holds; only `triggered_at` names the crossing. So the bar states what
+  the market does now, and a falling price never reads as a new fire.
+- **One template, `_fragment_alert_bar.html`, serves the page render and every poll**, so the bar
+  the poller swaps in cannot drift from the bar the context processor drew. The rows come back as
+  HTML rather than as data because each one carries the shared `{% item_name %}` component, and
+  rebuilding that in JavaScript would put the component in two places.
+- **Three rows show; the rest render `hidden` under a `+K more` link** to the alerts page. Every
+  triggered alert reaches the browser, hidden or not, so a card still fires for one the bar has no
+  room for.
+- **The container renders on every page, empty or not,** because the poller swaps its contents in
+  place. An `{% include %}` leaves whitespace behind, so `:empty` cannot hide it and the `hidden`
+  attribute does the work — set by the template on the first paint and by the poller after each swap.
+- **The bar is deliberately uncached**, unlike the fetch-warning bar beside it: nothing triggered
+  costs one indexed read, and the poller refreshes the same fragment every minute, so a cached page
+  render would disagree with it.
+
+### The poller has no toggle, so permission is the switch
+
+`notify_poller.js` is not reused here. That module is built around a per-page toggle, a status span
+and a banner, and it asks for permission on the toggle click. This bar has none of those: polling
+has to run for the bar to stay true, so a toggle could only ever govern the OS card. `alert_bar.js`
+is a separate 90 lines, and the three working pages that depend on `notify_poller.js` — which
+`PROJECT.md` records as having no automated browser cover — stay untouched.
+
+- **The seen set is rebuilt from the bar after every swap**, keyed on the alert id and the crossing
+  timestamp. A key that stays present raises nothing, which is what keeps a standing trigger quiet
+  while you navigate between pages; a key that leaves and returns carries a new timestamp and counts
+  as a new crossing. The set prunes itself, because it is only ever what the bar holds.
+- **A crossing while no tab is open raises no card.** The seed rule above makes that unavoidable, and
+  it is the same trade the other pollers make. The bar shows it on the next page you open.
+- **The poll runs every 60 s, matching the beat.** Nothing new can appear between beats, so a faster
+  poll re-reads the same answer. Worst case from a snapshot to a card is about two minutes.
+- **The permission request lives behind a button on the alerts page**, because Firefox and Safari
+  ignore a request without a user gesture. Off HTTPS the button reports that and the bar still works,
+  the same rule the other pollers follow.
+- **Three failed polls stop the loop and say so in the bar**, appended below the rows rather than
+  replacing them: those rows were true when they were drawn. Nothing else on the page claims the
+  poller is alive, so a dead loop would otherwise be invisible.
+
+### The item search box learned to not submit
+
+`type_search.js` submitted its enclosing form the moment you picked an item, which is right on the
+history chart and the market browser, where the item is the whole query. The alerts form still needs
+a region, a condition and a price, so the box takes `data-submit-on-pick="false"` and then fills its
+own text instead — with no navigation to follow, nothing else would show the choice. The default is
+unchanged, so both existing pages keep working untouched.
+
+### An alert belongs to the app, not to a login
+
+Alerts follow the rule below: the page shows what the database holds. There is no owner column and
+no scoping by `request.user`, matching `TradeItem` and `TrackedCharacter`. The bar renders for any
+authenticated session, and the login page renders neither the bar nor the poller.
+
 ## Every page shows every owner
 
 One rule across the app: **a page shows what the database holds, and a dropdown narrows it.** Not
@@ -1082,7 +1188,8 @@ vendored and pinned under `market/static/market/vendor/`.
   `days` falls back quietly: it is a display preference, not data.
 
 The region list comes from `marketdata.RegionStatus`, never from `TradeHub` — that table names
-region 10000002 "Jita", while the region is "The Forge".
+region 10000002 "Jita", while the region is "The Forge". The alerts page offers the same 25-entry
+select, so the filing rule lives in `market/services/regions.py` and both pages read it from there.
 
 The item search box is shared with the market browser: `type_search.js` and the styles in
 `helion.css` serve both, and each page supplies its own form around them. Its endpoint
@@ -1256,8 +1363,8 @@ password — they all authenticate through `force_login` — so nothing is being
 
 The endpoints are tested; the JavaScript is not. `notify_poller.js` holds the toggle, the permission
 rules and the failure policy for all three pages, so an edit to it can break a page silently — a
-poller that stops notifying looks exactly like a quiet market. Walk this checklist by hand after
-touching any of the four notification files:
+poller that stops notifying looks exactly like a quiet market. `alert_bar.js` carries the same risk
+on every page at once. Walk this checklist by hand after touching any of the six notification files:
 
 1. **Transactions.** Open the page, turn the toggle on, grant permission. Reload: the toggle stays
    on and no card fires for transactions already listed.
@@ -1267,5 +1374,10 @@ touching any of the four notification files:
    and leaves the other cells unchanged. Click a name in the banner and confirm the in-game market
    window opens for that item.
 4. **All three.** Turn a toggle off and confirm the banner clears and polling stops.
+5. **The alert bar.** Save an alert whose condition already holds and reload: the bar names the item
+   and the two icon links open the browser and the chart for the region it names. Navigate to another
+   page and confirm the bar is still there and raises no second card. Add enough alerts to pass three
+   and confirm the `+K more` link. Let the price recover and confirm the bar leaves by itself.
 
-Over plain HTTP the OS card never appears by design, so the banner is the observable part in dev.
+Over plain HTTP the OS card never appears by design, so the banner and the bar are the observable
+parts in dev.

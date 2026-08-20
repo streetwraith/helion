@@ -24,6 +24,9 @@ from .views import (
     transactions_since,
     mistakes_since,
     undercuts_since,
+    market_alerts,
+    market_alert_delete,
+    alert_bar,
 )
 
 urlpatterns = [
@@ -61,6 +64,10 @@ urlpatterns = [
     # gas
     path("gas", market_gas_index, name="market_gas_index"),
 
+    # price alerts
+    path("alerts", market_alerts, name="market_alerts"),
+    path("alerts/<int:alert_id>/delete", market_alert_delete, name="market_alert_delete"),
+
     # loyalty points
     path("lp", lp_index, name="lp_index"),
     path("lp/<str:trade_type>/<str:location>/<str:corporation_name>", lp_data, name="lp_data"),
@@ -73,4 +80,5 @@ urlpatterns = [
     path("ajax/transactions_since", transactions_since, name="transactions_since"),
     path("ajax/mistakes_since/<int:region_id>", mistakes_since, name="mistakes_since"),
     path("ajax/undercuts_since/<int:region_id>", undercuts_since, name="undercuts_since"),
+    path("ajax/alert_bar", alert_bar, name="alert_bar"),
 ]

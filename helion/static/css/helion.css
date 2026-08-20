@@ -16,6 +16,24 @@
     padding: 2px 8px;
 }
 
+/* Blue, not a third shade of the red bar above or the green notify banner:
+   those two converge under deuteranopia and blue stays apart from both.
+   Contrast against white ink is 6.9, in line with the warning bar's 6.3. */
+#alert-bar {
+    background: #0f5aa8;
+    color: #fff;
+    font-size: 0.9em;
+    padding: 2px 8px;
+}
+
+#alert-bar a {
+    color: #fff;
+}
+
+.alert-condition {
+    opacity: 0.8;
+}
+
 .notify-panel {
     font-size: 0.8em;
     margin: 4px 0;
@@ -401,9 +419,10 @@ table tr.headers-rotated th span {
         border: 1px solid #333d42;
     }
 
-    /* #fetch-warning-bar and .notify-banner keep their light-mode colours: both
-       are already dark surfaces under white ink, and both still separate from
-       this background. tr.notify-new keeps its outline for the same reason. */
+    /* #fetch-warning-bar, #alert-bar and .notify-banner keep their light-mode
+       colours: all three are already dark surfaces under white ink, and all
+       three still separate from this background. tr.notify-new keeps its
+       outline for the same reason. */
     .notify-status {
         color: #d15656;
     }

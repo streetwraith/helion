@@ -1,4 +1,5 @@
-from .ajax_views import transaction_history, market_open_in_game, trade_item_add_or_del, type_search, transactions_since, mistakes_since, undercuts_since
+from .ajax_views import transaction_history, market_open_in_game, trade_item_add_or_del, type_search, transactions_since, mistakes_since, undercuts_since, alert_bar
+from .alert_views import market_alerts, market_alert_delete
 from .asset_views import market_assets
 from .base_views import index, shopping_list
 from .browser_views import market_browse
@@ -18,6 +19,9 @@ __all__ = [
     'transactions_since',
     'mistakes_since',
     'undercuts_since',
+    'alert_bar',
+    'market_alerts',
+    'market_alert_delete',
     'index',
     'market_assets',
     'shopping_list',

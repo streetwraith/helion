@@ -20,6 +20,7 @@
     <script src="{% static 'js/dialog.js' %}"></script>
     <script src="{% static 'js/jquery.peity.min.js' %}"></script>
     <script src="{% static 'js/ticker.js' %}"></script>
+    <script src="{% static 'js/alert_bar.js' %}"></script>
     {% block js %}
     {% endblock %}
 </head>
@@ -29,6 +30,15 @@
         ESI fetch problems:
         {% for warning in esi_fetch_warnings %}<span>{{ warning.character_name }}/{{ warning.feed }}{% if warning.disabled %} DISABLED{% else %} ({{ warning.errors }} errors){% endif %}</span>{% if not forloop.last %}, {% endif %}{% endfor %}
     </div>
+    {% endif %}
+    {% if user.is_authenticated %}
+    {% comment %}
+    Ambient, like the warning bar above it: it shows the live condition and
+    leaves when the price recovers. The container always renders, because the
+    poller swaps its contents in place; `hidden` keeps an empty one off the
+    screen. The include leaves whitespace behind, so :empty cannot do it.
+    {% endcomment %}
+    <div id="alert-bar" data-endpoint="{% url 'alert_bar' %}" {% if not alert_rows %}hidden{% endif %}>{% include "market/alerts/_fragment_alert_bar.html" %}</div>
     {% endif %}
     <header>
         <div id="top-bar">
@@ -73,6 +83,7 @@
                         <li><a href="{% url 'market_gas_index' %}">gas</a></li>
                         <li><a href="{% url 'lp_index' %}">loyalty points</a></li>
                         <li><a href="{% url 'shopping_list' %}">shopping</a></li>
+                        <li><a href="{% url 'market_alerts' %}">alerts</a></li>
                         <li>station trading:
                             <ul class="hub-links">
                                 {% for trade_hub in trade_hubs %}

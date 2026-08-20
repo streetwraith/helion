@@ -11,24 +11,9 @@ from evesde import services as sde_service
 from market.constants import REGION_ID_FORGE
 from market.models import TradeHub
 from market.services import market_service
-from marketdata.models import RegionStatus
 
 WINDOW_DAYS = (90, 365, 730)
 DEFAULT_WINDOW_DAYS = 365
-
-# EVE names three of the ingested regions "The <something>". In a list of 25 the
-# article buries them under one letter, so the dropdown moves it to the end and
-# sorts on that: "The Forge" files under F. The trailing space matters - it keeps
-# a name like "Thera" out of the rule.
-ARTICLE = 'The'
-
-
-def _filed_region_name(name):
-    """"The Forge" as "Forge, The". Any other name unchanged."""
-    prefix = ARTICLE + ' '
-    if name.startswith(prefix):
-        return f'{name[len(prefix):]}, {ARTICLE}'
-    return name
 
 
 def _selected_days(request):
@@ -74,14 +59,10 @@ def _selected_type(request):
 
 
 def market_history(request):
-    region_names = dict(RegionStatus.objects.values_list('region_id', 'region_name'))
+    region_names = market_service.region_names()
     # The dropdown files the article at the end; the heading and the notices keep
     # the natural name, which reads better in prose than "Forge, The".
-    # Case-folded, because sorting on raw codepoints files every capital before
-    # every lower-case letter: "GPMR-01" would land ahead of "Genesis".
-    region_options = sorted(
-        ((region_id, _filed_region_name(name)) for region_id, name in region_names.items()),
-        key=lambda option: option[1].casefold())
+    region_options = market_service.region_options(region_names)
     region_id, region_notice = _selected_region(request, region_names)
     type_id, type_name, type_notice = _selected_type(request)
     days = _selected_days(request)

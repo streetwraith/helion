@@ -1,0 +1,24 @@
+#alert-permission {
+    font-size: 0.9em;
+    padding: 4px 0;
+}
+
+#alert-form {
+    padding: 4px 0;
+}
+
+#alert-form label {
+    padding-left: 0.6em;
+}
+
+.alert-errors {
+    color: #b03030;
+    list-style-position: inside;
+    padding: 2px 0;
+}
+
+/* The delete button sits in a form of its own, so that a POST carries the CSRF
+   token. Inline, or every row grows by a line. */
+.alert-actions form {
+    display: inline;
+}

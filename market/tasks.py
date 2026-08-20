@@ -4,7 +4,7 @@ from contextlib import contextmanager
 from celery import shared_task
 from django.core.cache import cache
 
-from market.services import esi_scheduler, market_service
+from market.services import alerts, esi_scheduler, market_service
 from market.models import CharacterOrder, TradeHub
 from marketdata.models import RegionStatus
 
@@ -81,3 +81,19 @@ def compute_undercuts(self):
             # Advance only after a successful compute, so a failure retries
             # on the next beat. A lost mark costs one deduped recompute.
             cache.set(mark_key, status.refreshed_at, timeout=None)
+
+@shared_task(bind=True)
+def check_price_alerts(self):
+    """Beat task (every minute): re-evaluate every price alert.
+
+    No cache marks, unlike compute_undercuts: one best-price lookup costs about
+    5 ms, so skipping an unchanged snapshot saves nothing worth the bookkeeping.
+    Edge-triggering makes the re-read harmless - an unchanged book crosses
+    nothing - and it cuts the lag to under a minute after ingestion publishes.
+    """
+    with cache_lock("check_price_alerts_lock", timeout=300) as acquired:
+        if not acquired:
+            return
+        crossed = alerts.evaluate_all()
+        if crossed:
+            logger.info("Price alerts crossed: %s", crossed)

@@ -1,4 +1,4 @@
-from market.services import market_service, tracking
+from market.services import alerts, market_service, tracking
 from evesde import services as sde_service
 from django.shortcuts import get_object_or_404
 from django.template.loader import render_to_string
@@ -17,6 +17,11 @@ ESI_RATE_LIMIT_EXCEPTIONS = (ESIErrorLimitException, ESIBucketLimitException)
 # to predict: the probe is a single indexed row read, and a short fixed wait
 # beats copying a cadence this app does not control.
 MARKET_POLL_SECONDS = 15
+
+# The alert bar's poll. The beat task writes the alert state once a minute, so a
+# faster poll only re-reads the same answer. Worst case from a snapshot to a card
+# is about two minutes: up to a minute for the beat, up to a minute for this.
+ALERT_POLL_SECONDS = 60
 
 def _rate_limited_response(exc):
     return JsonResponse(
@@ -115,6 +120,18 @@ def undercuts_since(request, region_id):
     summary = market_service.get_undercuts_since(region_id, owner_ids, after=after)
     summary['next_poll_seconds'] = MARKET_POLL_SECONDS
     return JsonResponse(summary)
+
+def alert_bar(request):
+    """The price alert bar, rendered, for the poller that runs on every page.
+
+    One template serves this and the page render, so the bar the poller swaps in
+    cannot drift from the bar the context processor drew. The rows come back as
+    HTML because each one carries the shared item-name component, links and all.
+    """
+    if request.headers.get('x-requested-with') != 'XMLHttpRequest':
+        return JsonResponse({'error': 'bad request'}, status=400)
+    html = render_to_string('market/alerts/_fragment_alert_bar.html', alerts.bar_context())
+    return JsonResponse({'html': html, 'next_poll_seconds': ALERT_POLL_SECONDS})
 
 def _item_name_html(type_id, name, is_trade_item):
     """The item name cell, rebuilt after an add or a delete. The tag call keeps

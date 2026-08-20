@@ -1,0 +1,18 @@
+{% load custom_filters item_tags %}
+{% comment %}
+One template for the page render and for every poll, so the bar the poller
+swaps in cannot drift from the bar the context processor drew. A row past the
+visible limit still renders: the poller reads its key and raises its card.
+{% endcomment %}
+{% for row in alert_rows %}
+<div class="alert-row" data-alert-id="{{ row.alert_id }}" data-fired-at="{{ row.fired_at }}"
+     data-card="{{ row.name }} {{ row.side }} {{ row.price|isk_value }} in {{ row.region_name }} ({{ row.operator }} {{ row.threshold|isk_value }})"
+     {% if not row.visible %}hidden{% endif %}>
+  {% item_name row.type_id row.name region_id=row.region_id %}
+  {{ row.side }} {{ row.price|isk_value }} in {{ row.region_name }}
+  <span class="alert-condition">({{ row.operator }} {{ row.threshold|isk_value }})</span>
+</div>
+{% endfor %}
+{% if alert_hidden_count %}
+<a class="alert-more" href="{% url 'market_alerts' %}">+{{ alert_hidden_count }} more</a>
+{% endif %}
