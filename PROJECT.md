@@ -1265,6 +1265,11 @@ family-specific — the wormhole class range, the cloud radius, the rats and the
 opaque `extra` dict that the template prints and no code reads. A second gas family is therefore a
 data addition. Only fullerite exists today.
 
+Two fields stay first-class because every gas family has them: a cloud's short `label`, and a site's
+`danger`. `danger` holds the warning text for a site the rats make hard to huff, which the table
+shows as an icon with the text on hover. It is not a column, so it cannot ride in `extra`. An icon
+rather than an emoji, because the app uses none and the bootstrap-icons set is already loaded.
+
 ### Three deliberate limits
 
 These are decisions, not oversights. Each one trades accuracy for a narrower page.
@@ -1288,6 +1293,31 @@ These are decisions, not oversights. Each one trades accuracy for a narrower pag
 A gas with no order on the chosen side falls back to the other form, and only an unpriced pair
 blanks the cell. An unpriced cloud makes the whole site value `None` rather than a smaller number:
 counting a missing cloud as zero would read as a real site that happens to be cheap.
+
+### The table reads at two levels
+
+Every row block is one site over two rows, one per cloud. `ISK/hr`, `min` and `trips` appear once for
+the whole site and once for a single cloud, so a grouping row above the labels says which is which —
+the labels alone cannot, and two columns must not share one name.
+
+The `units` and `m3` columns read `banked (contents)`. Residue destroys gas above what the ship
+keeps, so the two figures differ, and both matter: the banked one fills a hold and sells, and the
+content one says how much gas the cloud loses. Every other number on the page uses the banked
+figure, and banked units times the volume equals the banked m3. The bracket disappears when the
+residue chance is zero, because the two figures are then equal — and since the residue chance is one
+form input, the whole column gains or loses its brackets together rather than raggedly.
+
+A cloud's `ISK/hr` equals its ISK per m3 times the hourly harvest, so it does not vary with the size
+of the cloud. Two clouds of one gas read the same, and the column ranks exactly as `ISK/m3` does. It
+earns its place because an hourly figure compares against the site figure beside it, which a price
+per m3 cannot.
+
+`_grade` colours the ISK columns with the site-wide `gradient_0`-`gradient_100` scale, the same one
+the trade hub spread uses: 0 is green and 100 red, in steps of 5. Each column ranks within itself,
+**linearly on the value** rather than by position, so an outlier shows as one. On the data measured
+that leaves the `ISK/m3` column mostly red, because C70 pays nearly twice the next gas — which is
+the fact, not a defect of the scale. An unpriced figure gets no step at all: a missing price is not
+a bad price.
 
 ### The table must not carry `class="market"`
 

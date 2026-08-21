@@ -41,6 +41,18 @@ split the two cloud rows that make up one site.
 {% endcomment %}
 <table style="width: auto;">
     <thead>
+        {% comment %}
+        ISK/hr, min and trips each appear twice, once for the whole site and once
+        for a single cloud. This row says which is which; the labels alone cannot.
+        {% endcomment %}
+        <tr>
+            <th colspan="{{ family.leading_columns|length|add:1 }}"></th>
+            <th colspan="5">whole site</th>
+            <th colspan="{{ family.cloud_columns|length|add:7 }}">one cloud</th>
+            {% if family.trailing_columns %}
+            <th colspan="{{ family.trailing_columns|length }}"></th>
+            {% endif %}
+        </tr>
         <tr>
             <th>class</th>
             {% for header, key in family.leading_columns %}<th>{{ header }}</th>{% endfor %}
@@ -51,7 +63,11 @@ split the two cloud rows that make up one site.
             <th>trips</th>
             <th>type</th>
             <th>ISK/m3</th>
-            <th>m3</th>
+            <th>ISK/hr</th>
+            <th>min</th>
+            <th>trips</th>
+            <th title="banked, and in brackets what the cloud holds before residue">units</th>
+            <th title="banked, and in brackets what the cloud holds before residue">m3</th>
             {% for header, key in family.cloud_columns %}<th>{{ header }}</th>{% endfor %}
             {% for header, key in family.trailing_columns %}<th>{{ header }}</th>{% endfor %}
         </tr>
@@ -65,16 +81,26 @@ split the two cloud rows that make up one site.
             {% for header, key in family.leading_columns %}
             <td rowspan="{{ site.clouds|length }}">{{ site.extra|get_by_key:key }}</td>
             {% endfor %}
-            <td rowspan="{{ site.clouds|length }}">{{ site.name }}</td>
+            <td rowspan="{{ site.clouds|length }}">{{ site.name }}{% if site.danger %}
+                <i class="bi bi-exclamation-triangle-fill danger-icon" title="{{ site.danger }}"></i>
+                {% endif %}</td>
             {# A priced site is never worth zero ISK, so falsy means unpriced. #}
             <td rowspan="{{ site.clouds|length }}">{% if site.value %}{{ site.value|isk_value_mil }}{% else %}-{% endif %}</td>
-            <td rowspan="{{ site.clouds|length }}">{% if site.isk_per_hour %}{{ site.isk_per_hour|isk_value_mil }}{% else %}-{% endif %}</td>
+            <td rowspan="{{ site.clouds|length }}"{% if site.isk_per_hour_gradient != None %} class="gradient_{{ site.isk_per_hour_gradient }}"{% endif %}>{% if site.isk_per_hour %}{{ site.isk_per_hour|isk_value_mil }}{% else %}-{% endif %}</td>
             <td rowspan="{{ site.clouds|length }}">{{ site.minutes|floatformat:0 }}</td>
             <td rowspan="{{ site.clouds|length }}">{{ site.trips|floatformat:1 }}</td>
             {% endif %}
             <td class="item-name">{% item_name cloud.type_id cloud.label region_id=region_id %}</td>
-            <td>{% if cloud.isk_per_m3 %}{{ cloud.isk_per_m3|isk_value }}{% else %}-{% endif %}</td>
-            <td>{{ cloud.m3|m3_value }}</td>
+            <td{% if cloud.isk_per_m3_gradient != None %} class="gradient_{{ cloud.isk_per_m3_gradient }}"{% endif %}>{% if cloud.isk_per_m3 %}{{ cloud.isk_per_m3|isk_value }}{% else %}-{% endif %}</td>
+            <td{% if cloud.isk_per_hour_gradient != None %} class="gradient_{{ cloud.isk_per_hour_gradient }}"{% endif %}>{% if cloud.isk_per_hour %}{{ cloud.isk_per_hour|isk_value_mil }}{% else %}-{% endif %}</td>
+            <td>{{ cloud.minutes|floatformat:0 }}</td>
+            <td>{{ cloud.trips|floatformat:1 }}</td>
+            {% comment %}
+            Residue makes the banked figure differ from what the cloud holds.
+            With no residue the two are equal and the bracket is dropped.
+            {% endcomment %}
+            <td>{{ cloud.units|floatformat:"0g" }}{% if cloud.content_units != cloud.units %} ({{ cloud.content_units|floatformat:"0g" }}){% endif %}</td>
+            <td>{{ cloud.m3|m3_value }}{% if cloud.content_m3 != cloud.m3 %} ({{ cloud.content_m3|m3_value }}){% endif %}</td>
             {% for header, key in family.cloud_columns %}
             <td>{{ cloud.extra|get_by_key:key }}</td>
             {% endfor %}

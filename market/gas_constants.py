@@ -24,11 +24,16 @@ class GasCloud:
 
 @dataclass(frozen=True, slots=True)
 class GasSite:
-    """One gas site: what it holds, and what the family says about it."""
+    """One gas site: what it holds, and what the family says about it.
+
+    `danger` marks a site that the rats make hard to huff, and its text is the
+    warning the table shows on hover. Empty for a site with no such trap.
+    """
     name: str
     group: str
     clouds: tuple
     extra: dict = field(default_factory=dict)
+    danger: str = ''
 
 
 @dataclass(frozen=True, slots=True)
@@ -80,7 +85,9 @@ FULLERITE_SITES = (
             {'classes': '1-4', 'rats': '2C', 'rat_speed': 1190}),
     GasSite('Ordinary Perimeter Reservoir', 'PERIMETER',
             (_cloud('C72', 12000, '120km'), _cloud('C84', 6000, '60km')),
-            {'classes': '1-4', 'rats': '6F', 'rat_speed': 1925}),
+            {'classes': '1-4', 'rats': '6F', 'rat_speed': 1925},
+            danger='turrets ~110km range. requires perching (position far from '
+                   'rats, on the edge of cloud)'),
     GasSite('Sizeable Perimeter Reservoir', 'PERIMETER',
             (_cloud('C84', 12000, '120km'), _cloud('C50', 6000, '60km')),
             {'classes': '1-4', 'rats': '6F', 'rat_speed': 1925}),
@@ -95,7 +102,9 @@ FULLERITE_SITES = (
             {'classes': '5-6', 'rats': '4B', 'rat_speed': 1125}),
     GasSite('Vital Core Reservoir', 'CORE',
             (_cloud('C540', 24000, '240km'), _cloud('C320', 2000, '20km')),
-            {'classes': '5-6', 'rats': '4F 4B', 'rat_speed': 2880}),
+            {'classes': '5-6', 'rats': '4F 4B', 'rat_speed': 2880},
+            danger='not spinnable, fast and long range BSes, doable with drones '
+                   'trick or perching 260km+ from rats'),
 )
 
 FULLERITE = GasFamily(

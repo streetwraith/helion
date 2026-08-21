@@ -9,6 +9,7 @@ from types import SimpleNamespace
 import pytest
 from django.http import QueryDict
 from django.urls import reverse
+from django.utils.html import escape
 
 from market.forms import GasFleetForm
 from market.gas_constants import FULLERITE, FULLERITE_COMPRESSED, FULLERITE_RAW
@@ -98,6 +99,97 @@ def test_residue_reduces_yield_and_time(residue_chance, efficiency):
     assert rows[0]['m3'] == pytest.approx(18000 * efficiency)
     assert rows[0]['isk_per_hour'] == pytest.approx(
         83790000 / (11.32075472 / 60))
+
+
+def test_a_cloud_carries_its_own_time_trips_and_rate():
+    rows = gas.site_rows(FULLERITE, quotes(), SHEET_SETUP)
+    big, small = rows[0]['clouds']            # C50 12,000 m3 and C60 6,000 m3
+    assert big['m3'] == pytest.approx(12000)
+    assert small['m3'] == pytest.approx(6000)
+    assert big['minutes'] == pytest.approx(12000 / 26.5 / 60)
+    assert big['trips'] == pytest.approx(12000 / 70000)
+    assert big['isk_per_hour'] == pytest.approx(12000 * 4622.5 / (big['minutes'] / 60))
+
+
+def test_a_clouds_isk_per_hour_does_not_vary_with_its_size():
+    """It is the price per m3 times the hourly harvest, so the size cancels."""
+    rows = gas.site_rows(FULLERITE, quotes(), SHEET_SETUP)
+    by_label = {cloud['label']: cloud
+                for row in rows for cloud in row['clouds']}
+    # C50 appears as 12,000 m3 in a Barren and as 6,000 m3 in a Sizeable.
+    assert rows[0]['clouds'][0]['label'] == 'C50'
+    assert rows[4]['clouds'][1]['label'] == 'C50'
+    assert (rows[0]['clouds'][0]['isk_per_hour']
+            == pytest.approx(rows[4]['clouds'][1]['isk_per_hour']))
+    assert by_label['C50']['isk_per_hour'] == pytest.approx(
+        4622.5 * SHEET_SETUP['hourly_harvest'])
+
+
+def test_units_are_banked_units_so_units_times_volume_is_the_m3():
+    setup = gas.fleet_setup(0, 5.4, 25000, 27.2)
+    rows = gas.site_rows(FULLERITE, quotes(), setup)
+    barren = rows[0]['clouds'][0]             # C50, 1 m3 per unit
+    assert barren['units'] == pytest.approx(12000 * setup['efficiency'])
+    assert barren['units'] * 1.0 == pytest.approx(barren['m3'])
+    vast = rows[6]['clouds'][0]               # C32, 5 m3 per unit
+    assert vast['units'] * 5.0 == pytest.approx(vast['m3'])
+
+
+def test_a_cloud_reports_its_contents_beside_what_it_banks():
+    setup = gas.fleet_setup(0, 5.4, 25000, 27.2)
+    vast = gas.site_rows(FULLERITE, quotes(), setup)[6]['clouds'][0]  # C32, 5 m3
+    assert vast['content_units'] == 20000
+    assert vast['content_m3'] == pytest.approx(100000)
+    assert vast['units'] < vast['content_units']
+    assert vast['m3'] < vast['content_m3']
+
+
+def test_without_residue_the_contents_are_what_you_bank():
+    vast = gas.site_rows(FULLERITE, quotes(), SHEET_SETUP)[6]['clouds'][0]
+    assert SHEET_SETUP['efficiency'] == 1.0
+    assert vast['units'] == vast['content_units']
+    assert vast['m3'] == vast['content_m3']
+
+
+class TestGradients:
+    """The green-to-red steps the table colours its ISK columns with."""
+
+    def test_the_best_figure_is_green_and_the_worst_red(self):
+        rows = gas.site_rows(FULLERITE, quotes(), SHEET_SETUP)
+        best = max(rows, key=lambda row: row['isk_per_hour'])
+        worst = min(rows, key=lambda row: row['isk_per_hour'])
+        assert best['isk_per_hour_gradient'] == 0
+        assert worst['isk_per_hour_gradient'] == 100
+
+    def test_every_step_is_a_multiple_of_five_in_range(self):
+        rows = gas.site_rows(FULLERITE, quotes(), SHEET_SETUP)
+        clouds = [cloud for row in rows for cloud in row['clouds']]
+        for item in rows + clouds:
+            for key in ('isk_per_hour_gradient', 'isk_per_m3_gradient'):
+                if key in item:
+                    assert item[key] % 5 == 0
+                    assert 0 <= item[key] <= 100
+
+    def test_an_unpriced_figure_gets_no_step(self):
+        """A missing price is not a bad price, so it must not colour red."""
+        without_c60 = {label: price for label, price in SHEET_ISK_PER_M3.items()
+                       if label != 'C60'}
+        rows = gas.site_rows(FULLERITE, quotes(without_c60), SHEET_SETUP)
+        assert rows[0]['isk_per_hour_gradient'] is None
+        assert rows[0]['clouds'][1]['isk_per_m3_gradient'] is None
+        assert rows[0]['clouds'][1]['isk_per_hour_gradient'] is None
+        # A priced neighbour still grades.
+        assert rows[0]['clouds'][0]['isk_per_m3_gradient'] is not None
+
+    def test_one_price_everywhere_grades_all_green(self):
+        flat = dict.fromkeys(SHEET_ISK_PER_M3, 1000.0)
+        rows = gas.site_rows(FULLERITE, quotes(flat), SHEET_SETUP)
+        clouds = [cloud for row in rows for cloud in row['clouds']]
+        assert {cloud['isk_per_m3_gradient'] for cloud in clouds} == {0}
+
+    def test_no_price_at_all_grades_nothing(self):
+        rows = gas.site_rows(FULLERITE, quotes({}), SHEET_SETUP)
+        assert all(row['isk_per_hour_gradient'] is None for row in rows)
 
 
 def test_an_unpriced_cloud_leaves_the_site_unpriced():
@@ -190,6 +282,9 @@ class TestQuotes:
             gas.gas_quotes(JITA_REGION, 'bid', {999999: 999998})
 
 
+# Keeps a sell order's id clear of the raw type id the buy order uses.
+SELL_ORDER_ID = 1_000_000
+
 HUBS = [SimpleNamespace(region_id=JITA_REGION, name='Jita'),
         SimpleNamespace(region_id=10000043, name='Amarr')]
 
@@ -242,9 +337,13 @@ class TestForm:
 class TestPage:
     @pytest.fixture(autouse=True)
     def types(self, db):
+        # Every gas bids 1000 and asks 1200 ISK per m3, so a figure on the page
+        # is traceable to a round number whichever basis the form defaults to.
         for gas_label, type_id in FULLERITE_RAW.items():
             add_type(type_id, f'Fullerite-{gas_label}', volume=VOLUMES[gas_label])
             add_order(type_id, type_id, price=1000 * VOLUMES[gas_label], is_buy=True)
+            add_order(SELL_ORDER_ID + type_id, type_id,
+                      price=1200 * VOLUMES[gas_label])
         for gas_label, type_id in FULLERITE_COMPRESSED.items():
             add_type(type_id, f'Compressed Fullerite-{gas_label}',
                      volume=VOLUMES[gas_label] / 10)
@@ -260,10 +359,51 @@ class TestPage:
         # Every gas bids 1000 ISK/m3, so a Barren site pays 18,000 m3 worth.
         assert '18.0m' in body
 
+    def test_no_template_comment_reaches_the_page(self, auth_client, trade_hubs):
+        """Django's {# #} comment cannot span lines. A multi-line one is not a
+        comment at all -- it renders its own text into the page."""
+        body = auth_client.get(reverse('market_gas_index')).content.decode()
+        assert '{#' not in body
+        assert '#}' not in body
+        assert '{%' not in body
+
     def test_the_table_never_carries_the_sorter_class(self, auth_client, trade_hubs):
         """A tablesorter would split the two cloud rows that make one site."""
         response = auth_client.get(reverse('market_gas_index'))
         assert 'class="market"' not in response.content.decode()
+
+    def test_a_dangerous_site_carries_its_warning_on_hover(self, auth_client, trade_hubs):
+        body = auth_client.get(reverse('market_gas_index')).content.decode()
+        dangerous = [site for site in FULLERITE.sites if site.danger]
+        assert [site.name for site in dangerous] == [
+            'Ordinary Perimeter Reservoir', 'Vital Core Reservoir']
+        for site in dangerous:
+            assert f'title="{escape(site.danger)}"' in body
+        assert body.count('danger-icon') == len(dangerous)
+
+    def test_residue_puts_the_cloud_contents_in_brackets(self, auth_client, trade_hubs):
+        url = reverse('market_gas_index')
+        # Vast Frontier Reservoir holds 20,000 units of C32, which is 100,000 m3.
+        with_residue = auth_client.get(url, {'residue_chance': 27.2}).content.decode()
+        assert '(20,000)' in with_residue
+        assert '(100,000)' in with_residue
+
+        without = auth_client.get(url, {'residue_chance': 0}).content.decode()
+        assert '(20,000)' not in without
+        assert '>20,000<' in without
+
+    def test_the_isk_columns_carry_a_gradient_class(self, auth_client, trade_hubs):
+        body = auth_client.get(reverse('market_gas_index')).content.decode()
+        # Every gas is priced alike here, so every graded cell is greenest.
+        assert 'class="gradient_0"' in body
+
+    def test_the_header_says_which_figures_belong_to_a_cloud(self, auth_client, trade_hubs):
+        """ISK/hr, min and trips each appear twice; the labels alone cannot say
+        which is the site's and which is one cloud's."""
+        body = auth_client.get(reverse('market_gas_index')).content.decode()
+        assert '>whole site<' in body
+        assert '>one cloud<' in body
+        assert body.count('<th>ISK/hr</th>') == 2
 
     def test_a_bad_input_shows_the_error_and_no_table(self, auth_client, trade_hubs):
         response = auth_client.get(reverse('market_gas_index'), {'hold': 0})

@@ -94,7 +94,31 @@ def _quote_price(quote, basis):
 
 def site_rows(family, quotes, setup):
     """One row per site of the family, each carrying its own cloud rows."""
-    return [_site_row(site, quotes, setup) for site in family.sites]
+    rows = [_site_row(site, quotes, setup) for site in family.sites]
+    _grade(rows, 'isk_per_hour')
+    clouds = [cloud for row in rows for cloud in row['clouds']]
+    _grade(clouds, 'isk_per_m3')
+    _grade(clouds, 'isk_per_hour')
+    return rows
+
+
+def _grade(items, key):
+    """Rank one figure across the rows that share a column, as a gradient step.
+
+    The scale is the site-wide one: 0 is greenest and 100 reddest, in steps of
+    5, so the best figure in the column is green. An unknown figure gets no
+    step, because a missing price is not a bad price.
+    """
+    values = [item[key] for item in items if item[key] is not None]
+    best, worst = (max(values), min(values)) if values else (0, 0)
+    span = best - worst
+    for item in items:
+        if item[key] is None:
+            item[f'{key}_gradient'] = None
+        elif span == 0:
+            item[f'{key}_gradient'] = 0
+        else:
+            item[f'{key}_gradient'] = round((best - item[key]) / span * 100 / 5) * 5
 
 
 def _site_row(site, quotes, setup):
@@ -110,6 +134,7 @@ def _site_row(site, quotes, setup):
         'name': site.name,
         'group': site.group,
         'extra': site.extra,
+        'danger': site.danger,
         'clouds': clouds,
         'm3': total_m3,
         'minutes': minutes,
@@ -124,14 +149,27 @@ def _site_row(site, quotes, setup):
 
 def _cloud_row(cloud, quotes, setup):
     quote = quotes[cloud.type_id]
-    m3 = cloud.units * quote['volume'] * setup['efficiency']
+    content_m3 = cloud.units * quote['volume']
+    m3 = content_m3 * setup['efficiency']
+    minutes = m3 / setup['harvest_rate'] / 60
     isk_per_m3 = quote['isk_per_m3']
+    value = None if isk_per_m3 is None else m3 * isk_per_m3
     return {
         'type_id': cloud.type_id,
         'label': cloud.label,
         'extra': cloud.extra,
-        'units': cloud.units,
+        # Banked and content figures both ship, because residue destroys gas
+        # above what the ship keeps. Every other number here uses the banked
+        # one, and banked units times volume equals the banked m3.
+        'units': cloud.units * setup['efficiency'],
+        'content_units': cloud.units,
         'm3': m3,
+        'content_m3': content_m3,
+        'minutes': minutes,
+        'trips': m3 / setup['hold'],
         'isk_per_m3': isk_per_m3,
-        'value': None if isk_per_m3 is None else m3 * isk_per_m3,
+        # This equals isk_per_m3 times the hourly harvest, so it does not vary
+        # with the size of the cloud: two clouds of one gas read the same.
+        'isk_per_hour': None if value is None else value / (minutes / 60),
+        'value': value,
     }

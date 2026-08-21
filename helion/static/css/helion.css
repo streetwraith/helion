@@ -242,6 +242,12 @@ tr.selected {
     background-color: lightyellow;
 }
 
+/* Marks a gas site the rats make hard to huff. The title attribute carries the
+   reason, so the icon needs no label beside it. */
+.danger-icon {
+    color: #b03030;
+}
+
 .gradient_0    {background: #57bb8a;}
 .gradient_5    {background: #63b682;}
 .gradient_10   {background: #73b87e;}
@@ -495,6 +501,10 @@ table tr.headers-rotated th span {
 
     .warning {
         background-color: #3c3c09;
+    }
+
+    .danger-icon {
+        color: #d15656;
     }
 
     .gradient_0    {background: #396e54;}
