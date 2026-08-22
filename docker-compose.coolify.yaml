@@ -36,13 +36,15 @@ services:
     # pre_start; its pre-deploy command no-ops for compose). sync_market_views recreates the
     # orders_hub view and therefore needs the externally-owned market schema: a cluster
     # without it fails here, loudly, at startup. gunicorn binds only after both steps, so the
-    # healthcheck below (HTTP GET /login/ -> 200) is also a "migrations + view done" signal
+    # healthcheck below (HTTP GET /healthz/ -> 200) is also a "migrations + view done" signal
     # that worker/beat gate on.
     command: ["sh", "-c", "python manage.py migrate --noinput && python manage.py sync_market_views && exec gunicorn helion.wsgi --bind 0.0.0.0:8000 --timeout 600 --log-file -"]
     # HTTP check via python (no curl/wget in slim). Host header set so Django ALLOWED_HOSTS
     # returns 200 instead of 400; urlopen raises (non-zero exit) on any non-2xx.
+    # /healthz/ answers 503 when Postgres or Redis does not answer, so this check covers
+    # the datastores too - it marks the container unhealthy on a datastore outage.
     healthcheck:
-      test: ["CMD", "python", "-c", "import urllib.request as u; u.urlopen(u.Request('http://127.0.0.1:8000/login/', headers={'Host': 'helion.entropiadev.com'}), timeout=4)"]
+      test: ["CMD", "python", "-c", "import urllib.request as u; u.urlopen(u.Request('http://127.0.0.1:8000/healthz/', headers={'Host': 'helion.entropiadev.com'}), timeout=4)"]
       interval: 10s
       timeout: 5s
       retries: 12

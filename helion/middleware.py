@@ -8,7 +8,9 @@ class LoginRequiredMiddleware:
     def __call__(self, request):
         if not request.user.is_authenticated:
             login_url = reverse('login')
-            if request.path != login_url:
+            # healthz stays public: a redirect to the login page answers 200 and
+            # would report a dead datastore as healthy.
+            if request.path not in (login_url, reverse('healthz')):
                 return redirect(f"{login_url}?next={request.path}")
         response = self.get_response(request)
         return response

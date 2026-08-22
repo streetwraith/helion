@@ -1377,6 +1377,27 @@ peity takes the stroke as an option, so `ice_views` sends the colour. Its two st
 either background, but the empty case must be `transparent` — white hides the line on the light
 page only.
 
+## The health URL
+
+`/healthz/` is a readiness check, not a liveness check. It runs `SELECT 1` and one cache read, so a
+200 means gunicorn answers **and** both datastores answer. The deployment healthcheck calls it. It
+therefore also reports that `migrate` and `sync_market_views` finished, because gunicorn binds the
+port only after those two commands return.
+
+The check replaced a GET of the login page. That page renders without a query, so it proved nothing
+about Postgres or Redis: a container with a dead database stayed healthy.
+
+Three consequences of that choice:
+
+- The trade-off is flap. A short Postgres or Redis fault now marks the container unhealthy, and the
+  platform can act on it. That is the point of the check, but it means a datastore blip costs a
+  restart instead of a few failed requests.
+- `LoginRequiredMiddleware` exempts this one path. Every other path redirects an anonymous request
+  to the login page, and the check follows redirects, so without the exemption a dead datastore
+  would still answer 200 from the login page.
+- The body is `ok` or `unavailable` in plain text, and it never names the failed dependency. The URL
+  needs no login, so the detail goes to the log instead.
+
 ## Testing
 
 External schemas are faked minimally: the test setup creates the `sde` and `market` tables with

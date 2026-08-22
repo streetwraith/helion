@@ -1,11 +1,14 @@
 from django.conf import settings
-from django.http import Http404
+from django.core.cache import cache
+from django.db import DatabaseError, InterfaceError, connection
+from django.http import Http404, HttpResponse
 from django.shortcuts import render, redirect
 from django.urls import reverse
 from django.utils import timezone
 from aiopenapi3.errors import HTTPError
 from esi.errors import TokenError
 from esi.models import Token
+from redis.exceptions import RedisError
 from helion.character_sheet import SheetUnavailable, get_character_sheet
 from market.services import tracking
 import logging
@@ -72,6 +75,22 @@ def _shown_character(request):
         'name': token.character_name,
         'token_pk': token.pk,
     }
+
+def healthz(request):
+    """Readiness for the container healthcheck: Postgres and Redis both answer.
+
+    The URL is unauthenticated, so the body never names the dead dependency;
+    the log line does.
+    """
+    try:
+        with connection.cursor() as cursor:
+            cursor.execute("SELECT 1")
+        cache.get("healthz")
+    except (DatabaseError, InterfaceError, RedisError, OSError) as exc:
+        logger.warning("healthz: %r", exc)
+        return HttpResponse("unavailable\n", status=503, content_type="text/plain")
+    return HttpResponse("ok\n", content_type="text/plain")
+
 
 def index(request):
     context = {}

@@ -7,6 +7,7 @@ from django.core.management import call_command
 from django.db import connection
 from django.utils import timezone
 
+from helion import views as helion_views
 from market import context_processors
 from market.models import TradeHub
 from market.services import balances, esi_scheduler, mistakes, orders
@@ -178,6 +179,8 @@ def isolated_shared_caches(monkeypatch):
     # The scheduler's global pause lives in the same shared Redis, and anything
     # that calls ESI now reads it. A real pause there must not fail the suite.
     monkeypatch.setattr(esi_scheduler, "cache", FakeCache())
+    # healthz reads the cache to prove Redis answers.
+    monkeypatch.setattr(helion_views, "cache", FakeCache())
 
 
 @pytest.fixture(autouse=True)
