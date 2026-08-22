@@ -6,6 +6,7 @@ from django.urls import reverse
 from django.utils import timezone
 
 from marketdata.models import History
+from market.ice_constants import ICE_PRODUCT_TYPES, ICE_TYPES
 from market.models import MarketTransaction
 from market.services import market_service
 
@@ -64,6 +65,29 @@ def test_zeroed_modifiers_give_base_yield(ice_client):
 def test_freighter_capacity(ice_client, hull, skill, fit, expected):
     context = get_ice(ice_client, freighter_hull=hull, freighter_skill=skill, freighter_fit=fit)
     assert context["params"]["freighter_capacity"] == pytest.approx(expected)
+
+
+def test_reprocess_output_carries_base_and_effective_yield(ice_client):
+    rows = get_ice(ice_client)["ice_reprocess_output"]
+
+    assert [row["name"] for row in rows] == list(ICE_TYPES)
+    products = list(ICE_PRODUCT_TYPES)
+    for row in rows:
+        base_yield = ICE_TYPES[row["name"]]["base_yield"]
+        assert row["type_id"] == ICE_TYPES[row["name"]]["type_id"]
+        assert [cell["base"] for cell in row["yields"]] == [base_yield[p] for p in products]
+        # ZERO_PARAMS collapses the yield to the 50% base.
+        assert [cell["effective"] for cell in row["yields"]] == pytest.approx(
+            [base_yield[p] * 0.5 for p in products])
+
+
+def test_reprocess_output_scales_with_the_parameters(ice_client):
+    rows = get_ice(ice_client, reprocessing_skill_modifier=5)["ice_reprocess_output"]
+
+    icicle = next(row for row in rows if row["name"] == "Compressed Clear Icicle")
+    heavy_water = icicle["yields"][list(ICE_PRODUCT_TYPES).index("Heavy Water")]
+    assert heavy_water["base"] == 69
+    assert heavy_water["effective"] == pytest.approx(69 * 0.5 * 1.15)
 
 
 def test_full_cargo_price_walks_the_order_book(ice_client):
@@ -182,7 +206,7 @@ def test_the_profit_block_reaches_the_page(ice_client):
               if row["label"] == "sells"]
 
     assert sells["cells"][0] == pytest.approx(100_000_000.0)
-    assert "<h2>Ice profit</h2>" in response.content.decode()
+    assert "<h2>Ice profit " in response.content.decode()
 
 
 def test_reprocessing_offered_only_for_the_four_haul_hubs(ice_client):

@@ -304,6 +304,12 @@ h1.item-name {
     font-size: 1.25rem;
 }
 
+/* An icon in a heading inherits the heading font, which renders it at 24px. */
+h2 .bi {
+    font-size: 0.75rem;
+    vertical-align: middle;
+}
+
 table.ice {
     display: inline-block;
 }

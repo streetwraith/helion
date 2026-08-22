@@ -85,9 +85,9 @@ def market_ice_index(request):
             'reprocessing_efficiency_skill_modifier': int(request.GET.get('reprocessing_efficiency_skill_modifier', 5)),
             'ice_processing_skill_modifier': int(request.GET.get('ice_processing_skill_modifier', 5)),
             'implant_modifier': float(request.GET.get('implant_modifier', 0.04)),
-            'freighter_hull': request.GET.get('freighter_hull', 'providence'),
+            'freighter_hull': request.GET.get('freighter_hull', 'obelisk'),
             'freighter_skill': int(request.GET.get('freighter_skill', 4)),
-            'freighter_fit': request.GET.get('freighter_fit', 'other')
+            'freighter_fit': request.GET.get('freighter_fit', 'reinforced_bulkheads')
         }
     except ValueError:
         return HttpResponseBadRequest('invalid parameter')
@@ -161,6 +161,7 @@ def market_ice_index(request):
         }
 
     context['ice_types'] = ICE_TYPES
+    context['ice_reprocess_output'] = _build_reprocess_output(reprocessing_yield)
 
     context['ice_data'] = _build_ice_data(
         ice_books, ice_history, product_books, context['ice_product_data'],
@@ -170,6 +171,21 @@ def market_ice_index(request):
     # What the wallet did, not what the parameters above project.
     context['ice_stats'] = ice_stats.build_stats(timezone.now())
     return render(request, "market/ice.html", context)
+
+def _build_reprocess_output(reprocessing_yield):
+    """Per ice type: the reprocess output of one unit of ice, at the base 100%
+    yield and at the yield the parameters give. No market data, so no hub."""
+    rows = []
+    for ice_type, ice_type_data in ICE_TYPES.items():
+        base_yield = ice_type_data['base_yield']
+        rows.append({
+            'name': ice_type,
+            'type_id': ice_type_data['type_id'],
+            'yields': [{'base': base_yield[product],
+                        'effective': base_yield[product] * reprocessing_yield / 100}
+                       for product in ICE_PRODUCT_TYPES],
+        })
+    return rows
 
 def _build_product_data(product_books, product_history, ice_products_stock,
                         market_hubs, hub_station_ids, today):

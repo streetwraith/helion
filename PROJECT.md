@@ -784,7 +784,12 @@ needing an edit when the next ice one lands.
 **A short window misleads by construction.** Ice bought in one month sells as products in the next,
 so a cell holds what happened inside the window and not the margin on the ice that window bought. The
 30d and 90d columns of the live data differ by less than 4% in buys and by a factor of two in sells.
-The page states this under the table.
+The page states this in the tooltip of the heading, together with the two other caveats.
+
+**The reprocess output table under the block is reference data, not wallet data.** It renders the
+`ICE_TYPES` base yields of one unit of ice, the numbers the EVE University ice variants table lists,
+and in brackets the same yields at the page's own parameters. It computes nothing new: the base table
+already fed every projection above it.
 
 ## The market browser
 

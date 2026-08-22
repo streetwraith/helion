@@ -378,7 +378,7 @@
 {% endwith %}
 {% endfor %}
 
-<h2>Ice profit</h2>
+<h2>Ice profit <i class="bi bi-info-circle" title="Ice and ice products only, from the wallet, so the parameters above do not change it. Sells include the collateral paid out on two failed ice couriers, in the windows that reach them.&#10;&#10;The broker fee is the one modelled figure. No journal row attributes a broker fee to an item, so this is the sell value at the rate above, and it understates by roughly a third because a relisted order pays again. Sales tax is measured and split by the second it was charged in. Refining is the reprocessing tax of one facility owner, which assumes ice is all that goes through it.&#10;&#10;A short window misleads on purpose: ice bought in one month sells as products in the next, so the cells hold whatever happened in the window, not the margin on the ice it bought."></i></h2>
 
 <table>
     <thead>
@@ -401,23 +401,28 @@
     </tbody>
 </table>
 
-<p>
-    Ice and ice products only, from the wallet, so the parameters above do not
-    change it. Sells include the collateral paid out on two failed ice couriers,
-    in the windows that reach them.
-</p>
-<p>
-    The broker fee is the one modelled figure. No journal row attributes a broker
-    fee to an item, so this is the sell value at the rate above, and it understates
-    by roughly a third because a relisted order pays again. Sales tax is measured
-    and split by the second it was charged in. Refining is the reprocessing tax of
-    one facility owner, which assumes ice is all that goes through it.
-</p>
-<p>
-    A short window misleads on purpose: ice bought in one month sells as products
-    in the next, so the cells hold whatever happened in the window, not the margin
-    on the ice it bought.
-</p>
+<h2>Reprocess output</h2>
+
+<table>
+    <thead>
+        <tr>
+            <th></th>
+            {% for ice_product_type in ice_product_types %}
+            <th class="item-name">{% item_name ice_product_types|get_by_key:ice_product_type ice_product_type %}</th>
+            {% endfor %}
+        </tr>
+    </thead>
+    <tbody>
+        {% for row in ice_reprocess_output %}
+        <tr>
+            <th class="item-name">{% item_name row.type_id row.name %}</th>
+            {% for cell in row.yields %}
+            <td>{% if cell.base %}{{ cell.base }} ({{ cell.effective|floatformat:0 }}){% endif %}</td>
+            {% endfor %}
+        </tr>
+        {% endfor %}
+    </tbody>
+</table>
 
 <script type="text/javascript">
     $(document).ready(function() {
