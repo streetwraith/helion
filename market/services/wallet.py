@@ -5,7 +5,7 @@ from functools import wraps
 from django.db.models import Count, F, Max, Q, Sum
 
 from evesde.models import Type
-from market.models import MarketTransaction
+from market.models import MarketTransaction, WalletJournal
 from market.services.names import owner_labels
 
 def get_market_transactions(owner_id=None, *, type_id=None, type_name=None, location_id=None, is_buy=None, limit=None):
@@ -161,6 +161,47 @@ def get_trade_history_bulk(type_ids, location_id=None, is_buy=False):
         if histories[latest.type_id]['volume'] > 0:
             histories[latest.type_id]['last_price'] = latest.unit_price
     return histories
+
+def get_sells_after(type_ids, location_id, since):
+    """Personal sells of these items at one station, from `since` onward, oldest first.
+
+    Oldest first is part of the contract, not a display choice: the haul tracker
+    consumes these in order to attribute the first units sold to the haul.
+    `get_trade_history_bulk` cannot answer this, because it has no date bound and
+    totals over all time.
+    """
+    return list(MarketTransaction.objects.filter(
+        type_id__in=type_ids, location_id=location_id, is_buy=False,
+        is_personal=True, date__gte=since,
+    ).order_by('date', 'transaction_id').values(
+        'type_id', 'date', 'quantity', 'unit_price'))
+
+def get_gross_sales_by_second(seconds):
+    """Value of every personal sell in each of these seconds, any item, any station.
+
+    This is the denominator a sales-tax row splits by. It spans all items on
+    purpose: the tax of a second was charged on everything sold in it.
+    """
+    if not seconds:
+        return {}
+    rows = MarketTransaction.objects.filter(
+        is_buy=False, is_personal=True, date__in=list(seconds),
+    ).values('date').annotate(gross=Sum(F('quantity') * F('unit_price')))
+    return {row['date']: float(row['gross']) for row in rows}
+
+def get_sales_tax_by_second(seconds):
+    """Sales tax charged in each of these seconds, as a positive cost.
+
+    Journal amounts are negative because a tax is a debit; the sign flips here so
+    callers add a cost rather than subtract a negative.
+    """
+    if not seconds:
+        return {}
+    rows = WalletJournal.objects.filter(
+        ref_type='transaction_tax', corporation_id__isnull=True,
+        date__in=list(seconds),
+    ).values('date').annotate(total=Sum('amount'))
+    return {row['date']: -float(row['total']) for row in rows}
 
 def get_average_transaction_price(type_id, days_back=90, is_buy=False):
     return get_average_transaction_price_bulk([type_id], days_back=days_back, is_buy=is_buy)[type_id]

@@ -1017,6 +1017,64 @@ Two things a reader will not guess:
   moves every displayed hauling profit. Do not "fix" one scan to match the other without deciding
   what the two pages should report.
 
+## The haul profit tracker
+
+The two scans above predict a haul. `/market/hauling/tracker` measures one that already happened:
+give it a buy date, a source hub and a destination hub, and it reports what each item cost, how
+much of it sold, and what the sale earned after fees.
+
+**No haul is ever recorded.** There is no model and no migration. A haul is reconstructed from the
+wallet, which means the page cannot know where one haul ends and the next begins. Four rules
+close that gap, and each one is a deliberate trade.
+
+- **The buy day is bucketed in the display timezone, not in UTC.** The date typed into the form was
+  read off the transaction list, which renders in `TIME_ZONE`. A third of the stored buys fall on a
+  different date under the two rules, so the two must agree. A buying session that runs past
+  midnight still splits across two days; the page takes only the day asked for.
+- **Every buy of that day is listed, and the trader unticks what the haul did not carry.** A buy day
+  mixes a haul with the rest of the day's trade, and no rule separates them reliably: an item that
+  never sold at the destination looks exactly like an item bought for another purpose. Auto-filtering
+  would hide the row most worth seeing. Unticking changes only the totals - every per-row figure is
+  independent of the others - so the browser recomputes them and nothing goes back to the server.
+- **A destination sell counts until the hauled quantity is reached, then stops.** Sells are taken in
+  date order from the first buy of that item onward, because goods cannot sell before they are
+  bought. A later restock sells through the same orders, and counting it would credit this haul with
+  goods it never carried. The sell that crosses the cap is split, so its price still weighs the
+  average by the units that belong here. The row is flagged when the destination sold more than the
+  haul brought. About two thirds of the stored types are bought on a single day and have no
+  ambiguity at all; the cap is what keeps the other third honest.
+- **Personal rows only, on both sides.** This follows `get_trade_history_bulk`. It can in principle
+  break a pairing - a corporation wallet funding a buy that sells personally would show sells with
+  no cost - but on the stored data those rows are minerals and single-digit oddments, never a haul.
+
+**Fees are measured where the wallet knows them and modelled where it cannot.** Sales tax comes from
+the real `transaction_tax` rows, allocated one second at a time by the value sold in that second,
+exactly as `ice_stats._sales_tax_by_window` does and for the same reason: the row names no item, but
+the rate is uniform for one character at one moment. The broker fee is modelled as revenue times
+`get_brokers_fee()`, because no `brokers_fee` row carries a context id; it understates, since a
+relisted order pays again. This page therefore does **not** use `SALE_PROCEEDS_PERCENT`, and its
+figures will not tie out against the two scan pages, which do. That is intended: a scan estimates,
+a tracker measures. The allocation is self-checking - on the stored data the implied rate comes out
+at 3.3750%, the rate the journal actually charges.
+
+**Margin divides by the cost of the units that sold**, not by the whole haul. Unsold stock has not
+failed, it has not finished. For the same reason an item with units left reports no time to clear.
+
+### Why the desk was split
+
+The destination columns are the trade hub's sell side: the live ask, the undercut times, `o48`, the
+station's lowest competing ask, the stock held there. Rather than rebuild them, `build_desk` was
+split into `_sell_entry` (both pages) and the buy half (the trade hub only), with `_prefetch` still
+shared so the trade hub's query count does not move. `build_sell_desk` skips the buy book, the buy
+history and the region names - six queries. Two consequences worth knowing:
+
+- **`other_region_id` is the source hub here**, where the trade hub passes Jita or Amarr. That is
+  what puts the source hub's live ask next to the price actually paid.
+- **`my_sell_history` is still built and deliberately ignored.** It has no date bound and totals over
+  all time, which is the one thing a haul must not do; the tracker uses `wallet.get_sells_after` and
+  its own attribution instead. Leaving the key in place keeps `_sell_entry` identical for both
+  callers, so the two pages cannot drift apart.
+
 ## The station trading filter
 
 The page filters by a market group and by excluded meta groups. The group input is a

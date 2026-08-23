@@ -12,6 +12,7 @@ from .views import (
     market_hauling_index,
     market_hauling_sell_to_buy,
     market_hauling_sell_to_sell,
+    market_hauling_tracker,
     lp_index,
     lp_data,
     market_trade_hub,
@@ -57,6 +58,7 @@ urlpatterns = [
     path("hauling", market_hauling_index, name="market_hauling_index"),
     path("hauling_stb/<str:from_location>/<str:to_location>", market_hauling_sell_to_buy, name="market_hauling_sell_to_buy"),
     path("hauling_sts/<str:from_location>/<str:to_location>", market_hauling_sell_to_sell, name="market_hauling_sell_to_sell"),
+    path("hauling/tracker", market_hauling_tracker, name="market_hauling_tracker"),
 
     # ice
     path("ice", market_ice_index, name="market_ice_index"),

@@ -1,0 +1,110 @@
+{% extends "market_base.html" %}
+
+{% load static %}
+{% load custom_filters item_tags %}
+
+{% block title %}haul tracker | Helion{% endblock %}
+
+{% block js %}
+<script src="{% static 'market/js/haul_tracker_totals.js' %}"></script>
+{% endblock %}
+
+{% block content %}
+<h1>Haul tracker</h1>
+
+{% include 'market/hauling/_fragment_haul_tracker_form.html' %}
+
+{% if date_error %}<p class="warning">{{ date_error }}</p>{% endif %}
+
+{% if rows %}
+<p>Untick anything this haul did not carry. Only the totals change.</p>
+
+<table id="haul-totals" style="width: auto;">
+    <tr><th>cost</th><td class="isk" data-total="cost"></td>
+        <th>sold</th><td class="isk" data-total="cost_sold"></td>
+        <th>% sold</th><td data-total="sold_percent"></td></tr>
+    <tr><th>revenue</th><td class="isk" data-total="revenue"></td>
+        <th>tax</th><td class="isk" data-total="tax"></td>
+        <th>fee</th><td class="isk" data-total="fee"></td></tr>
+    <tr><th>net</th><td class="isk" data-total="net"></td>
+        <th>margin</th><td data-total="margin"></td>
+        <th>items</th><td data-total="items"></td></tr>
+</table>
+<br>
+
+{% with dest_region=destination.region_id source_region=source.region_id %}
+<table id="haul-rows" style="width: auto;" class="market">
+    <thead>
+        <tr>
+            <th></th>
+            <th>item</th>
+            <th>l</th>
+            <th>units</th>
+            <th>avg buy</th>
+            <th>cost</th>
+            <th>sold</th>
+            <th>avg sell</th>
+            <th>revenue</th>
+            <th>tax</th>
+            <th>fee</th>
+            <th>net</th>
+            <th>margin</th>
+            <th>left</th>
+            <th>stock</th>
+            <th>my ask</th>
+            <th>{{ destination.name|lower }} ask</th>
+            <th>{{ source.name|lower }} ask</th>
+            <th>uc</th>
+            <th>uca</th>
+            <th>o48</th>
+            <th>first</th>
+            <th>last</th>
+            <th>days</th>
+        </tr>
+    </thead>
+    <tbody>
+        {% for row in rows %}
+        {% with dest=desk|get_by_key:row.type_id|get_by_key:'regions'|get_by_key:dest_region src=desk|get_by_key:row.type_id|get_by_key:'regions'|get_by_key:source_region %}
+        <tr data-type-id="{{ row.type_id }}"
+            data-cost="{{ row.cost|floatformat:'2u' }}"
+            data-cost-sold="{{ row.cost_of_sold|floatformat:'2u' }}"
+            data-revenue="{{ row.revenue|floatformat:'2u' }}"
+            data-tax="{{ row.sales_tax|floatformat:'2u' }}"
+            data-fee="{{ row.brokers_fee|floatformat:'2u' }}"
+            data-net="{{ row.net_profit|floatformat:'2u' }}">
+            <td><input type="checkbox" class="haul-pick" checked></td>
+            <td class="item-name">{% item_name row.type_id row.name region_id=dest_region %}</td>
+            <td>{{ row.buy_lines }}</td>
+            <td>{{ row.units_bought }}</td>
+            <td>{{ row.avg_buy_price|isk_value }}</td>
+            <td>{{ row.cost|isk_value }}</td>
+            <td class="{% if row.oversold %}warning{% endif %}">{{ row.units_sold }}</td>
+            <td>{{ row.avg_sell_price|isk_value_blank }}</td>
+            <td>{{ row.revenue|isk_value }}</td>
+            <td>{{ row.sales_tax|isk_value }}</td>
+            <td>{{ row.brokers_fee|isk_value }}</td>
+            <td class="{% if row.net_profit < 0 %}red{% endif %}">{{ row.net_profit|isk_value }}</td>
+            <td>{{ row.margin_percent|floatformat:0 }}</td>
+            <td>{{ row.units_left }}</td>
+            <td>{{ desk|get_by_key:row.type_id|get_by_key:'in_assets' }}</td>
+            <td class="{% if dest|get_by_key:'my_sell_price' >= dest|get_by_key:'station_lowest_sell_order'|get_by_key:'price' %}red{% endif %}">{{ dest|get_by_key:'my_sell_price'|isk_value_blank }}</td>
+            <td>{{ dest|get_by_key:'station_lowest_sell_order'|get_by_key:'price'|isk_value_blank }}</td>
+            <td>{{ src|get_by_key:'station_lowest_sell_order'|get_by_key:'price'|isk_value_blank }}</td>
+            <td>{{ dest|get_by_key:'my_sell_price_undercut_time'|floatformat:0 }}</td>
+            <td>{{ dest|get_by_key:'my_sell_price_undercut_time_avg'|floatformat:0 }}</td>
+            <td>{{ dest|get_by_key:'recent_sell_orders_issued' }}</td>
+            <td>{{ row.first_sell|date:"Y-m-d" }}</td>
+            <td>{{ row.last_sell|date:"Y-m-d" }}</td>
+            <td>{{ row.days_to_clear|default_if_none:"" }}</td>
+        </tr>
+        {% endwith %}
+        {% endfor %}
+    </tbody>
+</table>
+{% endwith %}
+
+{% elif source and destination and date %}
+<p>No buys at {{ source.name }} on {{ date }}.</p>
+{% endif %}
+
+{% endblock %}

@@ -28,21 +28,24 @@ UNDERCUT_AVERAGE_DAYS = 30
 
 @dataclass(frozen=True)
 class _Books:
-    """Every bulk read one item's entry needs."""
+    """Every bulk read one item's entry needs.
+
+    The buy-side fields are None on a sell-only desk, which never reads them.
+    """
     global_lowest_sells: dict
-    global_highest_buys: dict
+    global_highest_buys: dict | None
     station_lowest_sells: dict
-    station_highest_buys: dict
+    station_highest_buys: dict | None
     other_lowest_sells: dict
-    other_highest_buys: dict
+    other_highest_buys: dict | None
     sell_histories: dict
-    buy_histories: dict
+    buy_histories: dict | None
     undercuts_by_type: dict
     region_levels: dict
     other_levels: dict
     recent_counts: dict
     hub_names_by_station: dict
-    region_names: dict
+    region_names: dict | None
     my_orders_by_type: dict
     assets: dict
 
@@ -57,7 +60,7 @@ def build_desk(*, region_id, other_region_id, station_id, trade_hubs, type_ids,
     Returns (item_data, isk_in_escrow, isk_in_sell_orders).
     """
     books = _prefetch(region_id, other_region_id, station_id, trade_hubs,
-                      type_ids, own_orders, assets, now)
+                      type_ids, own_orders, assets, now, with_buy_side=True)
     item_data = {}
     isk_in_escrow = 0
     isk_in_sell_orders = 0
@@ -70,8 +73,25 @@ def build_desk(*, region_id, other_region_id, station_id, trade_hubs, type_ids,
     return item_data, isk_in_escrow, isk_in_sell_orders
 
 
+def build_sell_desk(*, region_id, other_region_id, station_id, trade_hubs,
+                    type_ids, own_orders, assets, now):
+    """One sell-side entry per type id, for a page that never bids at the hub.
+
+    The haul tracker sells what it carried in and places no buy order there, so
+    the buy columns and the five reads behind them are dead weight. The cells it
+    does show come from the same `_sell_entry` the full desk builds on, so the
+    two pages cannot drift apart.
+
+    `other_region_id` is the comparison hub: the source hub, for a haul.
+    """
+    books = _prefetch(region_id, other_region_id, station_id, trade_hubs,
+                      type_ids, own_orders, assets, now, with_buy_side=False)
+    return {type_id: _sell_entry(type_id, books, region_id, other_region_id, now)
+            for type_id in type_ids}
+
+
 def _prefetch(region_id, other_region_id, station_id, trade_hubs, type_ids,
-              own_orders, assets, now):
+              own_orders, assets, now, with_buy_side):
     market_orders = OrdersHub.objects.filter(
         region_id__in=[hub.region_id for hub in trade_hubs],
         is_in_trade_hub_range=True,
@@ -93,21 +113,27 @@ def _prefetch(region_id, other_region_id, station_id, trade_hubs, type_ids,
 
     return _Books(
         global_lowest_sells=orders.best_orders_by_type(market_orders, is_buy=False),
-        global_highest_buys=orders.best_orders_by_type(market_orders, is_buy=True),
+        global_highest_buys=(orders.best_orders_by_type(market_orders, is_buy=True)
+                             if with_buy_side else None),
         station_lowest_sells=orders.best_orders_by_type(competitor_orders, is_buy=False),
-        station_highest_buys=orders.best_orders_by_type(competitor_orders, is_buy=True),
+        station_highest_buys=(orders.best_orders_by_type(competitor_orders, is_buy=True)
+                              if with_buy_side else None),
         # The comparison-hub columns include own orders.
         other_lowest_sells=orders.best_orders_by_type(other_hub_orders, is_buy=False),
-        other_highest_buys=orders.best_orders_by_type(other_hub_orders, is_buy=True),
+        other_highest_buys=(orders.best_orders_by_type(other_hub_orders, is_buy=True)
+                            if with_buy_side else None),
         sell_histories=wallet.get_trade_history_bulk(
             type_ids, location_id=station_id, is_buy=False),
-        buy_histories=wallet.get_trade_history_bulk(type_ids, is_buy=True),
+        buy_histories=(wallet.get_trade_history_bulk(type_ids, is_buy=True)
+                       if with_buy_side else None),
         undercuts_by_type=undercuts_by_type,
         region_levels=history.get_history_levels_bulk(region_id, type_ids),
         other_levels=history.get_history_levels_bulk(other_region_id, type_ids),
         recent_counts=_recent_counts(competitor_orders, now),
         hub_names_by_station={hub.station_id: hub.name for hub in trade_hubs},
-        region_names=dict(RegionStatus.objects.values_list('region_id', 'region_name')),
+        # Only the best-hub buy fallback needs a region name.
+        region_names=(dict(RegionStatus.objects.values_list('region_id', 'region_name'))
+                      if with_buy_side else None),
         my_orders_by_type=my_orders_by_type,
         assets=assets,
     )
@@ -128,72 +154,93 @@ def _recent_counts(competitor_orders, now):
     }
 
 
-def _item_entry(type_id, books, region_id, other_region_id, now):
-    """One item's cells, and what its own orders tie up in ISK."""
-    my_sell_orders = books.my_orders_by_type.get((type_id, False), [])
-    my_buy_orders = books.my_orders_by_type.get((type_id, True), [])
-    my_sell_order = min(my_sell_orders, key=lambda order: order.price, default=None)
-    my_buy_order = max(my_buy_orders, key=lambda order: order.price, default=None)
-
-    station_lowest_sell = books.station_lowest_sells.get(type_id)
-    station_highest_buy = books.station_highest_buys.get(type_id)
-    spread = _spread(station_lowest_sell, station_highest_buy)
-
-    sell_undercut, sell_undercut_avg = _undercut_times(
-        books.undercuts_by_type.get((type_id, False), []), my_sell_order, now)
-    buy_undercut, buy_undercut_avg = _undercut_times(
-        books.undercuts_by_type.get((type_id, True), []), my_buy_order, now)
-
-    sell_history = books.sell_histories[type_id]
-    buy_history = books.buy_histories[type_id]
-
-    region_levels = books.region_levels[type_id]
-    other_levels = books.other_levels[type_id]
-    other_lowest_sell = books.other_lowest_sells.get(type_id)
-
-    entry = {
+def _sell_entry(type_id, books, region_id, other_region_id, now):
+    """Everything needed to sell one item at the hub, and nothing else."""
+    return {
         'in_assets': books.assets.get(type_id, 0),
         'regions': {
-            region_id: {
-                'my_profit': _realized_profit(sell_history, buy_history),
-                'my_sell_price': my_sell_order.price if my_sell_order else None,
-                'my_sell_price_last_update': _days_since(my_sell_order, now),
-                'my_sell_price_undercut_time': sell_undercut,
-                'my_sell_price_undercut_time_avg': sell_undercut_avg,
-                'my_sell_volume': sum(order.volume_remain for order in my_sell_orders),
-                'my_sell_history': sell_history,
-                'my_buy_price': my_buy_order.price if my_buy_order else None,
-                'my_buy_price_last_update': _days_since(my_buy_order, now),
-                'my_buy_price_undercut_time': buy_undercut,
-                'my_buy_price_undercut_time_avg': buy_undercut_avg,
-                'my_buy_volume': sum(order.volume_remain for order in my_buy_orders),
-                'my_buy_history': buy_history,
-                'station_lowest_sell_order': station_lowest_sell,
-                'station_highest_buy_order': station_highest_buy,
-                'spread': spread,
-                'spread_inverse_rounded': 100 - round(spread / 5) * 5,
-                'history_daily_volume_avg': region_levels.daily_volume_avg,
-                'history_median_high': region_levels.median_high,
-                'history_price_ratio': _price_ratio(station_lowest_sell,
-                                                    region_levels.median_high),
-                'recent_sell_orders_issued': books.recent_counts.get((type_id, False), 0),
-                'recent_buy_orders_issued': books.recent_counts.get((type_id, True), 0),
-            },
-            # The comparison hub: Jita, or Amarr when already looking at Jita.
-            other_region_id: {
-                'station_lowest_sell_order': other_lowest_sell,
-                'station_highest_buy_order': books.other_highest_buys.get(type_id),
-                'history_daily_volume_avg': other_levels.daily_volume_avg,
-                'history_median_high': other_levels.median_high,
-                'history_price_ratio': _price_ratio(other_lowest_sell,
-                                                    other_levels.median_high),
-            },
+            region_id: _sell_cells(type_id, books, now),
+            other_region_id: _other_sell_cells(type_id, books),
         },
     }
+
+
+def _sell_cells(type_id, books, now):
+    my_sell_orders = books.my_orders_by_type.get((type_id, False), [])
+    my_sell_order = min(my_sell_orders, key=lambda order: order.price, default=None)
+    undercut, undercut_avg = _undercut_times(
+        books.undercuts_by_type.get((type_id, False), []), my_sell_order, now)
+    station_lowest_sell = books.station_lowest_sells.get(type_id)
+    region_levels = books.region_levels[type_id]
+    return {
+        'my_sell_price': my_sell_order.price if my_sell_order else None,
+        'my_sell_price_last_update': _days_since(my_sell_order, now),
+        'my_sell_price_undercut_time': undercut,
+        'my_sell_price_undercut_time_avg': undercut_avg,
+        'my_sell_volume': sum(order.volume_remain for order in my_sell_orders),
+        'my_sell_history': books.sell_histories[type_id],
+        'station_lowest_sell_order': station_lowest_sell,
+        'history_daily_volume_avg': region_levels.daily_volume_avg,
+        'history_median_high': region_levels.median_high,
+        'history_price_ratio': _price_ratio(station_lowest_sell,
+                                            region_levels.median_high),
+        'recent_sell_orders_issued': books.recent_counts.get((type_id, False), 0),
+    }
+
+
+def _other_sell_cells(type_id, books):
+    """The comparison hub: Jita, or Amarr when already looking at Jita."""
+    other_lowest_sell = books.other_lowest_sells.get(type_id)
+    other_levels = books.other_levels[type_id]
+    return {
+        'station_lowest_sell_order': other_lowest_sell,
+        'history_daily_volume_avg': other_levels.daily_volume_avg,
+        'history_median_high': other_levels.median_high,
+        'history_price_ratio': _price_ratio(other_lowest_sell,
+                                            other_levels.median_high),
+    }
+
+
+def _buy_cells(type_id, books, now):
+    my_buy_orders = books.my_orders_by_type.get((type_id, True), [])
+    my_buy_order = max(my_buy_orders, key=lambda order: order.price, default=None)
+    undercut, undercut_avg = _undercut_times(
+        books.undercuts_by_type.get((type_id, True), []), my_buy_order, now)
+    return {
+        'my_buy_price': my_buy_order.price if my_buy_order else None,
+        'my_buy_price_last_update': _days_since(my_buy_order, now),
+        'my_buy_price_undercut_time': undercut,
+        'my_buy_price_undercut_time_avg': undercut_avg,
+        'my_buy_volume': sum(order.volume_remain for order in my_buy_orders),
+        'my_buy_history': books.buy_histories[type_id],
+        'station_highest_buy_order': books.station_highest_buys.get(type_id),
+        'recent_buy_orders_issued': books.recent_counts.get((type_id, True), 0),
+    }
+
+
+def _item_entry(type_id, books, region_id, other_region_id, now):
+    """One item's cells, and what its own orders tie up in ISK."""
+    entry = _sell_entry(type_id, books, region_id, other_region_id, now)
+    own_cells = entry['regions'][region_id]
+    own_cells.update(_buy_cells(type_id, books, now))
+    entry['regions'][other_region_id]['station_highest_buy_order'] = (
+        books.other_highest_buys.get(type_id))
+
+    # The cells below read both sides at once, so they belong to neither half:
+    # the spread pairs the two books, the profit pairs the two histories, and
+    # the best-hub block reports one price per side.
+    spread = _spread(own_cells['station_lowest_sell_order'],
+                     own_cells['station_highest_buy_order'])
+    own_cells['spread'] = spread
+    own_cells['spread_inverse_rounded'] = 100 - round(spread / 5) * 5
+    own_cells['my_profit'] = _realized_profit(own_cells['my_sell_history'],
+                                              own_cells['my_buy_history'])
     _add_best_hub_prices(entry, type_id, books)
 
-    isk_in_sell_orders = sum(order.volume_remain * order.price for order in my_sell_orders)
-    isk_in_escrow = sum(order.volume_remain * order.price for order in my_buy_orders)
+    isk_in_sell_orders = sum(order.volume_remain * order.price
+                             for order in books.my_orders_by_type.get((type_id, False), []))
+    isk_in_escrow = sum(order.volume_remain * order.price
+                        for order in books.my_orders_by_type.get((type_id, True), []))
     return entry, isk_in_escrow, isk_in_sell_orders
 
 

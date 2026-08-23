@@ -8,12 +8,12 @@ from django.test.utils import CaptureQueriesContext
 from django.urls import reverse
 from django.utils import timezone
 
-from market.models import MarketOrderUndercut, TradeItem
+from market.models import MarketOrderUndercut, TradeHub, TradeItem
 from marketdata.models import History
-from market.services import market_service
+from market.services import market_service, station_trading
 
 from .conftest import CHARACTER_ID
-from .test_market_service_db import add_order, add_transaction, add_type
+from .test_market_service_db import JITA_STATION, add_order, add_transaction, add_type
 from .test_views_smoke import AMARR_REGION, AMARR_STATION, AMARR_SYSTEM
 
 pytestmark = pytest.mark.django_db
@@ -74,6 +74,52 @@ def test_trade_hub_queries_do_not_grow_with_items(character_client, trade_hubs, 
     six = count_queries(character_client, url)
 
     assert six == with_two_items
+
+
+def add_haul_item(index, type_id):
+    """One item bought at Jita yesterday and sold at Amarr today."""
+    add_trade_hub_item(index, type_id)
+    add_transaction(index * 100 + 7, type_id, 10, 100.0, days_ago=1,
+                    is_buy=True, location_id=JITA_STATION)
+    add_transaction(index * 100 + 8, type_id, 10, 200.0,
+                    is_buy=False, location_id=AMARR_STATION)
+
+
+def test_haul_tracker_queries_do_not_grow_with_items(character_client, trade_hubs, monkeypatch):
+    monkeypatch.setattr(market_service, "get_character_assets", lambda *a, **kw: {})
+    yesterday = timezone.localtime(timezone.now() - timedelta(days=1)).date()
+    params = {"date": yesterday.isoformat(), "from_location": "Jita",
+              "to_location": "Amarr"}
+    url = reverse("market_hauling_tracker")
+    for index, type_id in enumerate((34, 35)):
+        add_haul_item(index, type_id)
+
+    warm = character_client.get(url, params)  # warm the ticker cache
+    # A constant count means nothing if the page found no haul to render.
+    assert len(warm.context["rows"]) == 2
+    with_two_items = count_queries(character_client, url, params)
+
+    for index, type_id in enumerate((36, 37, 38, 39), start=2):
+        add_haul_item(index, type_id)
+    six = count_queries(character_client, url, params)
+
+    assert six == with_two_items
+
+
+def test_the_sell_desk_is_cheaper_than_the_full_desk(trade_hubs):
+    """The split earns its keep: no buy book, no buy history, no region names."""
+    hubs = list(TradeHub.objects.all())
+    by_name = {hub.name: hub for hub in hubs}
+    kwargs = dict(region_id=AMARR_REGION,
+                  other_region_id=by_name["Jita"].region_id,
+                  station_id=AMARR_STATION, trade_hubs=hubs,
+                  type_ids=[34, 35], own_orders=[], assets={},
+                  now=timezone.now())
+    with CaptureQueriesContext(connection) as full:
+        station_trading.build_desk(**kwargs)
+    with CaptureQueriesContext(connection) as sell:
+        station_trading.build_sell_desk(**kwargs)
+    assert len(sell.captured_queries) == len(full.captured_queries) - 6
 
 
 def test_transactions_queries_do_not_grow_with_rows(character_client, trade_hubs):

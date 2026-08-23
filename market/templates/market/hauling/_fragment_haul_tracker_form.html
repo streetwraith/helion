@@ -1,0 +1,19 @@
+<form action="{% url 'market_hauling_tracker' %}" method="GET">
+    <label for="date">Buy date</label>
+    <input type="date" id="date" name="date" value="{{ date }}" required>
+    <label for="from_location">From</label>
+    <select id="from_location" name="from_location">
+        <option value=""></option>
+        {% for trade_hub in trade_hubs %}
+        <option value="{{ trade_hub.name }}" {% if from_location == trade_hub.name %}selected{% endif %}>{{ trade_hub.name }}</option>
+        {% endfor %}
+    </select>
+    <label for="to_location">To</label>
+    <select id="to_location" name="to_location">
+        <option value=""></option>
+        {% for trade_hub in trade_hubs %}
+        <option value="{{ trade_hub.name }}" {% if to_location == trade_hub.name %}selected{% endif %}>{{ trade_hub.name }}</option>
+        {% endfor %}
+    </select>
+    <button type="submit">track</button>
+</form>
