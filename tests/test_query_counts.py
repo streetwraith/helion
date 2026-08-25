@@ -4,7 +4,7 @@ from datetime import timedelta
 
 import pytest
 from django.db import connection
-from django.test.utils import CaptureQueriesContext
+from django.test.utils import CaptureQueriesContext, override_settings
 from django.urls import reverse
 from django.utils import timezone
 
@@ -153,7 +153,10 @@ def test_ice_page_query_ceiling(character_client, trade_hubs, monkeypatch):
 
     character_client.get(url, ICE_PAGE_PARAMS)  # warm the ticker cache
     # 12 ice types x 5 hubs and 7 products x 4 hubs used to cost ~700 queries.
-    assert count_queries(character_client, url, ICE_PAGE_PARAMS) <= 25
+    # The ceiling counts the work of the page. SESSION_SAVE_EVERY_REQUEST adds
+    # one session write to every request, which is not page work.
+    with override_settings(SESSION_SAVE_EVERY_REQUEST=False):
+        assert count_queries(character_client, url, ICE_PAGE_PARAMS) <= 25
 
 
 def test_index_wallet_table_query_ceiling(auth_client, trade_hubs):

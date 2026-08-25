@@ -202,6 +202,9 @@ LOGGING = {
 }
 
 SESSION_ENGINE = 'django.contrib.sessions.backends.db'
+SESSION_COOKIE_AGE = 60 * 60 * 24 * 365
+# Each request rewrites the expiry, so a session in use never runs out.
+SESSION_SAVE_EVERY_REQUEST = True
 
 LOGIN_REDIRECT_URL = '/'
 LOGOUT_REDIRECT_URL = '/'
