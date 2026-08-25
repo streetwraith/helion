@@ -9,8 +9,9 @@ from aiopenapi3.errors import HTTPError
 from esi.errors import TokenError
 from esi.models import Token
 from redis.exceptions import RedisError
+from evesde import hulls
 from helion.character_sheet import SheetUnavailable, get_character_sheet
-from market.services import tracking
+from market.services import orders, tracking
 import logging
 
 logger = logging.getLogger(__name__)
@@ -95,6 +96,17 @@ def healthz(request):
 def index(request):
     context = {}
     return render(request, "index.html", context)
+
+def hull_reference(request):
+    """Every published hull, read from the sde schema on each request.
+
+    No character and no market data, so nothing here is per user. The sde schema
+    changes only when sdemanager imports, and the page is not cached: a render
+    costs one fixed set of queries.
+    """
+    return render(request, "hulls.html",
+                  hulls.get_hull_page(price_lookup=orders.get_jita_mean_asks))
+
 
 def characters(request, *args, **kwargs):
     if request.method == 'POST':

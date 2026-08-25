@@ -1,0 +1,97 @@
+{% extends "base.html" %}
+
+{% load static %}
+
+{% block title %}ships | Helion{% endblock %}
+
+{% block css %}
+<link rel="stylesheet" href="{% static 'css/hulls.css' %}">
+{% endblock %}
+
+{% block js %}
+<script src="{% static 'js/hull_filter.js' %}" defer></script>
+{% endblock %}
+
+{% block content %}
+<h1>Hull datasheets</h1>
+
+<nav id="hull-toc">
+    {% for size in sizes %}
+    <div class="toc-size">
+        <a class="toc-head" href="#{{ size.anchor }}">{{ size.name }}</a>
+        <span class="count">{{ size.count }}</span>
+        {% for tier in size.tiers %}
+        <span class="toc-tier">
+            {% if tier.name %}<a class="toc-tier-name" href="#{{ tier.anchor }}">{{ tier.name }}</a>{% endif %}
+            {% for hull_class in tier.classes %}{% if hull_class.name %}<a class="toc-class" href="#{{ hull_class.anchor }}">{{ hull_class.name }}</a>{% endif %}{% endfor %}
+        </span>
+        {% endfor %}
+    </div>
+    {% endfor %}
+</nav>
+
+<div id="hull-bar">
+    <input id="hull-filter" type="search" placeholder="filter hulls" autocomplete="off"
+           aria-label="Filter hulls by name or bonus">
+    <span id="hull-toggles">
+        {% for toggle in stat_toggles %}
+        <label><input type="checkbox" data-stat="{{ toggle.key }}" checked> {{ toggle.label }}</label>
+        {% endfor %}
+        <button type="button" id="hull-toggle-all">all</button>
+        <button type="button" id="hull-toggle-none">none</button>
+    </span>
+</div>
+
+{% for size in sizes %}
+<div class="hull-size" id="{{ size.anchor }}">
+    <h2>{{ size.name }} <span class="count">({{ size.count }})</span></h2>
+    {% for tier in size.tiers %}
+    <div class="hull-tier" id="{{ tier.anchor }}">
+        {% if tier.name %}<h3>{{ tier.name }} <span class="count">({{ tier.count }})</span></h3>{% endif %}
+        {% for hull_class in tier.classes %}
+        <div class="hull-class" id="{{ hull_class.anchor }}">
+            {% if hull_class.name %}<h4>{{ hull_class.name }} <span class="count">({{ hull_class.hulls|length }})</span></h4>{% endif %}
+            <div class="hull-grid">
+                {% for hull in hull_class.hulls %}
+                <div class="hull-card{% if hull.faction %} faction-{{ hull.faction }}{% endif %}" data-name="{{ hull.name|lower }}">
+                    <h5>{{ hull.name }}{% if hull.price %}<span class="hull-price">{{ hull.price }}</span>{% endif %}</h5>
+                    <p class="hull-fitting">{{ hull.slots }}{% for hardpoint in hull.hardpoints %} &middot; {{ hardpoint }}{% endfor %}{% if hull.drones %} &middot; {{ hull.drones }}{% endif %}</p>
+                    <div class="hull-resists">
+                        {% for layer in hull.resists %}
+                        <div class="layer">
+                            <span class="layer-name">{{ layer.name }}</span>
+                            <span class="layer-hp">{{ layer.hp }}</span>
+                            {% for chip in layer.chips %}<span class="chip chip-{{ chip.key }}" title="{{ layer.name }} {{ chip.label }}"><span class="chip-fill" style="width:{{ chip.width }}%"></span><span class="chip-value">{{ chip.percent }}%</span></span>{% endfor %}
+                        </div>
+                        {% endfor %}
+                    </div>
+                    <dl class="hull-stats">
+                        {% for stat in hull.stats %}
+                        <div class="stat" data-stat="{{ stat.key }}">
+                            <dt>{{ stat.label }}</dt>
+                            <dd>{{ stat.text }}{% if stat.unit %} <i>{{ stat.unit }}</i>{% endif %}</dd>
+                        </div>
+                        {% endfor %}
+                    </dl>
+                    {% if hull.traits %}
+                    <div class="hull-traits">
+                        {% for trait in hull.traits %}
+                        <p class="trait-name">{{ trait.name }}</p>
+                        <ul>
+                            {% for line in trait.lines %}
+                            <li>{% if line.value %}<span class="trait-value">{{ line.value }}</span> {% endif %}{{ line.text }}</li>
+                            {% endfor %}
+                        </ul>
+                        {% endfor %}
+                    </div>
+                    {% endif %}
+                </div>
+                {% endfor %}
+            </div>
+        </div>
+        {% endfor %}
+    </div>
+    {% endfor %}
+</div>
+{% endfor %}
+{% endblock %}

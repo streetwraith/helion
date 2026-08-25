@@ -1,0 +1,106 @@
+Frigates
+  Tech I
+	Combat: Executioner, Punisher, Tormentor, Condor, Merlin, Kestrel, Atron, Incursus, Tristan, Slasher, Breacher, Rifter, Damavik, Skybreaker
+	Exploration: Magnate, Heron, Imicus, Probe
+	EWAR: Crucifier, Griffin, Maulus, Vigil
+	Logistics: Inquisitor, Bantam, Navitas, Burst
+  Navy
+	Combat: Imperial Navy Slicer, Caldari Navy Hookbill, Federation Navy Comet, Republic Fleet Firetail
+	Exploration: Magnate Navy Issue, Heron Navy Issue, Imicus Navy Issue, Probe Fleet Issue
+	EWAR: Crucifier Navy Issue, Griffin Navy Issue, Maulus Navy Issue, Vigil Fleet Issue
+  Faction
+	Metamorphosis, Astero, Cruor, Daredevil, Dramiel, Garmur, Succubus, Worm
+  Tech II
+    Assault Frigates: Vengeance, Retribution, Harpy, Hawk, Enyo, Ishkur, Jaguar, Wolf, Nergal 
+    Covert Ops: Anathema, Buzzard, Helios, Cheetah, Pacifier
+	Electronic Attack Ships: Sentinel, Kitsune, Keres, Hyena
+	Interceptors (Fleet): Malediction, Crow, Ares, Stiletto
+	Interceptors (Combat): Crusader, Raptor, Taranis, Claw
+	Stealth Bombers: Purifier, Manticore, Nemesis, Hound
+	Logistics: Deacon, Kirin, Thalia, Scalpel
+Destroyers
+  Tech I
+	Coercer, Dragoon, Cormorant, Corax, Catalyst, Algos, Thrasher, Talwar, Kikimora
+  Navy
+	Coercer Navy Issue, Dragoon Navy Issue, Cormorant Navy Issue, Corax Navy Issue, Catalyst Navy Issue, Algos Navy Issue, Thrasher Fleet Issue, Talwar Fleet Issue
+  Faction
+	Sunesis, Mamba, Mekubal, Tholos
+  Tech II
+	Interdictors: Heretic, Flycatcher, Eris, Sabre
+	Command Destroyers: Pontifex, Stork, Magus, Bifrost, Draugur
+  Tech III
+	Tactical Destroyers: Confessor, Jackdaw, Hecate, Svipul
+Cruisers
+  Tech I
+	EWAR: Arbitrator, Blackbird, Celestis, Bellicose
+	Logistics: Augoror, Osprey, Exequror, Scythe, Rodiva
+	Attack: Omen, Caracal, Thorax, Stabber, Vedmak, Stormbringer
+	Combat: Maller, Moa, Vexor, Rupture
+  Navy
+	Augoror Navy Issue, Omen Navy Issue, Caracal Navy Issue, Osprey Navy Issue, Exequror Navy Issue, Vexor Navy Issue, Scythe Fleet Issue, Stabber Fleet Issue
+  Faction
+	Stratios, Ashimmu, Cynabal, Gila, Orthrus, Phantasm, Vigilant
+  Tech II
+	Recon Ships (Force): Pilgrim, Falcon, Arazu, Rapier, Enforcer
+	Recon Ships (Combat): Curse, Rook, Lachesis, Huginn
+	Heavy Assault Cruisers: Zealot, Sacrilege, Cerberus, Eagle, Ishtar, Deimos, Muninn, Vagabond, Ikitursa
+	Heavy Interdiction Cruisers: Devoter, Onyx, Phobos, Broadsword
+	Logistics: Guardian, Basilisk, Oneiros, Scimitar, Zarmazd
+	Flag Cruisers: Monitor
+  Tech III
+	Strategic Cruisers: Legion, Tengu, Proteus, Loki
+Battlecruisers
+  Tech I
+	Combat: Harbinger, Prophecy, Ferox, Drake, Brutix, Myrmidon, Cyclone, Hurricane, Drekavac
+	Attack: Oracle, Naga, Talos, Tornado
+  Navy
+	Harbinger Navy Issue, Prophecy Navy Issue, Drake Navy Issue, Ferox Navy Issue, Brutix Navy Issue, Myrmidon Navy Issue, Hurricane Fleet Issue, Cyclone Fleet Issue
+  Faction
+    Gnosis, Odysseus, Khizriel, Alligator, Cenotaph
+  Tech II
+	Command Ships (Attack): Absolution, Nighthawk, Astarte, Sleipnir
+	Command Ships (Fleet): Damnation, Vulture, Eos, Claymore
+Battleships
+  Tech I
+	Abaddon, Apocalypse, Armageddon, Raven, Rokh, Scorpion, Megathron, Hyperion, Dominix, Tempest, Typhoon, Maelstrom, Leshak, Thunderchild
+  Navy
+    Apocalypse Navy Issue, Armageddon Navy Issue, Raven Navy Issue, Scorpion Navy Issue, Dominix Navy Issue, Megathron Navy Issue, Tempest Fleet Issue, Typhoon Fleet Issue
+  Faction
+	Praxis, Nestor, Barghest, Bhaalgorn, Machariel, Nightmare, Rattlesnake, Vindicator
+  Tech II
+	Marauders: Paladin, Golem, Kronos, Vargur, Babaroga
+	Black Ops: Redeemer, Widow, Sin, Panther, Marshal
+Haulers
+  Tech I
+	Fast: Sigil, Badger, Nereus, Wreathe
+	Bulk: Bestower, Tayra, Iteron Mark V, Mammoth
+	Specialized: Epithal, Kryos, Miasmos, Hoarder, Squall, Noctis
+	Freighters: Providence, Charon, Obelisk, Fenrir, Bowhead, Avalanche
+  Tech II
+	Blockade Runner: Prorator, Crane, Viator, Prowler, Deluge
+	Deep Space Transport: Impel, Bustard, Occator, Mastodon, Torrent
+	Jump Freighters: Ark, Rhea, Anshar, Nomad
+Mining and Industrials
+  Tech I
+	Frigates: Venture
+	Destroyers: Pioneer, Perseverance
+	Barges: Procurer, Covetor, Retriever
+    Industrial Command Ships: Porpoise, Orca
+    Capital Industrial Ships: Rorqual
+  Navy
+	Frigates: Venture Consortium Issue
+	Destroyers: Pioneer Consortium Issue
+  Tech II
+	Expedition Frigates: Prospect, Endurance
+	Command Destroyers: Outrider
+	Exhumers: Skiff, Hulk, Mackinaw
+
+
+	
+Special
+  Frigates: Caedes, Cambion, Chremoas, Echelon, Freki, Geri, Gold Magnate, Hydra, Imp, Malice, Raiju, Shapash, Sidewinder, Silver Magnate, Utu, Virtuoso, Whiptail, Zephyr
+  Destroyers: Skua
+  Cruisers: Adrestia, Bestla, Etana, Guardian-Vexor, Mimir, Moracha, Opux Luxury Yacht, Rabisu, Vangel, Cybele, Fiend, Laelaps, Chameleon, Cobra, Victor, Tiamat, Stratios Emergency Responder, Moreau YC128 Campaign Bus, Roden YC128 Campaign Bus, Tenzin YC128 Campaign Bus, Victorieux Luxury Yacht
+  Battlecruisers: Anhinga
+  Battleships: Apocalypse Imperial Issue, Armageddon Imperial Issue, Megathron Federate Issue, Raven State Issue, Tempest Tribal Issue, Python
+  Haulers: Primae, Miasmos Amastris Edition, Miasmos Quafe Ultra Edition, Miasmos Quafe Ultramarine Edition

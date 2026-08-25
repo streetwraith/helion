@@ -235,6 +235,8 @@ def get_orders_in_hub_range(type_ids, is_buy_order=None):
 LARGE_SKILL_INJECTOR_TYPE_ID = 40520
 SKILL_EXTRACTOR_TYPE_ID = 40519
 JITA_STATION_ID = 60003760
+# How many of the cheapest asks an approximate price averages over.
+JITA_ASK_DEPTH = 5
 PRICE_TICKER_CACHE_SECONDS = 600  # caps the ticker queries per page render
 # The key names the shape, not the feature: a deploy that changes the entry
 # would otherwise read the old shape back until the entry expires.
@@ -381,6 +383,40 @@ def get_jita_best_ask(type_id):
         region_id=REGION_ID_FORGE, type_id=type_id,
         location_id=JITA_STATION_ID, is_buy_order=False
     ).aggregate(best=Min('price'))['best']
+
+def get_jita_mean_asks(type_ids, depth=JITA_ASK_DEPTH):
+    """The mean of the cheapest `depth` sell orders in Jita 4-4, per type id.
+
+    An approximate market price, for a page that shows hundreds of items at
+    once. The mean rather than the single cheapest ask, because one underpriced
+    order should not become the price of a hull; the depth is small enough that
+    a thin market still reads as its real asking price.
+
+    The region and station filter prunes to one partition and the index over
+    (region, location, is_buy_order, type_id, price) serves the whole query, so
+    the cost is a single index-only scan.
+    """
+    if not type_ids:
+        return {}
+    assert depth > 0
+    placeholders = ", ".join(["%s"] * len(type_ids))
+    query = f"""
+    SELECT type_id, AVG(price) AS mean_ask
+    FROM (
+        SELECT type_id, price,
+               ROW_NUMBER() OVER (PARTITION BY type_id ORDER BY price) AS rank
+        FROM market.orders
+        WHERE region_id = %s AND location_id = %s AND is_buy_order = FALSE
+          AND type_id IN ({placeholders})
+    ) ranked
+    WHERE rank <= %s
+    GROUP BY type_id
+    """
+    params = [REGION_ID_FORGE, JITA_STATION_ID, *type_ids, depth]
+    with connection.cursor() as cursor:
+        cursor.execute(query, params)
+        return {type_id: price for type_id, price in cursor.fetchall()}
+
 
 def get_plex_best_ask():
     return Order.objects.filter(

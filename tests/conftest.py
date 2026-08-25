@@ -39,7 +39,12 @@ CREATE TABLE IF NOT EXISTS sde.types (
     volume double precision,
     packaged_volume double precision,
     is_repackable boolean,
-    portion_size integer
+    portion_size integer,
+    published boolean,
+    tech_level integer,
+    faction_id bigint,
+    mass double precision,
+    capacity double precision
 );
 -- A record array flattened into a child table: the type id is the parent key.
 CREATE TABLE IF NOT EXISTS sde.type_dogma__dogma_attributes (
@@ -84,6 +89,55 @@ CREATE TABLE IF NOT EXISTS sde.map_solar_systems (
 CREATE TABLE IF NOT EXISTS sde.npc_station_names (
     station_id bigint PRIMARY KEY,
     name text NOT NULL
+);
+CREATE TABLE IF NOT EXISTS sde.dogma_attributes (
+    _key bigint PRIMARY KEY,
+    name text NOT NULL,
+    display_name_en text,
+    unit_id bigint
+);
+CREATE TABLE IF NOT EXISTS sde.dogma_units (
+    _key bigint PRIMARY KEY,
+    display_name_en text
+);
+-- The ship traits. Each is a record array of the typeBonus entity, flattened
+-- into its own child table and keyed by the ship type id.
+CREATE TABLE IF NOT EXISTS sde.type_bonus__role_bonuses (
+    _parent_key bigint NOT NULL,
+    _ordinal_1 integer NOT NULL,
+    bonus double precision,
+    bonus_text_en text NOT NULL,
+    importance integer,
+    unit_id bigint,
+    PRIMARY KEY (_parent_key, _ordinal_1)
+);
+CREATE TABLE IF NOT EXISTS sde.type_bonus__misc_bonuses (
+    _parent_key bigint NOT NULL,
+    _ordinal_1 integer NOT NULL,
+    bonus double precision,
+    bonus_text_en text NOT NULL,
+    importance integer,
+    unit_id bigint,
+    PRIMARY KEY (_parent_key, _ordinal_1)
+);
+-- The skill a bonus block belongs to. `_key` is the skill's own type id.
+CREATE TABLE IF NOT EXISTS sde.type_bonus__types (
+    _parent_key bigint NOT NULL,
+    _ordinal_1 integer NOT NULL,
+    _key bigint NOT NULL,
+    PRIMARY KEY (_parent_key, _ordinal_1)
+);
+-- One line of a skill's bonus block: a record array nested inside a record
+-- array, so it carries two ordinals.
+CREATE TABLE IF NOT EXISTS sde.type_bonus__types___value (
+    _parent_key bigint NOT NULL,
+    _ordinal_1 integer NOT NULL,
+    _ordinal_2 integer NOT NULL,
+    bonus double precision,
+    bonus_text_en text NOT NULL,
+    importance integer,
+    unit_id bigint,
+    PRIMARY KEY (_parent_key, _ordinal_1, _ordinal_2)
 );
 """
 

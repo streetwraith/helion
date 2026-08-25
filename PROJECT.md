@@ -1401,6 +1401,127 @@ The form always binds, filling any absent field from `DEFAULTS`, so a bare `/mar
 full table while a present-but-invalid parameter still errors. State lives entirely in the query
 string: the URL describes what you see and a bookmark saves your fleet.
 
+## The hull datasheets
+
+`/hulls/` (menu entry **ships**) lists every published ship hull with its base attributes, its
+resist profile and its trait bonuses. It is a reference page: no character data, no market data,
+nothing per user. The data assembly lives in `evesde/hulls.py`, beside the read models rather than
+in `market/`, because `sde` is the only schema it touches.
+
+**The page queries `sde` on each request and caches nothing.** The schema changes when the importer
+runs, which no signal here can observe, and a stale hull page is worse than a slow one. The cost is
+bounded instead: eleven reads whatever the hull count, assembled in Python, because a per-hull query
+over 400 hulls would be hundreds of round trips. A test pins that count against a growing hull list.
+A render of all 401 hulls costs about 0.3 s in the queries and about 1 s in total.
+
+### The grouping is the owner's, because the SDE has none
+
+The SDE has no hull size class and no ship role: its 48 ship groups mix the two, so `Assault
+Frigate` and `Frigate` sit at the same level and nothing says both are frigates. Worse, the group
+alone cannot say that a Rifter and a Firetail differ in tier while a Rifter and a Slasher do not.
+
+`HULL_TAXONOMY` in `evesde/hulls.py` is therefore hand-written, and it is the page's whole running
+order: **hull size, then tier, then class, then the hulls in the order the taxonomy lists them** -
+which is racial order, Amarr through Minmatar, then the rest. The `hulls.txt` at the repo root is
+the working copy it was built from; the constant is the source the app reads.
+
+Three consequences worth knowing:
+
+- **The taxonomy names every hull**, and a test asserts nothing is listed twice. A hull it does not
+  name still renders, under `LEFTOVER_SIZE`, so a new import never drops a ship silently.
+- **A tier is not CCP's meta group.** They agree on all but seven hulls (see below), and where they
+  differ the taxonomy wins, because it encodes how a pilot shops for a hull rather than how CCP
+  files it. The card carries no tech marker any more: the tier heading says it, and a marker reading
+  "Faction" under a "Tech II" heading only confused the two.
+- **Combat capitals are off the page entirely** (`EXCLUDED_GROUPS`), along with corvettes, capsules
+  and shuttles. The industrial capitals stay: the Orca and Porpoise, the freighters, the Rorqual.
+
+Two hulls sit in a tier CCP tags differently, and they show what the disagreement is about. CCP says
+`Faction` for the Perseverance, because `meta_group_id` conflates **who owns a hull** with **what
+tier it is**: anything a non-empire faction owns becomes `Faction`, so an ORE mining destroyer reads
+like a collectible. The taxonomy separates the two. The Metamorphosis goes the other way: CCP tags it
+Tech I while its four Society of Conscious Thought siblings (faction 500017: Gnosis, Praxis, Sunesis,
+Apotheosis) carry no meta group at all - an inconsistency inside CCP's own data - and the taxonomy
+files it with the faction frigates.
+
+Twenty-four hulls carry no meta group whatsoever, so for those the taxonomy is the only
+classification that exists. The SoCT line is the clearest case: the Gnosis, the Praxis and the
+Sunesis are untagged and priced at 6, 6 and 7 ISK, which is what a promotional hull looks like in
+this data.
+
+### The resist block
+
+`_resists` builds three rows — shield, armor, structure — each with its hit points and four chips,
+which is the compact form the in-game fitting window uses. Hit points live in that block rather than
+among the figures, because a layer's hit points and its resists are read together.
+
+- **A resist is 1 minus the resonance**, and it is exact. A resonance carries up to five decimals,
+  so 0.20625 reads 79.375 percent. Rounding to whole numbers looked like the data was quantised to
+  steps of five, which it is not.
+- **The structure row stays** even though all four values read 33 percent on every hull, so the
+  three layers read as one block.
+- A second, legacy attribute set (`hullEmDamageResonance` and its three siblings) exists on nine
+  hulls only and is ignored.
+- **Each value reads as a bar**: the fill runs from the left to the percentage, over a track in a
+  dimmed shade of the same hue, so the four damage types stay apart even at a low value. The number
+  sits on top and crosses the boundary between fill and track, so **both** surfaces carry the ink.
+  They follow the cell-colour rule of the tables — a light surface under dark ink in the light
+  theme, a dark surface under pale ink in the dark theme — and the measured contrast is 8.1:1 at
+  worst on a fill and 9.2:1 at worst on a track. The four hues come from the existing palette
+  (`.jita`, `.red`, `.orange`) rather than from a new one.
+
+### The figures are the reader's choice
+
+Every figure except the slot layout is toggleable, and the choice persists in `localStorage`. A card
+carries up to twenty figures, and no reader wants all of them at once; which twenty matter depends
+entirely on the question being asked.
+
+The name filter searches the hull name **and its bonus text**, so "projectile turret" finds the 55
+hulls that bonus one. It reads that text once at load, from the rendered card, rather than from a
+second copy in a data attribute: a card carries hundreds of characters of trait text, and 400 of
+them would be a quarter of the page again. The figures stay out of the haystack, so a term like
+"50" matches a bonus rather than every capacitor on the page.
+
+The toggles write **one stylesheet rule per hidden key**, not a class on every row: 400 cards carry
+thousands of rows, and touching each one per click is work the cascade does for free. Reads and
+writes of `localStorage` are wrapped, because a private window throws instead of returning nothing.
+
+Two figure rows are shaped for width rather than for symmetry: the sensor row takes the sensor type
+as its **label** (`Ladar 8`, not `Sensors 8 ladar`), and drone capacity and bandwidth are two rows.
+Both were long enough to overflow their box and collide with the next column.
+
+### The price is an approximation, on purpose
+
+Every hull outside the Special shelf carries a market price on its fitting line: the **mean of the
+five cheapest sell orders in Jita 4-4**, from `market.orders` through
+`market.services.orders.get_jita_mean_asks`. One query, one index-only scan over the station's
+partition, about 5 ms for all 350 hulls.
+
+Three choices behind that:
+
+- **The mean of five, not the single cheapest ask.** One underpriced order should not become the
+  price of a hull, and five is shallow enough that a thin market still reads as its real asking
+  price. Checked against the 30-day mean of the daily average per hull, the two agree within a few
+  percent (Charon 1675.6m against 1639.8m, Vargur 988.9m against 1016.5m).
+- **Not the history table.** The same figure from a 30-day window over `market.history` costs about
+  6 s against 5 ms, because that query cannot use a station index. Same answer, three orders of
+  magnitude more work.
+- **The lookup is injected, not imported.** `get_hull_page(price_lookup=...)` takes a callable, and
+  the view passes the market service in. `evesde` reads only the `sde` schema; a market price comes
+  from another schema and another app, so the dependency points inward from the view rather than
+  sideways between the two read layers.
+
+The Special shelf gets no price at all: a handful of those hulls ever traded, and a figure derived
+from the two orders that exist would mislead. One ordinary hull also shows none - the Rorqual, which
+has no sell order in Jita 4-4 at all. Absent means absent; the page prints nothing rather than
+falling back to a wider, less comparable scope.
+
+### What the page cannot fix
+
+A strategic cruiser reports no high, mid or low slots, because its subsystems grant them, and a
+tactical destroyer changes figures with its mode. Every figure is the bare hull: no skills, no
+modules and no rigs. The page compares hulls; it does not fit them.
+
 ## Dark mode
 
 The theme follows `prefers-color-scheme`. There is no toggle, so no state to store and no flash of

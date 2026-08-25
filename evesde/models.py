@@ -21,6 +21,15 @@ class Type(models.Model):
     # unpacked one worth marking. Null for types the state never applies to.
     is_repackable = models.BooleanField(null=True)
     portion_size = models.IntegerField(null=True)
+    published = models.BooleanField(null=True)
+    tech_level = models.IntegerField(null=True)
+    # The type's owner: an empire, a pirate faction or a special-edition issuer.
+    # Not its lineage - a Cynabal is faction Angel Cartel though its hull is
+    # Minmatar. The sde imports no factions entity, so an id has no name here.
+    faction_id = models.BigIntegerField(null=True)
+    mass = models.FloatField(null=True)
+    # The cargo hold. A ship's specialised holds are dogma attributes instead.
+    capacity = models.FloatField(null=True)
 
     class Meta:
         managed = False
@@ -143,3 +152,104 @@ class NpcStationName(models.Model):
 
     def __str__(self):
         return str(self.station_id) + " " + self.name
+
+
+class DogmaAttribute(models.Model):
+    """The definition of one dogma attribute: its name and the unit it reads in.
+
+    `name` is the internal name (`maxVelocity`), which is stable across builds
+    and is what code should match on. It carries no `_en` suffix, because it is
+    not localized text.
+    """
+    attribute_id = models.BigIntegerField(primary_key=True, db_column="_key")
+    name = models.CharField(max_length=256)
+    display_name = models.CharField(max_length=256, null=True, db_column="display_name_en")
+    unit_id = models.BigIntegerField(null=True)
+
+    class Meta:
+        managed = False
+        db_table = 'sde"."dogma_attributes'
+
+    def __str__(self):
+        return str(self.attribute_id) + " " + self.name
+
+
+class DogmaUnit(models.Model):
+    """The symbol an attribute or a trait bonus reads in: %, x, +, m, AU/s."""
+    unit_id = models.BigIntegerField(primary_key=True, db_column="_key")
+    display_name = models.CharField(max_length=256, null=True, db_column="display_name_en")
+
+    class Meta:
+        managed = False
+        db_table = 'sde"."dogma_units'
+
+    def __str__(self):
+        return str(self.unit_id) + " " + (self.display_name or "")
+
+
+# The three tables below are the ship traits: the bonus text the in-game ship
+# info window lists. sdemanager flattens each record array of the typeBonus
+# entity into its own child table, keyed by the ship type id and the position
+# in the array.
+
+
+class TypeBonusRoleBonus(models.Model):
+    """A role bonus: it applies whoever flies the hull, with no skill behind it."""
+    pk = models.CompositePrimaryKey("type_id", "ordinal")
+    type_id = models.BigIntegerField(db_column="_parent_key")
+    ordinal = models.IntegerField(db_column="_ordinal_1")
+    bonus = models.FloatField(null=True)
+    bonus_text = models.TextField(db_column="bonus_text_en")
+    importance = models.IntegerField(null=True)
+    unit_id = models.BigIntegerField(null=True)
+
+    class Meta:
+        managed = False
+        db_table = 'sde"."type_bonus__role_bonuses'
+
+
+class TypeBonusMiscBonus(models.Model):
+    """A bonus CCP files under neither a skill nor the hull's role. Eight ships have one."""
+    pk = models.CompositePrimaryKey("type_id", "ordinal")
+    type_id = models.BigIntegerField(db_column="_parent_key")
+    ordinal = models.IntegerField(db_column="_ordinal_1")
+    bonus = models.FloatField(null=True)
+    bonus_text = models.TextField(db_column="bonus_text_en")
+    importance = models.IntegerField(null=True)
+    unit_id = models.BigIntegerField(null=True)
+
+    class Meta:
+        managed = False
+        db_table = 'sde"."type_bonus__misc_bonuses'
+
+
+class TypeBonusSkill(models.Model):
+    """Names the skill one block of per-skill hull bonuses belongs to.
+
+    `skill_type_id` is the skill's own type id. It carries no foreign key, and
+    the upstream data can dangle, so resolve the name with an outer join.
+    """
+    pk = models.CompositePrimaryKey("type_id", "ordinal")
+    type_id = models.BigIntegerField(db_column="_parent_key")
+    ordinal = models.IntegerField(db_column="_ordinal_1")
+    skill_type_id = models.BigIntegerField(db_column="_key")
+
+    class Meta:
+        managed = False
+        db_table = 'sde"."type_bonus__types'
+
+
+class TypeBonusSkillBonus(models.Model):
+    """One line of a per-skill bonus block. `ordinal` points back at the skill."""
+    pk = models.CompositePrimaryKey("type_id", "ordinal", "sub_ordinal")
+    type_id = models.BigIntegerField(db_column="_parent_key")
+    ordinal = models.IntegerField(db_column="_ordinal_1")
+    sub_ordinal = models.IntegerField(db_column="_ordinal_2")
+    bonus = models.FloatField(null=True)
+    bonus_text = models.TextField(db_column="bonus_text_en")
+    importance = models.IntegerField(null=True)
+    unit_id = models.BigIntegerField(null=True)
+
+    class Meta:
+        managed = False
+        db_table = 'sde"."type_bonus__types___value'

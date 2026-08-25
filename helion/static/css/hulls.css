@@ -1,0 +1,305 @@
+/* The hull datasheets page. The one new component is the resist chip; the rest
+   follows helion.css: browser default type, 1px rules, 80% data text. */
+
+/* --- table of contents --- */
+#hull-toc {
+    font-size: 80%;
+    margin: 0.4em 0 0.6em;
+}
+
+.toc-size {
+    margin-bottom: 1px;
+}
+
+.toc-head {
+    display: inline-block;
+    min-width: 11em;
+    font-weight: bold;
+}
+
+.toc-tier {
+    margin-left: 0.6em;
+    white-space: nowrap;
+}
+
+.toc-tier-name {
+    font-style: italic;
+}
+
+.toc-class {
+    margin-left: 0.4em;
+}
+
+/* --- the control bar --- */
+#hull-bar {
+    position: sticky;
+    top: 0;
+    z-index: 1;
+    background: #fff;
+    border-top: 1px solid #ccc;
+    border-bottom: 1px solid #ccc;
+    padding: 3px 0;
+    font-size: 80%;
+}
+
+#hull-bar input[type="search"] {
+    font-size: inherit;
+}
+
+#hull-toggles label {
+    margin-left: 0.7em;
+    white-space: nowrap;
+}
+
+#hull-toggles button {
+    font-size: inherit;
+    margin-left: 0.7em;
+}
+
+/* --- headings --- */
+.hull-size h2 {
+    font-size: 1.1rem;
+    border-bottom: 1px solid #ccc;
+    margin-top: 1.2em;
+}
+
+.hull-tier h3 {
+    font-size: 0.95rem;
+    margin-top: 0.8em;
+}
+
+.hull-class h4 {
+    font-size: 0.85rem;
+    font-weight: normal;
+    color: #666;
+    margin-top: 0.5em;
+}
+
+.count {
+    color: #666;
+    font-weight: normal;
+    font-size: 80%;
+}
+
+/* --- cards --- */
+.hull-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(23em, 1fr));
+    gap: 4px;
+    align-items: start;
+    margin-top: 0.3em;
+}
+
+.hull-card {
+    border: 1px solid #ccc;
+    /* The hull's race, on the edge where it does not compete with the chips. */
+    border-left: 4px solid #ccc;
+    padding: 3px 6px;
+}
+
+.faction-amarr { border-left-color: #b8912a; }
+.faction-caldari { border-left-color: #3d6fa8; }
+.faction-gallente { border-left-color: #3f8f5f; }
+.faction-minmatar { border-left-color: #a5622c; }
+
+/* The hull name, with the price at the far end of the same line. */
+.hull-card h5 {
+    font-size: 0.95rem;
+    display: flex;
+    align-items: baseline;
+}
+
+.hull-fitting {
+    font-size: 80%;
+    color: #666;
+}
+
+.hull-price {
+    margin-left: auto;
+    padding-left: 0.5em;
+    font-size: 70%;
+    font-weight: normal;
+    white-space: nowrap;
+}
+
+/* --- the resist block: one row per layer, hit points then four chips --- */
+.hull-resists {
+    font-size: 80%;
+    margin: 2px 0;
+}
+
+.hull-resists .layer {
+    display: grid;
+    /* Wide enough for the longest of each: the word Structure, a six-figure
+       hit point count, and an exact percentage like 79.375%. */
+    grid-template-columns: 5em 4.6em repeat(4, 1fr);
+    gap: 2px;
+    align-items: center;
+}
+
+.hull-resists .layer-name {
+    color: #666;
+    overflow: hidden;
+    white-space: nowrap;
+}
+
+.hull-resists .layer-hp {
+    text-align: right;
+    padding-right: 0.4em;
+}
+
+/* A resist reads as a bar: the fill runs from the left to the percentage, over
+   a track in a dimmed shade of the same hue, so the four damage types stay
+   apart even at a low value. Both surfaces follow the cell-colour rule of
+   helion.css - a light surface under dark ink here, a dark surface under pale
+   ink in the dark theme - and both carry that ink well past 4.5:1, because the
+   number crosses the boundary between them. */
+.hull-resists .chip {
+    position: relative;
+    /* Stretch to the row height, so a smaller number does not shrink the bar. */
+    align-self: stretch;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: #000;
+    padding: 0 1px;
+    overflow: hidden;
+}
+
+.hull-resists .chip-fill {
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    left: 0;
+}
+
+/* Smaller than the surrounding figures: the number sits over the bar, and the
+   bar has to stay readable under it. */
+.hull-resists .chip-value {
+    position: relative;
+    font-size: 80%;
+    line-height: 1;
+}
+
+.chip-em { background: #dceefc; }
+.chip-th { background: #fadbdb; }
+.chip-ki { background: #e8e8e8; }
+.chip-ex { background: #ffe6bf; }
+
+.chip-em .chip-fill { background: #87cefa; }
+.chip-th .chip-fill { background: #f08080; }
+.chip-ki .chip-fill { background: #c9c9c9; }
+.chip-ex .chip-fill { background: #ffa500; }
+
+/* --- the toggleable figures --- */
+.hull-stats {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(9.5em, 1fr));
+    column-gap: 1em;
+    font-size: 80%;
+    padding-top: 2px;
+}
+
+/* No rule above this block: the coloured chips already separate it, and a
+   border would leave a stray line behind when every figure is switched off. */
+
+.hull-stats .stat {
+    display: flex;
+    justify-content: space-between;
+    gap: 0.5em;
+    min-width: 0;
+}
+
+.hull-stats dt {
+    color: #666;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.hull-stats dd {
+    white-space: nowrap;
+}
+
+.hull-stats dd i {
+    font-style: normal;
+    color: #666;
+}
+
+/* --- traits --- */
+.hull-traits {
+    border-top: 1px solid #ccc;
+    padding-top: 2px;
+    font-size: 80%;
+}
+
+.hull-traits .trait-name {
+    font-size: inherit;
+    color: #666;
+}
+
+.hull-traits ul {
+    list-style-type: none;
+    padding-left: 0.8em;
+}
+
+.hull-traits li {
+    text-indent: -0.8em;
+    padding-left: 0.8em;
+}
+
+.hull-traits .trait-value {
+    white-space: nowrap;
+}
+
+.hull-hidden {
+    display: none;
+}
+
+@media (prefers-color-scheme: dark) {
+    #hull-bar {
+        background: #121516;
+        border-color: #333d42;
+    }
+
+    .count,
+    .hull-class h4,
+    .hull-fitting,
+    .hull-resists .layer-name,
+    .hull-stats dt,
+    .hull-stats dd i,
+    .hull-traits .trait-name {
+        color: #9a9793;
+    }
+
+    .hull-size h2,
+    .hull-card,
+    .hull-traits {
+        border-color: #333d42;
+    }
+
+    .hull-card {
+        border-left-color: #333d42;
+    }
+
+    /* Each chip keeps its hue and inverts its lightness, so a colour means the
+       same thing in both themes. The ink flips with the surface. */
+    .hull-resists .chip {
+        color: #e4e2df;
+    }
+
+    .chip-em { background: #0d2735; }
+    .chip-th { background: #3a1010; }
+    .chip-ki { background: #26292b; }
+    .chip-ex { background: #4a3309; }
+
+    .chip-em .chip-fill { background: #134767; }
+    .chip-th .chip-fill { background: #691b1b; }
+    .chip-ki .chip-fill { background: #41474a; }
+    .chip-ex .chip-fill { background: #865d13; }
+
+    .faction-amarr { border-left-color: #8a6d1f; }
+    .faction-caldari { border-left-color: #2f5580; }
+    .faction-gallente { border-left-color: #2f6b47; }
+    .faction-minmatar { border-left-color: #7d4a21; }
+}
