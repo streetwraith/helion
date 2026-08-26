@@ -1118,6 +1118,17 @@ The column label carries the number, so the constant and the header must change 
 count reads 0 on every row whenever the market snapshot is older than the window, which the restored
 prod dump usually is.
 
+### The hv columns
+
+`hv` counts the units **you** traded, per side, over the whole wallet history the app holds. It is
+not market volume: the two `v` columns of the history block carry that. Both sides count the hub
+station only, so a sell `hv` and a buy `hv` describe the same desk.
+
+The buy history is read twice for that reason. `my_profit` pairs the sell history with a buy history
+over **every** location, because stock bought elsewhere and sold here is still profit; `hv` needs the
+hub-local count. The two answers differ whenever you buy in one hub and sell in another, so they
+cannot share one read (`station_trading._prefetch`).
+
 ### The desk is one character plus its corporations
 
 The my-columns - `v`, `p`, `u`, `stock`, ISK in escrow and ISK in sell orders - take the session

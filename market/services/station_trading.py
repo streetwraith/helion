@@ -40,6 +40,7 @@ class _Books:
     other_highest_buys: dict | None
     sell_histories: dict
     buy_histories: dict | None
+    hub_buy_histories: dict | None
     undercuts_by_type: dict
     region_levels: dict
     other_levels: dict
@@ -54,8 +55,9 @@ def build_desk(*, region_id, other_region_id, station_id, trade_hubs, type_ids,
                own_orders, assets, now):
     """One entry per type id, and the two ISK totals the page footer shows.
 
-    `station_id` is the desk's own hub station: the sell history is local to it,
-    where the buy history is not.
+    `station_id` is the desk's own hub station. The sell history and the hv buy
+    history are local to it; the buy history behind my_profit counts every
+    location.
 
     Returns (item_data, isk_in_escrow, isk_in_sell_orders).
     """
@@ -126,6 +128,11 @@ def _prefetch(region_id, other_region_id, station_id, trade_hubs, type_ids,
             type_ids, location_id=station_id, is_buy=False),
         buy_histories=(wallet.get_trade_history_bulk(type_ids, is_buy=True)
                        if with_buy_side else None),
+        # The hv column counts what this hub bought, while my_profit keeps the
+        # all-location basis above, so the two sides cannot share one read.
+        hub_buy_histories=(wallet.get_trade_history_bulk(
+            type_ids, location_id=station_id, is_buy=True)
+            if with_buy_side else None),
         undercuts_by_type=undercuts_by_type,
         region_levels=history.get_history_levels_bulk(region_id, type_ids),
         other_levels=history.get_history_levels_bulk(other_region_id, type_ids),
@@ -213,6 +220,7 @@ def _buy_cells(type_id, books, now):
         'my_buy_price_undercut_time_avg': undercut_avg,
         'my_buy_volume': sum(order.volume_remain for order in my_buy_orders),
         'my_buy_history': books.buy_histories[type_id],
+        'my_buy_history_hub': books.hub_buy_histories[type_id],
         'station_highest_buy_order': books.station_highest_buys.get(type_id),
         'recent_buy_orders_issued': books.recent_counts.get((type_id, True), 0),
     }

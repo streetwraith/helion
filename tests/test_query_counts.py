@@ -107,7 +107,11 @@ def test_haul_tracker_queries_do_not_grow_with_items(character_client, trade_hub
 
 
 def test_the_sell_desk_is_cheaper_than_the_full_desk(trade_hubs):
-    """The split earns its keep: no buy book, no buy history, no region names."""
+    """The split earns its keep: no buy book, no buy history, no region names.
+
+    The full desk reads the buy history twice: once over every location for the
+    profit column, once at the hub station for the hv column.
+    """
     hubs = list(TradeHub.objects.all())
     by_name = {hub.name: hub for hub in hubs}
     kwargs = dict(region_id=AMARR_REGION,
@@ -119,7 +123,7 @@ def test_the_sell_desk_is_cheaper_than_the_full_desk(trade_hubs):
         station_trading.build_desk(**kwargs)
     with CaptureQueriesContext(connection) as sell:
         station_trading.build_sell_desk(**kwargs)
-    assert len(sell.captured_queries) == len(full.captured_queries) - 6
+    assert len(sell.captured_queries) == len(full.captured_queries) - 8
 
 
 def test_transactions_queries_do_not_grow_with_rows(character_client, trade_hubs):

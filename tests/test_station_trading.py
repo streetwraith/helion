@@ -174,6 +174,15 @@ class TestTradeHubMetrics:
         assert region_data["my_sell_history"] == {"volume": 5, "avg_price": 150.0, "last_price": 150.0}
         assert region_data["my_buy_history"]["volume"] == 10
 
+    def test_hv_counts_only_what_this_hub_traded(self, region_data):
+        # The fixture bought its 10 units in Jita, so the Amarr desk bought
+        # nothing. my_profit keeps the all-location buy by decision, which is
+        # why the two numbers differ.
+        assert region_data["my_buy_history_hub"]["volume"] == 0
+        assert region_data["my_buy_history"]["volume"] == 10
+        assert region_data["my_sell_history"]["volume"] == 5
+        assert region_data["my_profit"] == pytest.approx(250.0)
+
     def test_recent_order_counts_span_48_hours_and_exclude_own(self, region_data):
         # Own orders never count, whatever their age.
         assert region_data["recent_sell_orders_issued"] == 2  # competitors, 3h and 47h
@@ -268,13 +277,16 @@ class TestTradeHubTableMarkup:
             reverse("market_trade_hub", kwargs={"region_id": AMARR_REGION}))
         assert 'data-hvol-other="1.00"' in response.content.decode()
 
+    def test_history_volume_column_is_on_the_page(self, trade_hub_response):
+        assert "<th>hv</th>" in trade_hub_response.content.decode()
+
     def test_every_row_declares_the_same_column_count(self, trade_hub_response):
         parser = _RowWidths()
         parser.feed(trade_hub_response.content.decode())
         # The column toggles shrink a group cell to its visible columns. A group
         # row that declares a width the data rows do not have would put the
         # header out of step with the table.
-        assert set(parser.widths) == {32}
+        assert set(parser.widths) == {34}
 
 
 def add_history_days(region_id, type_id, highs, volume=1):
