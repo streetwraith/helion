@@ -123,3 +123,15 @@ def search_market_type_names(query, limit=MAX_SEARCH_RESULTS):
         .order_by("prefix_rank", "name")
         .values("type_id", "name")[:limit]
     )
+
+
+def get_market_type_name(name):
+    """The stored spelling of a tradeable type, or None when nothing matches.
+
+    The match ignores case, because a shopping list keeps the name the user
+    typed. `iexact` compiles to an ILIKE without a wildcard, so this is a
+    lookup, not the scan that search_market_type_names pays for.
+    """
+    return Type.objects.filter(
+        market_group_id__isnull=False, name__iexact=name
+    ).values_list("name", flat=True).first()

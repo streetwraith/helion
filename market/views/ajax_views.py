@@ -1,10 +1,10 @@
-from market.services import alerts, market_service, tracking
+from market.services import alerts, market_service, shopping, tracking
 from evesde import services as sde_service
 from django.shortcuts import get_object_or_404
 from django.template.loader import render_to_string
 from django.http import JsonResponse
 from helion.decorators import require_character
-from market.models import TradeHub
+from market.models import ShoppingList, TradeHub
 from market.templatetags.item_tags import item_name
 from helion.providers import esi
 from esi.exceptions import ESIBucketLimitException, ESIErrorLimitException
@@ -150,6 +150,36 @@ def trade_item_add_or_del(request):
             trade_item_name = market_service.trade_item_del(type_id)
             return JsonResponse({'html': _item_name_html(type_id, trade_item_name, False)}, safe=False)
     return JsonResponse({'error': 'bad request'}, status=400)
+
+def shopping_list_item(request):
+    """One add, remove or quantity change on a saved list.
+
+    The answer is the whole re-priced table, because a change moves the region
+    totals and the cheapest-price marks of the list, not one row.
+    """
+    if request.headers.get('x-requested-with') != 'XMLHttpRequest':
+        return JsonResponse({'error': 'bad request'}, status=400)
+
+    saved = get_object_or_404(ShoppingList, id=request.POST.get('list_id'))
+    operation = request.POST.get('operation')
+    try:
+        if operation == 'add':
+            shopping.add_item(saved, request.POST.get('name', ''),
+                              request.POST.get('quantity'))
+        elif operation == 'del':
+            shopping.remove_item(saved, request.POST.get('item_id'))
+        elif operation == 'qty':
+            shopping.set_quantity(saved, request.POST.get('item_id'),
+                                  request.POST.get('quantity'))
+        else:
+            return JsonResponse({'error': f'unknown operation {operation}'}, status=400)
+    except shopping.ShoppingListError as error:
+        return JsonResponse({'error': str(error)}, status=400)
+
+    context = shopping.price_context(shopping.stored_items(saved))
+    return JsonResponse({'html': render_to_string(
+        'market/shopping/_fragment_shopping_table.html',
+        {'shopping_list': saved, **context})})
 
 def type_search(request):
     """Item name matches for the search box of the history chart."""

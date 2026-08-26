@@ -1,0 +1,77 @@
+{% extends "market_base.html" %}
+
+{% load static %}
+
+{% block title %}shopping | Helion{% endblock %}
+
+{% block js %}
+<script src="{% static 'market/js/type_search.js' %}"></script>
+<script src="{% static 'market/js/shopping_list.js' %}"></script>
+{% endblock %}
+
+{% block content %}
+<h1>Shopping list</h1>
+
+{% if error %}<p class="alert-errors">{{ error }}</p>{% endif %}
+
+<div id="saved-lists">
+  <select id="saved-list-select">
+    <option value="">saved lists</option>
+    {% for saved in saved_lists %}
+      <option value="{% url 'shopping_list_detail' saved.id %}"
+              {% if saved.id == shopping_list.id %}selected{% endif %}>{{ saved.name }} - {{ saved.created_at|date:"Y-m-d" }}</option>
+    {% endfor %}
+  </select>
+  {% if shopping_list %}
+    <form method="POST" action="{% url 'shopping_list_delete' shopping_list.id %}"
+          id="delete-list-form" data-list-name="{{ shopping_list.name }}">
+      {% csrf_token %}
+      <button type="submit">delete this list</button>
+    </form>
+  {% endif %}
+</div>
+
+{% comment %}
+One textarea serves both buttons, so the name is always saved with the text on
+screen. With a list open the form replaces that list; the save button is gone,
+because a saved list is edited item by item below.
+{% endcomment %}
+<form id="paste-form" method="POST"
+      action="{% if shopping_list %}{% url 'shopping_list_detail' shopping_list.id %}{% else %}{% url 'shopping_list' %}{% endif %}"
+      {% if shopping_list %}data-list-name="{{ shopping_list.name }}"{% endif %}>
+  {% csrf_token %}
+  <textarea name="items" rows="10" cols="50">{{ items }}</textarea>
+  <br>
+  <button type="submit">{% if shopping_list %}replace this list{% else %}submit{% endif %}</button>
+  {% if not shopping_list %}
+  <input type="text" name="name" id="list-name" placeholder="list name" maxlength="128">
+  <button type="submit" formaction="{% url 'shopping_list_save' %}">save</button>
+  {% endif %}
+</form>
+
+{% if shopping_list %}
+<form id="add-item-form">
+  <label for="type_search">add item</label>
+  {% comment %}
+  data-submit-on-pick keeps the shared search box from submitting: this form
+  posts through ajax and still needs the quantity.
+  {% endcomment %}
+  <span id="type-search-box" data-submit-on-pick="false">
+    <input type="text" id="type_search" autocomplete="off" placeholder="item name">
+    <ul id="type-search-results"></ul>
+  </span>
+  <input type="hidden" id="type_id">
+  <input type="number" id="add-quantity" value="1" min="1" step="1">
+  <button type="submit">add</button>
+</form>
+{% endif %}
+
+<p id="shopping-error" class="alert-errors" hidden></p>
+
+<br>
+<div id="shopping-table" data-endpoint="{% url 'shopping_list_item' %}"
+     data-list-id="{{ shopping_list.id|default_if_none:'' }}">
+  {% include "market/shopping/_fragment_shopping_table.html" %}
+</div>
+
+{% endblock %}

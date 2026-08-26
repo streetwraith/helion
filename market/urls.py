@@ -7,6 +7,10 @@ from .views import (
     trade_item_add_or_del,
     index,
     shopping_list,
+    shopping_list_detail,
+    shopping_list_save,
+    shopping_list_delete,
+    shopping_list_item,
     market_browse,
     market_contracts,
     market_hauling_index,
@@ -34,6 +38,9 @@ urlpatterns = [
     # base
     path("", index, name="market_index"),
     path("shopping_list", shopping_list, name="shopping_list"),
+    path("shopping_list/save", shopping_list_save, name="shopping_list_save"),
+    path("shopping_list/<int:list_id>", shopping_list_detail, name="shopping_list_detail"),
+    path("shopping_list/<int:list_id>/delete", shopping_list_delete, name="shopping_list_delete"),
 
     # market browser
     path("browse", market_browse, name="market_browse"),
@@ -79,6 +86,7 @@ urlpatterns = [
     path("ajax/trade_item_add_or_del", trade_item_add_or_del, name="trade_item_add_or_del"),
     path("ajax/transaction_history", transaction_history, name="transaction_history"),
     path("ajax/type_search", type_search, name="type_search"),
+    path("ajax/shopping_list_item", shopping_list_item, name="shopping_list_item"),
     path("ajax/transactions_since", transactions_since, name="transactions_since"),
     path("ajax/mistakes_since/<int:region_id>", mistakes_since, name="mistakes_since"),
     path("ajax/undercuts_since/<int:region_id>", undercuts_since, name="undercuts_since"),

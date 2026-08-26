@@ -1,8 +1,10 @@
-from .ajax_views import transaction_history, market_open_in_game, trade_item_add_or_del, type_search, transactions_since, mistakes_since, undercuts_since, alert_bar
+from .ajax_views import transaction_history, market_open_in_game, trade_item_add_or_del, type_search, transactions_since, mistakes_since, undercuts_since, alert_bar, shopping_list_item
 from .alert_views import market_alerts, market_alert_delete
 from .asset_views import market_assets
-from .base_views import index, shopping_list
+from .base_views import index
 from .browser_views import market_browse
+from .shopping_views import (shopping_list, shopping_list_detail,
+                             shopping_list_save, shopping_list_delete)
 from .contract_views import market_contracts
 from .history_views import market_history
 from .hauling_views import market_hauling_index, market_hauling_sell_to_buy, market_hauling_sell_to_sell, market_hauling_tracker
@@ -25,6 +27,10 @@ __all__ = [
     'index',
     'market_assets',
     'shopping_list',
+    'shopping_list_detail',
+    'shopping_list_save',
+    'shopping_list_delete',
+    'shopping_list_item',
     'market_browse',
     'market_contracts',
     'market_history',

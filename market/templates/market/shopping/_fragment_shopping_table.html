@@ -1,0 +1,63 @@
+{% load custom_filters item_tags %}
+
+{% if rows %}
+<table>
+    <thead>
+        <tr>
+            <th>Item Name</th>
+            <th>Qty</th>
+            {% for name in regions.values %}
+                <th>{{ name }}</th>
+            {% endfor %}
+            <th>j_m</th>
+            <th>j_r</th>
+            <th>a_m</th>
+            <th>a_r</th>
+            {% if shopping_list %}<th></th>{% endif %}
+        </tr>
+    </thead>
+    <tbody>
+        {% for row in rows %}
+          <tr {% if row.type_id %}data-type-id="{{ row.type_id }}"{% endif %}>
+              <td class="item-name">
+                {% if row.type_id %}{% item_name row.type_id row.name %}{% else %}{{ row.name }}{% endif %}
+              </td>
+              <td>
+                {% if row.item_id %}
+                  <input type="number" class="item-quantity" data-item-id="{{ row.item_id }}"
+                         value="{{ row.quantity }}" min="1" step="1">
+                {% else %}{{ row.quantity }}{% endif %}
+              </td>
+              {% for region_id in regions %}
+                  {% with price=row.prices|get_by_key:region_id %}
+                  <td {% if price and row.min_price and price == row.min_price %} class="green" {% endif %}>{% if price %}{{ price|isk_value }}{% else %}-{% endif %}</td>
+                  {% endwith %}
+              {% endfor %}
+              <td>{{ row.j_m|isk_value_blank }}</td>
+              <td>{{ row.j_r|floatformat:2 }}</td>
+              <td>{{ row.a_m|isk_value_blank }}</td>
+              <td>{{ row.a_r|floatformat:2 }}</td>
+              {% if shopping_list %}
+              <td><button type="button" class="item-remove" data-item-id="{{ row.item_id }}">x</button></td>
+              {% endif %}
+          </tr>
+        {% endfor %}
+    </tbody>
+    <tfoot>
+      <tr>
+          <td><strong>Total</strong></td>
+          <td></td>
+          {% for region_id in regions %}
+            {% with total=region_totals|get_by_key:region_id %}
+            <td {% if total is not None and total == min_region_total %} class="green" {% endif %}><strong>{{ total|isk_value }}</strong></td>
+            {% endwith %}
+          {% endfor %}
+          {% comment %}A median and a ratio do not add up, so the four columns
+          hold no total.{% endcomment %}
+          <td colspan="{% if shopping_list %}5{% else %}4{% endif %}"></td>
+      </tr>
+  </tfoot>
+</table>
+{% elif shopping_list %}
+<p>The list is empty. Add an item, or paste a new list over it.</p>
+{% endif %}

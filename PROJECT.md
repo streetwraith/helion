@@ -28,6 +28,7 @@ names.py            name resolution for the ids a contract or an asset carries
 assets.py           asset reads from the CharacterAsset overlay
 contracts.py        contract reads, and the active/deadline rules
 orders.py           order-book queries: undercuts, best asks, shopping, ticker
+shopping.py         the shopping list: pricing a paste, and the saved lists
 history.py          market-history queries and the statistics over them
 wallet.py           own-transaction queries and the profit statistics
 balances.py         the cached wallet balances the header sums
@@ -1199,6 +1200,31 @@ filters or the toggles:
 3. Untick one `o48` column and confirm the `o48` box empties and greys out.
 4. Click a label and confirm it still sorts, and that clicking a checkbox does not sort.
 5. Scroll down and confirm the group row and the labels pin, with no gap where the checkbox row was.
+
+## The shopping list
+
+The page prices a pasted list at the five trade hubs and keeps named lists.
+
+**A saved list stores names, not type ids.** The price query matches by `lower(name_en)` and a few
+names carry two type ids (SKINs, crates), where the cheaper one wins per region. A stored type id
+would pin one of them, and the same text would then price differently saved and pasted. The
+consequence is deliberate: for such a name the `j_m` and `a_m` medians read the type id the row
+carries, which can be the other one.
+
+**One textarea, two buttons.** The textarea is the bulk editor: with no list open it prices a paste
+or saves it under a name; with a list open it replaces every item of that list. Item-by-item work
+happens below it, through one ajax endpoint that answers with the whole re-priced table. A change of
+one item moves the region totals and the cheapest-price marks of every row, so a partial answer
+would let the two disagree.
+
+**The add box only accepts a market item.** It sits behind the shared item search, and the server
+checks the name against `sde.types` with a market group before it stores anything. A paste stays
+free to carry a name that matches nothing; such a row keeps its place and prices blank.
+
+**`j_m`, `j_r`, `a_m` and `a_r` mean what the trade hub's `m` and `r` mean.** `m` is the 90-day
+median daily high of the region, `r` is the hub ask over it. The ask is the same number the Jita and
+Amarr price columns show, because `orders_hub` marks a sell order in range only at the hub station
+itself. `m` stays empty under 30 priced days (`MEDIAN_MIN_DAYS`), and `r` with it.
 
 ## The item name component
 

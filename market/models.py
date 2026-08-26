@@ -1,4 +1,5 @@
 from django.db import models
+from django.db.models.functions import Lower
 
 class MarketTransaction(models.Model):
     transaction_id = models.BigIntegerField(primary_key=True)
@@ -276,3 +277,43 @@ class PriceAlert(models.Model):
     def __str__(self):
         scope = str(self.region_id) if self.region_id else 'any region'
         return f'{self.type_id} {self.side} {self.operator} {self.threshold} in {scope}'
+
+class ShoppingList(models.Model):
+    """A named shopping list, stored as items rather than as the pasted text.
+
+    An item carries a name, not a type id, because the price query matches by
+    name and a few names carry two type ids. A saved list therefore prices
+    exactly like the same text pasted into the form.
+    """
+    name = models.CharField(max_length=128)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ['-created_at']
+        constraints = [
+            models.UniqueConstraint(Lower('name'), name='uc_shopping_list_name'),
+        ]
+
+    def __str__(self):
+        return self.name
+
+
+class ShoppingListItem(models.Model):
+    shopping_list = models.ForeignKey(ShoppingList, on_delete=models.CASCADE,
+                                      related_name='items')
+    name = models.CharField(max_length=512)
+    quantity = models.PositiveIntegerField()
+    # The paste order. A new item goes to the end.
+    position = models.PositiveIntegerField()
+
+    class Meta:
+        ordering = ['position']
+        constraints = [
+            # One row per name, so an add of a name the list holds adds up the
+            # quantities instead of splitting the item over two rows.
+            models.UniqueConstraint(Lower('name'), 'shopping_list',
+                                    name='uc_shopping_list_item_name'),
+        ]
+
+    def __str__(self):
+        return f'{self.name} x{self.quantity}'
