@@ -1,4 +1,5 @@
-"""Wormhole gas site contents, and the compressed twin of every fullerite.
+"""Wormhole gas site contents, the compressed twin of every fullerite, and the
+fleet that huffs them.
 
 A cloud holds a unit count, not a volume. The m3 follows from `sde.types.volume`
 at read time, so a repackaging by CCP needs no edit here.
@@ -117,3 +118,44 @@ FULLERITE = GasFamily(
     cloud_columns=(('radius', 'radius'),),
     trailing_columns=(('rats', 'rats'), ('rat speed', 'rat_speed')),
 )
+
+
+# The fleet the calculator models, as sde type ids. Every number behind an id -
+# a cycle time, a yield, a mining hold, a residue chance - comes from the sde at
+# read time. Only the labels below are written here, because a select reads
+# better as 'GH-801' than as the full name of the implant.
+OUTRIDER = 89649
+PROSPECT = 33697
+GAS_CLOUD_SCOOP_II = 25812
+SYNDICATE_GAS_CLOUD_SCOOP = 28788
+MINING_SURVEY_CHIPSET_II = 2333
+MINING_FOREMAN_BURST_II = 43551
+MINING_LASER_OPTIMIZATION_CHARGE = 42830
+MINING_FOREMAN_MINDLINK = 22559
+MINING_DIRECTOR = 22552
+
+SCOOP_CHOICES = (
+    (GAS_CLOUD_SCOOP_II, 'Gas Cloud Scoop II'),
+    (SYNDICATE_GAS_CLOUD_SCOOP, 'Syndicate Gas Cloud Scoop'),
+)
+
+# Eifyr and Co. 'Alchemist' Gas Harvesting. The line runs 801, 803, 805; there
+# is no GH-802. An empty pod is the first option, because a huffer who expects
+# to lose the ship undocks without implants.
+GH_801 = 27240
+GH_803 = 27238
+GH_805 = 27239
+IMPLANT_CHOICES = (
+    ('', 'no implant'),
+    (GH_801, 'GH-801'),
+    (GH_803, 'GH-803'),
+    (GH_805, 'GH-805'),
+)
+
+# Every type the fleet arithmetic reads, so that one query fetches them all.
+FLEET_TYPE_IDS = frozenset({
+    OUTRIDER, PROSPECT, MINING_SURVEY_CHIPSET_II, MINING_FOREMAN_BURST_II,
+    MINING_LASER_OPTIMIZATION_CHARGE, MINING_FOREMAN_MINDLINK, MINING_DIRECTOR,
+    *(type_id for type_id, _ in SCOOP_CHOICES),
+    *(type_id for type_id, _ in IMPLANT_CHOICES if type_id),
+})

@@ -1320,6 +1320,70 @@ Residue needs one factor, not two. `efficiency = 100 / (100 + residue_chance)` s
 fleet banks and the time it takes to bank it by the same amount, so a residue chance moves the m3
 and the clear time and leaves ISK/hr alone.
 
+### The fleet is computed, not typed
+
+The page took four typed figures until August 2026: a boosting ship rate, a frigate rate, a mining
+hold and a residue chance. It now takes a fleet, and computes those four figures from the sde. The
+controls are an Outrider and a count of Prospects, each hull with a scoop, a survey chipset and a GH
+implant, plus a mindlink for the Outrider. `market/services/gas_fleet.py` holds the arithmetic and
+`gas.fleet_setup` still consumes its result, so the site table below did not change.
+
+Every base number comes from the sde on each request: the cycle and the yield of a scoop, the mining
+hold and the turret count of a hull, the duration bonus of an implant, and the four factors behind
+the burst. An attribute the sde does not carry raises `GasDataMissing` rather than defaulting to
+zero, because a silent zero would report a harvest rate that no ship in the game can reach.
+
+Which bonus reaches a gas scoop does not come from the sde. It is the conclusion of reading
+`sde.dogma_effects__modifier_info` once, and it lives in `gas_fleet.py` as a formula. A dogma engine
+that resolved effects, domains and stacking rules at run time would run to several hundred lines for
+one page, and it would be hard to prove correct. The four conclusions:
+
+- A Prospect doubles the yield of a scoop (effect 8315, a role bonus) and takes 5% off its cycle per
+  Gas Cloud Harvesting level (effect 8313).
+- An Outrider gives gas nothing. Its "+15% mining yield per Mining Destroyer level" is effect 12329,
+  which names the Mining skill, while a gas scoop requires only Gas Cloud Harvesting. The hull earns
+  its place with the burst and with the largest mining hold in the fleet.
+- Mining crits never fire on gas: no type in the Gas Cloud Scoops group carries `miningCritChance`.
+  A Mining Survey Chipset II therefore contributes only its -20% residue probability here, and
+  neither of its two crit bonuses.
+- The burst chain multiplies: -15% from the charge, times 1.25 for the tech 2 module, times 1.5 for
+  Mining Director V, times 1.25 for the mindlink, times 1.10 for the Outrider hull. That is -38.7%
+  of every cycle time in the fleet, the Outrider's own included, because a boosting ship is a fleet
+  member. `duration`, `miningAmount` and `warfareBuff1Value` are all stackable attributes, so no
+  stacking penalty applies to the chain.
+
+Three things the sde cannot answer, which this page assumes. The import carries no dbuff
+collections, so that the charge's -15% reaches a gas scoop is an assumption. A skill carries no
+level, so every skill sits at V. And the burst reaches every Prospect, which needs the fleet inside
+15 km.
+
+The scoop count is not a control. It is the hull's turret hardpoint count, which the sde carries:
+two on a Prospect and three on an Outrider. A huffer fills every hardpoint, and both fits stay
+inside the hull's CPU and powergrid.
+
+The fleet residue is weighted by harvest rate: `sum(rate x probability x volume multiplier)` over
+`sum(rate)`. That is the gas destroyed per second over the gas banked per second, so every clear
+time in the table stays correct when the two hulls waste different amounts. A plain average across
+the hulls would not. A Syndicate scoop wastes nothing at all, and a tech 2 scoop with the chipset
+wastes 27.2%.
+
+### Each Prospect hands the Outrider what it cannot hold
+
+An Outrider holds 20,000 m3 and harvests slowly. A Prospect holds 12,500 m3 and harvests fast. Left
+alone, the Prospects stop while the Outrider still fills. The page therefore prints how much gas
+each Prospect passes over, so that every hold fills at the same moment: `rate_prospect x fleet_hold
+/ fleet_rate - hold_prospect`. The gas always moves from a Prospect to the Outrider, for every scoop
+and every implant this page offers, because a Prospect always fills its own hold first.
+
+That figure does not move with the burst or with the implant. Both hulls share those factors, and
+the term cancels. It moves with the hull counts, and with a scoop that only one of the two hulls
+fits.
+
+The page also prints when a Prospect fills its own hold: 47 minutes against the fleet's 67 in the
+default fleet plus an Outrider. The Prospect must jettison by then or it stops harvesting. An
+Outrider carries no fleet hangar, so the hand-over is a jetcan that the Outrider tractors in. Its
+role bonuses give it +75% tractor beam range and +30% tractor beam velocity.
+
 ### A family is data, not code
 
 `GasFamily` carries its sites, its raw-to-compressed type id map, and three ordered lists of extra
@@ -1389,17 +1453,23 @@ site — one per gas cloud, joined by `rowspan` — so a sort would split the pa
 first cloud with another site's second. The paired layout is deliberate, it mirrors the spreadsheet,
 and it costs the free sorter. A test asserts the class is absent.
 
-### The form validates because three inputs are divisors
+### The form validates because the fleet divides
 
-`GasFleetForm` is the only `django.forms` class in the app. A zero harvest rate, a zero hold and a
-residue chance of -100 each divide by zero, so every field carries bounds and the cross-field rule
-rejects a total harvest rate of zero. The elsewhere-used pattern — parse in a `try/except ValueError`
+`GasFleetForm` is the only `django.forms` class in the app. The empty fleet divides by zero in every
+figure the page shows, so a cross-field rule rejects it, and the Prospect count carries a bound
+because it multiplies every figure. The elsewhere-used pattern — parse in a `try/except ValueError`
 and fall back to a default — cannot express a range, and the ice page shows the consequence: it
-accepts `rig_modifier=-1000`.
+accepts `rig_modifier=-1000`. The fleet rule waits for a valid count, so one typo does not report
+itself as two errors.
 
 The form always binds, filling any absent field from `DEFAULTS`, so a bare `/market/gas` renders the
 full table while a present-but-invalid parameter still errors. State lives entirely in the query
 string: the URL describes what you see and a bookmark saves your fleet.
+
+An unticked checkbox submits nothing at all, so an absent key cannot mean both "off" and "not
+given". The form writes a hidden `submitted` marker, which says that the query came from a submit
+and that an absent checkbox is therefore off. A hand-written query string carries no marker, so
+every field it leaves out keeps its default.
 
 ## The hull datasheets
 

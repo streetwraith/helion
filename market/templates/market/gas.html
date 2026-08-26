@@ -9,9 +9,18 @@
 
 <form action="{% url 'market_gas_index' %}" method="GET">
     <div id="gas_fleet">
-        {% for field in form %}
-        <label for="{{ field.id_for_label }}">{{ field.label }}</label>
-        {{ field }}
+        {% comment %}
+        The marker tells the form that an absent checkbox is an unticked one
+        rather than a field the query string never mentioned.
+        {% endcomment %}
+        <input type="hidden" name="{{ form.SUBMITTED }}" value="1">
+        {% for row in form.rows %}
+        <div class="gas_fleet_row">
+            {% for field in row %}
+            <label for="{{ field.id_for_label }}">{{ field.label }}</label>
+            {{ field }}
+            {% endfor %}
+        </div>
         {% endfor %}
         <button type="submit">calculate</button>
     </div>
@@ -30,10 +39,53 @@
     <tbody>
         <tr><td>Harvest rate (m3/s):</td><td>{{ setup.harvest_rate|floatformat:2 }}</td></tr>
         <tr><td>Hourly harvest (m3):</td><td>{{ setup.hourly_harvest|isk_value_k }}</td></tr>
+        <tr><td>Fleet mining hold (m3):</td><td>{{ setup.hold|m3_value }}</td></tr>
         <tr><td>Trip duration (minutes):</td><td>{{ setup.trip_minutes|floatformat:2 }}</td></tr>
+        <tr><td>Residue (%):</td><td>{{ fleet.residue_chance|floatformat:1 }}</td></tr>
         <tr><td>Estimated efficiency:</td><td>{{ setup.efficiency|floatformat:4 }}</td></tr>
+        {% comment %}
+        The burst runs only when an Outrider flies, so with no Outrider the row
+        would state a bonus that nothing in the fleet gives.
+        {% endcomment %}
+        {% if fleet.boost_percent %}
+        <tr><td>Burst cycle time (%):</td><td>{{ fleet.boost_percent|floatformat:1 }}</td></tr>
+        {% endif %}
     </tbody>
 </table>
+
+<table style="width: auto;">
+    <thead>
+        <tr>
+            <th>hull</th>
+            <th>ships</th>
+            <th>scoops</th>
+            <th>m3/s each</th>
+            <th>m3/s total</th>
+            <th>hold each</th>
+            <th>residue</th>
+        </tr>
+    </thead>
+    <tbody>
+        {% for hull in fleet.hulls %}
+        <tr>
+            <td>{{ hull.name }}</td>
+            <td>{{ hull.count }}</td>
+            <td>{{ hull.scoops }} x {{ hull.scoop }}</td>
+            <td>{{ hull.rate_each|floatformat:2 }}</td>
+            <td>{{ hull.rate_total|floatformat:2 }}</td>
+            <td>{{ hull.hold_each|m3_value }}</td>
+            <td>{{ hull.residue|floatformat:1 }}%</td>
+        </tr>
+        {% endfor %}
+    </tbody>
+</table>
+
+{% if fleet.transfer %}
+<p>Hand {{ fleet.transfer.per_prospect_m3|m3_value }} m3 from each Prospect to the
+    Outrider, and every hold fills at the same time. A Prospect fills its own hold
+    after {{ fleet.transfer.prospect_alone_minutes|floatformat:0 }} minutes, and the
+    fleet fills after {{ setup.trip_minutes|floatformat:0 }} minutes.</p>
+{% endif %}
 
 {% comment %}
 No class="market": market.js runs tablesorter on that class, and a sort would

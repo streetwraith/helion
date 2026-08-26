@@ -11,9 +11,26 @@ from django.http import QueryDict
 from django.urls import reverse
 from django.utils.html import escape
 
+from evesde.models import DogmaAttribute, Type, TypeDogmaAttribute
 from market.forms import GasFleetForm
-from market.gas_constants import FULLERITE, FULLERITE_COMPRESSED, FULLERITE_RAW
-from market.services import gas
+from market.gas_constants import (
+    FULLERITE,
+    FULLERITE_COMPRESSED,
+    FULLERITE_RAW,
+    GAS_CLOUD_SCOOP_II,
+    GH_801,
+    GH_803,
+    GH_805,
+    MINING_DIRECTOR,
+    MINING_FOREMAN_BURST_II,
+    MINING_FOREMAN_MINDLINK,
+    MINING_LASER_OPTIMIZATION_CHARGE,
+    MINING_SURVEY_CHIPSET_II,
+    OUTRIDER,
+    PROSPECT,
+    SYNDICATE_GAS_CLOUD_SCOOP,
+)
+from market.services import gas, gas_fleet
 
 from .test_market_service_db import JITA_REGION, add_order, add_type
 
@@ -282,6 +299,198 @@ class TestQuotes:
             gas.gas_quotes(JITA_REGION, 'bid', {999999: 999998})
 
 
+# The sde rows the fleet arithmetic reads, as the August 2026 import carries
+# them. The attribute ids are this module's own: the service joins by name.
+FLEET_ATTRIBUTE_IDS = {name: 900 + index
+                       for index, name in enumerate(gas_fleet.ATTRIBUTE_NAMES)}
+
+FLEET_NAMES = {
+    OUTRIDER: 'Outrider',
+    PROSPECT: 'Prospect',
+    GAS_CLOUD_SCOOP_II: 'Gas Cloud Scoop II',
+    SYNDICATE_GAS_CLOUD_SCOOP: 'Syndicate Gas Cloud Scoop',
+    MINING_SURVEY_CHIPSET_II: 'Mining Survey Chipset II',
+    MINING_FOREMAN_BURST_II: 'Mining Foreman Burst II',
+    MINING_LASER_OPTIMIZATION_CHARGE: 'Mining Laser Optimization Charge',
+    MINING_FOREMAN_MINDLINK: 'Mining Foreman Mindlink',
+    MINING_DIRECTOR: 'Mining Director',
+    GH_801: "Eifyr and Co. 'Alchemist' Gas Harvesting GH-801",
+    GH_803: "Eifyr and Co. 'Alchemist' Gas Harvesting GH-803",
+    GH_805: "Eifyr and Co. 'Alchemist' Gas Harvesting GH-805",
+}
+
+FLEET_ATTRIBUTES = {
+    OUTRIDER: {'turretSlotsLeft': 3, 'generalMiningHoldCapacity': 20000,
+               'eliteBonusCommandDestroyer1': 2},
+    PROSPECT: {'turretSlotsLeft': 2, 'generalMiningHoldCapacity': 12500},
+    GAS_CLOUD_SCOOP_II: {'duration': 40000, 'miningAmount': 20,
+                         'miningWasteProbability': 34,
+                         'miningWastedVolumeMultiplier': 1},
+    SYNDICATE_GAS_CLOUD_SCOOP: {'duration': 30000, 'miningAmount': 20,
+                                'miningWasteProbability': 0,
+                                'miningWastedVolumeMultiplier': 0},
+    MINING_SURVEY_CHIPSET_II: {'miningWasteProbabilityBonus': -20},
+    MINING_FOREMAN_BURST_II: {'warfareBuff1Value': 1.25},
+    MINING_LASER_OPTIMIZATION_CHARGE: {'warfareBuff1Multiplier': -15},
+    MINING_FOREMAN_MINDLINK: {'mindlinkBonus': 25},
+    MINING_DIRECTOR: {'commandStrengthBonus': 10},
+    GH_801: {'durationBonus': -1},
+    GH_803: {'durationBonus': -3},
+    GH_805: {'durationBonus': -5},
+}
+
+# The page's own fleet: two Prospects with tech 2 scoops, a chipset and a
+# GH-801. The three figures below were the form's hand-typed defaults before
+# these controls computed them, so they pin the whole model at once.
+# 2 ships x 2 scoops x 20 m3 x 2 role bonus / (40 s x 0.75 skill x 0.99 implant).
+DEFAULT_RATE = 5.3872
+DEFAULT_HOLD = 25000
+DEFAULT_RESIDUE = 27.2
+
+# -15% charge x 1.25 tech 2 module x 1.5 Mining Director V x 1.25 mindlink
+# x 1.10 Outrider hull.
+BOOST_PERCENT = -38.671875
+
+
+@pytest.fixture
+def fleet_sde(db):
+    """The fleet's sde rows: the two hulls, the modules and the implants."""
+    for name, attribute_id in FLEET_ATTRIBUTE_IDS.items():
+        DogmaAttribute.objects.create(attribute_id=attribute_id, name=name)
+    for type_id, type_name in FLEET_NAMES.items():
+        add_type(type_id, type_name)
+        for ordinal, (attribute, value) in enumerate(
+                sorted(FLEET_ATTRIBUTES[type_id].items())):
+            TypeDogmaAttribute.objects.create(
+                type_id=type_id, ordinal=ordinal, value=value,
+                attribute_id=FLEET_ATTRIBUTE_IDS[attribute])
+
+
+def fit(count, scoop=GAS_CLOUD_SCOOP_II, chipset=True, implant=GH_801):
+    return gas_fleet.HullFit(count=count, scoop_type_id=scoop, chipset=chipset,
+                             implant_type_id=implant)
+
+
+@pytest.mark.django_db
+class TestFleet:
+    def test_the_default_fleet_reproduces_the_typed_figures(self, fleet_sde):
+        figures = gas_fleet.fleet_figures(fit(0), fit(2), mindlink=True)
+        assert figures['outrider_rate'] == 0
+        assert figures['prospect_rate'] == pytest.approx(DEFAULT_RATE, abs=1e-3)
+        assert figures['hold'] == DEFAULT_HOLD
+        assert figures['residue_chance'] == pytest.approx(DEFAULT_RESIDUE)
+        # No Outrider flies, so no ship runs the burst.
+        assert figures['boost_percent'] == 0
+        assert figures['transfer'] is None
+        assert [hull['name'] for hull in figures['hulls']] == ['Prospect']
+
+    def test_the_burst_shortens_every_cycle(self, fleet_sde):
+        figures = gas_fleet.fleet_figures(fit(1), fit(2), mindlink=True)
+        assert figures['boost_percent'] == pytest.approx(BOOST_PERCENT)
+        assert figures['prospect_rate'] == pytest.approx(
+            DEFAULT_RATE / (1 + BOOST_PERCENT / 100), abs=1e-3)
+
+    def test_the_mindlink_is_a_quarter_of_the_burst(self, fleet_sde):
+        figures = gas_fleet.fleet_figures(fit(1), fit(2), mindlink=False)
+        assert figures['boost_percent'] == pytest.approx(BOOST_PERCENT / 1.25)
+
+    def test_the_outrider_gets_no_gas_yield_bonus(self, fleet_sde):
+        figures = gas_fleet.fleet_figures(fit(1), fit(2), mindlink=True)
+        outrider, prospect = figures['hulls']
+        # Three scoops and no doubled yield: 3 x 20 / (40 s x 0.99 x boost).
+        assert outrider['rate_each'] == pytest.approx(2.4706, abs=1e-3)
+        # Per scoop a Prospect harvests 2 / 0.75 times as much, which is its
+        # role bonus over its cycle time bonus and nothing else.
+        assert (prospect['rate_each'] / prospect['scoops']
+                == pytest.approx(outrider['rate_each'] / outrider['scoops']
+                                 * 2 / 0.75))
+
+    def test_the_syndicate_scoop_wastes_nothing(self, fleet_sde):
+        figures = gas_fleet.fleet_figures(
+            fit(0), fit(2, scoop=SYNDICATE_GAS_CLOUD_SCOOP), mindlink=True)
+        assert figures['residue_chance'] == 0
+        # A 30 second cycle against 40, so it harvests a third faster.
+        assert figures['prospect_rate'] == pytest.approx(DEFAULT_RATE * 40 / 30,
+                                                         abs=1e-3)
+
+    def test_the_chipset_takes_a_fifth_off_the_residue(self, fleet_sde):
+        figures = gas_fleet.fleet_figures(fit(0), fit(2, chipset=False),
+                                          mindlink=True)
+        assert figures['residue_chance'] == pytest.approx(34)
+        # Crits never fire on gas, so the chipset changes no harvest rate.
+        assert figures['prospect_rate'] == pytest.approx(DEFAULT_RATE, abs=1e-3)
+
+    def test_the_fleet_residue_weights_by_harvest_rate(self, fleet_sde):
+        """An Outrider on Syndicate scoops wastes nothing, so it dilutes what
+        the Prospects waste, in proportion to what it harvests."""
+        figures = gas_fleet.fleet_figures(
+            fit(1, scoop=SYNDICATE_GAS_CLOUD_SCOOP), fit(2), mindlink=True)
+        share = (figures['prospect_rate']
+                 / (figures['prospect_rate'] + figures['outrider_rate']))
+        assert figures['residue_chance'] == pytest.approx(DEFAULT_RESIDUE * share)
+        assert figures['residue_chance'] < DEFAULT_RESIDUE
+
+    def test_an_empty_pod_costs_the_implant(self, fleet_sde):
+        figures = gas_fleet.fleet_figures(fit(0), fit(2, implant=None),
+                                          mindlink=True)
+        assert figures['prospect_rate'] == pytest.approx(DEFAULT_RATE * 0.99,
+                                                         abs=1e-3)
+
+    def test_a_stronger_implant_shortens_the_cycle(self, fleet_sde):
+        figures = gas_fleet.fleet_figures(fit(0), fit(2, implant=GH_805),
+                                          mindlink=True)
+        assert figures['prospect_rate'] == pytest.approx(
+            DEFAULT_RATE * 0.99 / 0.95, abs=1e-3)
+
+    def test_every_hold_fills_at_the_same_time(self, fleet_sde):
+        figures = gas_fleet.fleet_figures(fit(1), fit(2), mindlink=True)
+        outrider, prospect = figures['hulls']
+        rate = figures['outrider_rate'] + figures['prospect_rate']
+        seconds = figures['hold'] / rate
+        handed = figures['transfer']['per_prospect_m3']
+        assert handed == pytest.approx(5061, abs=2)
+        # A Prospect keeps exactly its own hold, and the Outrider fills on what
+        # it harvests plus what both Prospects hand over.
+        assert (prospect['rate_each'] * seconds - handed
+                == pytest.approx(prospect['hold_each']))
+        assert (figures['outrider_rate'] * seconds + prospect['count'] * handed
+                == pytest.approx(outrider['hold_each']))
+
+    def test_a_prospect_fills_its_own_hold_first(self, fleet_sde):
+        figures = gas_fleet.fleet_figures(fit(1), fit(2), mindlink=True)
+        rate = figures['outrider_rate'] + figures['prospect_rate']
+        fleet_minutes = figures['hold'] / rate / 60
+        assert figures['transfer']['prospect_alone_minutes'] == pytest.approx(
+            47.4, abs=0.1)
+        assert figures['transfer']['prospect_alone_minutes'] < fleet_minutes
+
+    @pytest.mark.parametrize('outriders,prospects', [(0, 2), (1, 0)])
+    def test_one_hull_class_alone_hands_nothing_over(self, fleet_sde, outriders,
+                                                     prospects):
+        figures = gas_fleet.fleet_figures(fit(outriders), fit(prospects),
+                                          mindlink=True)
+        assert figures['transfer'] is None
+        assert len(figures['hulls']) == 1
+
+    def test_a_missing_attribute_fails_loudly(self, fleet_sde):
+        TypeDogmaAttribute.objects.filter(
+            type_id=GAS_CLOUD_SCOOP_II,
+            attribute_id=FLEET_ATTRIBUTE_IDS['miningAmount']).delete()
+        with pytest.raises(gas.GasDataMissing):
+            gas_fleet.fleet_figures(fit(0), fit(2), mindlink=True)
+
+    def test_a_missing_type_fails_loudly(self, fleet_sde):
+        Type.objects.filter(type_id=PROSPECT).delete()
+        with pytest.raises(gas.GasDataMissing):
+            gas_fleet.fleet_figures(fit(0), fit(2), mindlink=True)
+
+    def test_an_empty_fleet_is_a_programming_error(self, fleet_sde):
+        """The form rejects it. The service asserts, because every figure it
+        returns divides by the fleet."""
+        with pytest.raises(AssertionError):
+            gas_fleet.fleet_figures(fit(0), fit(0), mindlink=True)
+
+
 # Keeps a sell order's id clear of the raw type id the buy order uses.
 SELL_ORDER_ID = 1_000_000
 
@@ -293,50 +502,98 @@ def bound(query=''):
     return GasFleetForm.from_query(QueryDict(query), HUBS, JITA_REGION)
 
 
+SUBMITTED = f'{GasFleetForm.SUBMITTED}=1'
+
+
 class TestForm:
     def test_a_bare_query_uses_the_defaults(self):
         form = bound()
         assert form.is_valid(), form.errors
         assert form.cleaned_data == {
-            'boost_rate': 0.0, 'frigate_rate': 5.4, 'hold': 25000.0,
-            'residue_chance': 27.2, 'basis': 'ask', 'region_id': JITA_REGION,
+            'outrider': False, 'outrider_scoop': GAS_CLOUD_SCOOP_II,
+            'outrider_chipset': True, 'outrider_implant': GH_801,
+            'mindlink': True, 'prospects': 2,
+            'prospect_scoop': GAS_CLOUD_SCOOP_II, 'prospect_chipset': True,
+            'prospect_implant': GH_801, 'basis': 'ask', 'region_id': JITA_REGION,
         }
 
     def test_a_given_field_overrides_its_default(self):
-        form = bound('hold=35000&basis=mid')
+        form = bound('prospects=4&basis=mid')
         assert form.is_valid(), form.errors
-        assert form.cleaned_data['hold'] == 35000.0
+        assert form.cleaned_data['prospects'] == 4
         assert form.cleaned_data['basis'] == 'mid'
-        assert form.cleaned_data['frigate_rate'] == 5.4
+        assert form.cleaned_data['prospect_scoop'] == GAS_CLOUD_SCOOP_II
+
+    def test_a_hand_written_query_keeps_the_default_checkboxes(self):
+        """It carries no marker, so it never mentioned the checkboxes."""
+        form = bound('prospects=4')
+        assert form.is_valid(), form.errors
+        assert form.cleaned_data['prospect_chipset'] is True
+        assert form.cleaned_data['mindlink'] is True
+
+    def test_a_submitted_query_reads_an_absent_checkbox_as_off(self):
+        """An unticked checkbox submits nothing at all, so the marker decides."""
+        form = bound(f'{SUBMITTED}&prospects=2')
+        assert form.is_valid(), form.errors
+        assert form.cleaned_data['outrider'] is False
+        assert form.cleaned_data['outrider_chipset'] is False
+        assert form.cleaned_data['prospect_chipset'] is False
+        assert form.cleaned_data['mindlink'] is False
+
+    def test_a_ticked_checkbox_survives_the_marker(self):
+        form = bound(f'{SUBMITTED}&prospects=2&outrider=on&mindlink=on')
+        assert form.is_valid(), form.errors
+        assert form.cleaned_data['outrider'] is True
+        assert form.cleaned_data['mindlink'] is True
+        assert form.cleaned_data['prospect_chipset'] is False
+
+    def test_every_field_sits_in_exactly_one_row(self):
+        """A field outside every row would vanish from the page, and its
+        default would then decide a figure that nobody can see."""
+        rows = bound().rows()
+        assert len(rows) == 3
+        names = [field.name for row in rows for field in row]
+        assert sorted(names) == sorted(GasFleetForm.base_fields)
+
+    def test_an_empty_pod_is_allowed(self):
+        form = bound('prospect_implant=')
+        assert form.is_valid(), form.errors
+        assert form.cleaned_data['prospect_implant'] is None
 
     @pytest.mark.parametrize('query', [
-        'hold=0',              # divides by zero in trips
-        'hold=-1',
-        'residue_chance=-1',   # divides by zero in the efficiency
-        'residue_chance=101',
-        'boost_rate=-1',
-        'frigate_rate=abc',
+        'prospects=11',            # above the fleet bound
+        'prospects=-1',
+        'prospects=abc',
+        'prospect_scoop=999999',   # no gas scoop this page offers
+        'prospect_implant=999999',
+        'outrider_scoop=',
         'basis=last',
         'region_id=10000002000',
     ])
     def test_a_bad_value_is_rejected(self, query):
         assert not bound(query).is_valid()
 
-    def test_a_zero_total_harvest_rate_is_rejected(self):
-        """Either rate may be zero; their sum may not, because it divides."""
-        form = bound('boost_rate=0&frigate_rate=0')
+    def test_an_empty_fleet_is_rejected(self):
+        """Every figure the page shows divides by the fleet."""
+        form = bound('prospects=0')
         assert not form.is_valid()
         assert form.non_field_errors()
 
-    def test_one_zero_rate_is_allowed(self):
-        assert bound('boost_rate=0&frigate_rate=5.4').is_valid()
-        assert bound('boost_rate=3.3&frigate_rate=0').is_valid()
+    def test_an_outrider_alone_is_a_fleet(self):
+        assert bound('prospects=0&outrider=on').is_valid()
+
+    def test_a_bad_count_reports_itself_alone(self):
+        """The fleet rule waits for a valid count, or one typo reads as two
+        separate errors."""
+        form = bound('prospects=abc')
+        assert not form.is_valid()
+        assert not form.non_field_errors()
 
 
 @pytest.mark.django_db
 class TestPage:
     @pytest.fixture(autouse=True)
-    def types(self, db):
+    def types(self, db, fleet_sde):
         # Every gas bids 1000 and asks 1200 ISK per m3, so a figure on the page
         # is traceable to a round number whichever basis the form defaults to.
         for gas_label, type_id in FULLERITE_RAW.items():
@@ -349,9 +606,11 @@ class TestPage:
                      volume=VOLUMES[gas_label] / 10)
 
     def test_the_page_renders_every_site(self, auth_client, trade_hubs):
-        # residue_chance pinned so the figure below does not track the default.
-        response = auth_client.get(reverse('market_gas_index'),
-                                   {'residue_chance': 0, 'basis': 'bid'})
+        # A Syndicate scoop wastes nothing, so the figure below is the whole
+        # content of the site rather than what a tech 2 fleet banks of it.
+        response = auth_client.get(
+            reverse('market_gas_index'),
+            {'prospect_scoop': SYNDICATE_GAS_CLOUD_SCOOP, 'basis': 'bid'})
         assert response.status_code == 200
         body = response.content.decode()
         for site in FULLERITE.sites:
@@ -384,11 +643,13 @@ class TestPage:
     def test_residue_puts_the_cloud_contents_in_brackets(self, auth_client, trade_hubs):
         url = reverse('market_gas_index')
         # Vast Frontier Reservoir holds 20,000 units of C32, which is 100,000 m3.
-        with_residue = auth_client.get(url, {'residue_chance': 27.2}).content.decode()
+        with_residue = auth_client.get(url).content.decode()
         assert '(20,000)' in with_residue
         assert '(100,000)' in with_residue
 
-        without = auth_client.get(url, {'residue_chance': 0}).content.decode()
+        # A Syndicate scoop leaves no residue, so the two figures are equal.
+        without = auth_client.get(
+            url, {'prospect_scoop': SYNDICATE_GAS_CLOUD_SCOOP}).content.decode()
         assert '(20,000)' not in without
         assert '>20,000<' in without
 
@@ -405,8 +666,29 @@ class TestPage:
         assert '>one cloud<' in body
         assert body.count('<th>ISK/hr</th>') == 2
 
+    def test_the_form_prints_three_rows(self, auth_client, trade_hubs):
+        body = auth_client.get(reverse('market_gas_index')).content.decode()
+        assert body.count('class="gas_fleet_row"') == 3
+
+    def test_the_panel_reports_the_fleet_it_computed(self, auth_client, trade_hubs):
+        body = auth_client.get(reverse('market_gas_index')).content.decode()
+        assert '<td>Prospect</td>' in body
+        assert '2 x Gas Cloud Scoop II' in body
+        # 5.39 m3/s over a 25,000 m3 hold, and neither figure was typed in.
+        assert '>5.39<' in body
+        assert '>25,000<' in body
+
+    def test_the_hand_over_line_needs_both_hulls(self, auth_client, trade_hubs):
+        url = reverse('market_gas_index')
+        prospects_only = auth_client.get(url).content.decode()
+        assert 'from each Prospect' not in prospects_only
+
+        mixed = auth_client.get(url, {'outrider': 'on'}).content.decode()
+        assert 'from each Prospect' in mixed
+        assert '<td>Outrider</td>' in mixed
+
     def test_a_bad_input_shows_the_error_and_no_table(self, auth_client, trade_hubs):
-        response = auth_client.get(reverse('market_gas_index'), {'hold': 0})
+        response = auth_client.get(reverse('market_gas_index'), {'prospects': 11})
         assert response.status_code == 200
         body = response.content.decode()
         assert 'Vital Core Reservoir' not in body
