@@ -154,6 +154,32 @@ class NpcStationName(models.Model):
         return str(self.station_id) + " " + self.name
 
 
+class NpcStation(models.Model):
+    # An NPC station reaches its region in two steps: the station names its
+    # solar system, and the solar system names the region.
+    station_id = models.BigIntegerField(primary_key=True, db_column="_key")
+    solar_system_id = models.BigIntegerField()
+
+    class Meta:
+        managed = False
+        db_table = 'sde"."npc_stations'
+
+    def __str__(self):
+        return str(self.station_id)
+
+
+class MapRegion(models.Model):
+    region_id = models.BigIntegerField(primary_key=True, db_column="_key")
+    name = models.CharField(max_length=256, db_column="name_en")
+
+    class Meta:
+        managed = False
+        db_table = 'sde"."map_regions'
+
+    def __str__(self):
+        return str(self.region_id) + " " + self.name
+
+
 class DogmaAttribute(models.Model):
     """The definition of one dogma attribute: its name and the unit it reads in.
 
@@ -253,3 +279,4 @@ class TypeBonusSkillBonus(models.Model):
     class Meta:
         managed = False
         db_table = 'sde"."type_bonus__types___value'
+

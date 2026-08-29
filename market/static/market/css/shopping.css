@@ -1,0 +1,20 @@
+/* The quantity cell of a saved list holds an input, and the input alone decides
+   how wide the column reads. Ten digits is the bound the service enforces, but a
+   shopping quantity is short, so the box takes only what a normal one needs. */
+.item-quantity {
+    width: 5em;
+}
+
+/* The market carries no item of this name: a typo, or a name that is not
+   tradeable. The row keeps its place and prices nothing, so the marker has to
+   say why. */
+.not-found {
+    color: #b03030;
+    font-size: 0.85em;
+}
+
+@media (prefers-color-scheme: dark) {
+    .not-found {
+        color: #d15656;
+    }
+}

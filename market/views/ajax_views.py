@@ -176,7 +176,10 @@ def shopping_list_item(request):
     except shopping.ShoppingListError as error:
         return JsonResponse({'error': str(error)}, status=400)
 
-    context = shopping.price_context(shopping.stored_items(saved))
+    context = shopping.price_context(
+        shopping.stored_items(saved),
+        shopping.asset_region_id(request.POST.get('assets_region')),
+        bool(request.POST.get('assets_fitted')))
     return JsonResponse({'html': render_to_string(
         'market/shopping/_fragment_shopping_table.html',
         {'shopping_list': saved, **context})})

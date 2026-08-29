@@ -1,7 +1,8 @@
 """Asset reads from the CharacterAsset overlay (written by the assets feed)."""
 from django.db.models import Q, Sum
 
-from evesde.models import Category, Group, MapSolarSystem, NpcStationName, Type
+from evesde.models import (
+    Category, Group, MapSolarSystem, NpcStation, NpcStationName, Type)
 from market.constants import FIRST_STRUCTURE_ID
 from market.models import CharacterAsset, EveName
 from market.services.names import owner_labels
@@ -50,6 +51,64 @@ def get_character_assets(location_ids, trade_items, owner_ids=None):
             character_assets.setdefault(row['location_id'], {})[row['type_id']] = row['quantity']
         return character_assets
     return {row['type_id']: row['quantity'] for row in rows}
+
+
+def assets_by_region(include_fitted=False):
+    """What every owner holds, per region: {region_id: {type_id: quantity}}.
+
+    An item in a fitting slot or in a service bay is in use, not in store, so it
+    does not count. `include_fitted` counts it too, which answers "how many do we
+    own at all" rather than "how many can we spare". Everything else counts
+    wherever it sits: an item in a ship's cargo or in a container is still held
+    in the region.
+
+    A row in a player structure counts for no region. The app stores no solar
+    system for a structure, so such a row reaches no region and is left out.
+    """
+    rows = list(CharacterAsset.objects.all())
+    # The parent walk needs every row, so the in-service rows drop out after it.
+    by_item = {row.item_id: row for row in rows}
+    stock = [(_place_row(row, by_item), row) for row in rows
+             if include_fitted or not _in_service(row)]
+    regions = _place_regions({(place.location_type, place.location_id)
+                              for place, _ in stock})
+
+    counts = {}
+    for place, row in stock:
+        region_id = regions.get(place.location_id)
+        if region_id is None:
+            continue
+        by_type = counts.setdefault(region_id, {})
+        by_type[row.type_id] = by_type.get(row.type_id, 0) + row.quantity
+    return counts
+
+
+def _place_regions(places):
+    """{place_id: region_id} for the places the assets sit in.
+
+    A place is a station or a solar system. The ids of the two never collide, so
+    one map serves both. A station id above FIRST_STRUCTURE_ID is a player
+    structure and reaches no region.
+    """
+    system_ids, station_ids = set(), set()
+    for place_type, place_id in places:
+        if place_type == 'solar_system':
+            system_ids.add(place_id)
+        elif place_id < FIRST_STRUCTURE_ID:
+            station_ids.add(place_id)
+
+    station_systems = dict(NpcStation.objects.filter(station_id__in=station_ids)
+                           .values_list('station_id', 'solar_system_id'))
+    regions = dict(MapSolarSystem.objects
+                   .filter(system_id__in=system_ids | set(station_systems.values()))
+                   .values_list('system_id', 'region_id'))
+
+    places_regions = {system_id: regions[system_id]
+                      for system_id in system_ids if system_id in regions}
+    places_regions.update({station_id: regions[system_id]
+                           for station_id, system_id in station_systems.items()
+                           if system_id in regions})
+    return places_regions
 
 
 def get_asset_list():
@@ -174,9 +233,13 @@ def _state(row, type_row):
     """
     if not row.is_singleton or not type_row.get('is_repackable'):
         return ''
-    if 'Slot' in row.location_flag or row.location_flag in IN_SERVICE_BAYS:
-        return '(equipped)'
-    return '(assembled)'
+    return '(equipped)' if _in_service(row) else '(assembled)'
+
+
+def _in_service(row):
+    """True for an item in a fitting slot or in a service bay: it is in use, not
+    in store. Every fitting slot carries "Slot" in its flag."""
+    return 'Slot' in row.location_flag or row.location_flag in IN_SERVICE_BAYS
 
 
 def _holder(row, by_item, types):

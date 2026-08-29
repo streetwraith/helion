@@ -11,7 +11,8 @@ from django.db.models import Max
 
 from evesde import services as sde_service
 from market.models import ShoppingList, ShoppingListItem, TradeHub
-from market.services import history, orders
+from market.services import assets, history, orders
+from market.services.regions import region_options, sde_region_names
 
 # "Rifter x2" and "2x Rifter". A count of zero is not a quantity, so such a line
 # stays one plain name and finds no item.
@@ -72,33 +73,83 @@ def stored_items(shopping_list):
             for item in shopping_list.items.all()}
 
 
-def price_context(items):
+def price_context(items, asset_region_id=None, asset_fitted=False):
     """The table context for one set of items: rows, regions and the totals."""
     regions = dict(TradeHub.objects.all().values_list('region_id', 'name'))
     rows = _price_rows(items, regions, orders.get_shopping_list_prices(list(items)))
     _add_hub_levels(rows)
+    _add_volumes(rows)
     region_totals, min_region_total = _region_totals(rows, regions)
     return {'rows': rows, 'regions': regions, 'region_totals': region_totals,
-            'min_region_total': min_region_total}
+            'min_region_total': min_region_total,
+            'm3_total': sum(row['m3'] for row in rows if row['m3'] is not None),
+            **_asset_context(rows, asset_region_id, asset_fitted)}
+
+
+def _add_volumes(rows):
+    """The m3 a line takes: the packaged volume of one unit times the quantity.
+
+    Packaged, because a shopping list buys stacks and not assembled hulls. A row
+    that matches no item takes no m3, and neither does a type the sde ships with
+    no volume at all.
+    """
+    volumes = sde_service.get_packaged_volumes(
+        [row['type_id'] for row in rows if row['type_id'] is not None])
+    for row in rows:
+        volume = volumes.get(row['type_id'])
+        row['m3'] = None if volume is None else volume * row['quantity']
+
+
+def asset_region_id(raw):
+    """The region of the assets column, from an untrusted form field or query.
+
+    Anything unreadable counts as no region, which leaves the column empty. A
+    hand-edited link is no reason for a 400.
+    """
+    return int(raw) if raw and raw.isdigit() else None
+
+
+def _asset_context(rows, region_id, fitted):
+    """The assets column, and the regions its dropdown offers.
+
+    The column tells how many of the item you already hold in one region, so it
+    stays empty until a region is chosen. A row whose name matches no item stays
+    empty too: without a type id nothing can be counted.
+
+    The dropdown offers the regions the assets sit in. Any other region could
+    only ever answer zero, and the list stays short. `fitted` widens the count to
+    the items in use, which the checkbox beside the dropdown sets.
+    """
+    held = assets.assets_by_region(include_fitted=fitted)
+    counts = held.get(region_id, {})
+    for row in rows:
+        row['assets'] = (None if region_id is None or row['type_id'] is None
+                         else counts.get(row['type_id'], 0))
+    return {'asset_regions': region_options(sde_region_names(held)),
+            'asset_region_id': region_id, 'asset_fitted': fitted}
 
 
 def _price_rows(items, regions, prices):
     """One table row per item, with the lowest sell price per region.
 
-    A row keeps its name and empty prices when the name matches no item. The
+    The name resolves against the sde, not against the price rows: an item that
+    nobody sells today still carries its type id, and so still shows its size and
+    what you hold of it. A row with no type id therefore means one thing only -
+    the market carries no item of that name.
+
+    A row keeps the typed name and empty prices when it matches no item. The
     prices are the price of one unit.
     """
-    rows = {
-        key: {'type_id': None, 'name': item['name'], 'quantity': item['quantity'],
-              'item_id': item['item_id'],
-              'prices': {region_id: None for region_id in regions}, 'min_price': None}
-        for key, item in items.items()
-    }
-    for type_id, name, region_id, price in prices:
+    types = sde_service.get_market_type_ids(list(items))
+    rows = {}
+    for key, item in items.items():
+        type_id, name = types.get(key, (None, item['name']))
+        rows[key] = {'type_id': type_id, 'name': name, 'quantity': item['quantity'],
+                     'item_id': item['item_id'],
+                     'prices': {region_id: None for region_id in regions},
+                     'min_price': None}
+    for _, name, region_id, price in prices:
         row = rows[name.lower()]
-        if row['type_id'] is None:
-            row['type_id'] = type_id
-            row['name'] = name
         # A few names belong to two type ids (SKINs, crates). Keep the cheaper
         # one, so the item counts once in the total of the region.
         current = row['prices'][region_id]

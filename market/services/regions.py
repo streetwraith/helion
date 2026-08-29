@@ -3,6 +3,7 @@
 Two pages offer the same 25-entry region select - the history chart and the
 price alerts - so the filing rule lives here rather than in either view.
 """
+from evesde.models import MapRegion
 from marketdata.models import RegionStatus
 
 # EVE names three of the ingested regions "The <something>". In a list of 25 the
@@ -34,3 +35,16 @@ def region_options(names):
     return sorted(
         ((region_id, filed_region_name(name)) for region_id, name in names.items()),
         key=lambda option: option[1].casefold())
+
+
+def sde_region_names(region_ids):
+    """The name of each of these regions, from the sde.
+
+    `region_names` above answers only for the 25 ingested regions. A page that
+    files rows by their place - the assets a region holds, for one - reaches any
+    region of the map, so it asks the sde instead. A region the sde fails to name
+    reads as its id, which you can still paste into the game client.
+    """
+    names = dict(MapRegion.objects.filter(region_id__in=region_ids)
+                 .values_list('region_id', 'name'))
+    return {region_id: names.get(region_id, str(region_id)) for region_id in region_ids}

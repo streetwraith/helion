@@ -1211,6 +1211,18 @@ would pin one of them, and the same text would then price differently saved and 
 consequence is deliberate: for such a name the `j_m` and `a_m` medians read the type id the row
 carries, which can be the other one.
 
+**The row resolves its item against `sde.types`, not against the price rows.** An item that nobody
+sells today therefore still carries its type id, and still shows its size, its stock and its links;
+only the five price columns stay empty. That leaves one meaning for a row with no type id: no type
+of that name exists. The table says so beside the name, because such a row keeps its place and
+would otherwise look like an item nobody sells.
+
+The lookup asks for **no market group**, unlike the add box: about 200 types trade in the order book
+without one, and a row that shows a price must never read as an unknown name. A published type beats
+an unpublished twin of the same name, and the lower id settles the rest (SKINs and crates), so one
+name always resolves to one item. The lookup pays a scan over ~53k rows, the same one the price
+query pays, since helion cannot index the lower case name of a schema sdemanager owns.
+
 **One textarea, two buttons.** The textarea is the bulk editor: with no list open it prices a paste
 or saves it under a name; with a list open it replaces every item of that list. Item-by-item work
 happens below it, through one ajax endpoint that answers with the whole re-priced table. A change of
@@ -1219,12 +1231,34 @@ would let the two disagree.
 
 **The add box only accepts a market item.** It sits behind the shared item search, and the server
 checks the name against `sde.types` with a market group before it stores anything. A paste stays
-free to carry a name that matches nothing; such a row keeps its place and prices blank.
+free to carry a name that matches nothing; such a row keeps its place, prices blank and reads
+"not found".
 
 **`j_m`, `j_r`, `a_m` and `a_r` mean what the trade hub's `m` and `r` mean.** `m` is the 90-day
 median daily high of the region, `r` is the hub ask over it. The ask is the same number the Jita and
 Amarr price columns show, because `orders_hub` marks a sell order in range only at the hub station
 itself. `m` stays empty under 30 priced days (`MEDIAN_MIN_DAYS`), and `r` with it.
+
+**The `m3` column is the packaged size.** It is `sde.types.packaged_volume` times the quantity. It
+is never `volume`: `volume` is the assembled size, which is about ten times the packaged one for a
+ship, and a hauler that trusts it books the wrong trip. Only two published market types carry no
+packaged volume, and those carry no volume either, so such a row prints no size rather than a wrong
+one.
+
+**The assets column answers "do I hold this already".** It stays empty until you pick a region,
+because the count means nothing without a place. The dropdown offers only the regions your assets
+sit in: any other option could only ever answer zero. Every owner counts, character and corporation
+alike. The count reads the local `CharacterAsset` overlay, which the assets feed writes.
+
+An asset row carries a place, not a region. A station reaches its region in two steps,
+`sde.npc_stations.solar_system_id` and then `sde.map_solar_systems.region_id`. A player structure
+reaches no region, because the app stores no solar system for one, so such a row counts nowhere. An
+item in a ship's cargo or in a container counts: the walk out to the station is the same one the
+assets page makes. An item in a fitting slot or in a service bay does not count, because it is in
+use rather than in store; the checkbox beside the dropdown counts it too.
+
+Both controls ride with the paste and sit in the query of an open list's link, so the choice
+survives a submit, a redirect and an item edit.
 
 ## The item name component
 

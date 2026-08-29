@@ -5,7 +5,9 @@
     <thead>
         <tr>
             <th>Item Name</th>
+            <th>m3</th>
             <th>Qty</th>
+            <th>Assets</th>
             {% for name in regions.values %}
                 <th>{{ name }}</th>
             {% endfor %}
@@ -20,14 +22,16 @@
         {% for row in rows %}
           <tr {% if row.type_id %}data-type-id="{{ row.type_id }}"{% endif %}>
               <td class="item-name">
-                {% if row.type_id %}{% item_name row.type_id row.name %}{% else %}{{ row.name }}{% endif %}
+                {% if row.type_id %}{% item_name row.type_id row.name %}{% else %}{{ row.name }} <span class="not-found">not found</span>{% endif %}
               </td>
+              <td>{{ row.m3|m3_value }}</td>
               <td>
                 {% if row.item_id %}
                   <input type="number" class="item-quantity" data-item-id="{{ row.item_id }}"
                          value="{{ row.quantity }}" min="1" step="1">
                 {% else %}{{ row.quantity }}{% endif %}
               </td>
+              <td>{{ row.assets|default_if_none:"" }}</td>
               {% for region_id in regions %}
                   {% with price=row.prices|get_by_key:region_id %}
                   <td {% if price and row.min_price and price == row.min_price %} class="green" {% endif %}>{% if price %}{{ price|isk_value }}{% else %}-{% endif %}</td>
@@ -46,6 +50,8 @@
     <tfoot>
       <tr>
           <td><strong>Total</strong></td>
+          <td><strong>{{ m3_total|m3_value }}</strong></td>
+          <td></td>
           <td></td>
           {% for region_id in regions %}
             {% with total=region_totals|get_by_key:region_id %}

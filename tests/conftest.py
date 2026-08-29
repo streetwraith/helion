@@ -90,6 +90,14 @@ CREATE TABLE IF NOT EXISTS sde.npc_station_names (
     station_id bigint PRIMARY KEY,
     name text NOT NULL
 );
+CREATE TABLE IF NOT EXISTS sde.npc_stations (
+    _key bigint PRIMARY KEY,
+    solar_system_id bigint NOT NULL
+);
+CREATE TABLE IF NOT EXISTS sde.map_regions (
+    _key bigint PRIMARY KEY,
+    name_en text NOT NULL
+);
 CREATE TABLE IF NOT EXISTS sde.dogma_attributes (
     _key bigint PRIMARY KEY,
     name text NOT NULL,

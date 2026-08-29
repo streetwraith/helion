@@ -14,7 +14,10 @@ function postShoppingChange(payload) {
         url: table.data('endpoint'),
         type: 'POST',
         headers: {'X-Requested-With': 'XMLHttpRequest'},
-        data: $.extend({list_id: table.data('list-id')}, payload),
+        data: $.extend({list_id: table.data('list-id'),
+                        assets_region: $('#assets-region').val(),
+                        assets_fitted: $('#assets-fitted').is(':checked') ? '1' : ''},
+                       payload),
         dataType: 'json',
         success: function(data) {
             table.html(data.html);
@@ -27,10 +30,31 @@ function postShoppingChange(payload) {
     });
 }
 
+// The two asset controls, as the query of an open list's own link.
+function assetQuery() {
+    const region = $('#assets-region').val();
+    if (!region) {
+        return '';
+    }
+    return '?assets_region=' + region
+           + ($('#assets-fitted').is(':checked') ? '&assets_fitted=1' : '');
+}
+
 function bindShoppingList() {
     $('#saved-list-select').on('change', function() {
         if (this.value) {
             window.location = this.value;
+        }
+    });
+
+    // With a list open the items are stored, so a reload shows them again. A
+    // submit would replace them with the textarea instead, which the reader
+    // never asked for. A paste lives only in the textarea, so it must be sent.
+    $('#assets-region, #assets-fitted').on('change', function() {
+        if ($('#shopping-table').data('list-id')) {
+            window.location = assetQuery() || window.location.pathname;
+        } else {
+            this.form.submit();
         }
     });
 

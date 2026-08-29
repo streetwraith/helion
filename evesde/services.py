@@ -1,5 +1,6 @@
 from django.db import connection
-from django.db.models import Case, IntegerField, Value, When
+from django.db.models import Case, F, IntegerField, Value, When
+from django.db.models.functions import Lower
 
 from evesde.models import MarketGroup, MetaGroup, Type
 
@@ -15,6 +16,19 @@ MAX_MARKET_GROUP_DEPTH = 10
 def get_type_names(type_ids):
     type_names = Type.objects.filter(type_id__in=type_ids).values("type_id", "name")
     return {item["type_id"]: item["name"] for item in type_names}
+
+
+def get_packaged_volumes(type_ids):
+    """{type_id: the m3 of one packaged unit}.
+
+    Packaged only, with no fallback to `volume`: `volume` is the assembled size,
+    which is about ten times the packaged one for a ship. A type the sde ships
+    with no packaged volume gets no entry, so nothing ever prints a size that is
+    wrong by that factor.
+    """
+    return dict(Type.objects.filter(type_id__in=type_ids)
+                .exclude(packaged_volume=None)
+                .values_list("type_id", "packaged_volume"))
 
 
 def get_market_group_options(excluded_root_ids=()):
@@ -123,6 +137,33 @@ def search_market_type_names(query, limit=MAX_SEARCH_RESULTS):
         .order_by("prefix_rank", "name")
         .values("type_id", "name")[:limit]
     )
+
+
+def get_market_type_ids(names):
+    """{lower case name: (type_id, stored spelling)}. The names must be lower case.
+
+    A name no type carries gets no entry, which is how a caller tells a
+    misspelling from an item nobody sells today.
+
+    The lookup takes no market group, unlike `get_market_type_name` behind the
+    add box: about 200 types trade in the order book without one, and a row that
+    shows a price must never read as an unknown name.
+
+    A published type beats an unpublished twin of the same name, and the lower id
+    settles the rest, so one name always resolves to one item. The rows arrive
+    least preferred first and each one overwrites the last.
+
+    The match is the one the price query makes, `lower(name_en)` against the
+    list, and it pays the same scan over ~53k rows: the sde schema belongs to
+    sdemanager, so helion cannot index the lower case name.
+    """
+    if not names:
+        return {}
+    matches = (Type.objects.annotate(lower_name=Lower("name"))
+               .filter(lower_name__in=names)
+               .order_by(F("published").asc(nulls_first=True), "-type_id")
+               .values_list("type_id", "name"))
+    return {name.lower(): (type_id, name) for type_id, name in matches}
 
 
 def get_market_type_name(name):

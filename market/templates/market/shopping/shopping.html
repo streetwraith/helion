@@ -4,6 +4,10 @@
 
 {% block title %}shopping | Helion{% endblock %}
 
+{% block css %}
+<link rel="stylesheet" href="{% static 'market/css/shopping.css' %}">
+{% endblock %}
+
 {% block js %}
 <script src="{% static 'market/js/type_search.js' %}"></script>
 <script src="{% static 'market/js/shopping_list.js' %}"></script>
@@ -41,6 +45,25 @@ because a saved list is edited item by item below.
       {% if shopping_list %}data-list-name="{{ shopping_list.name }}"{% endif %}>
   {% csrf_token %}
   <textarea name="items" rows="10" cols="50">{{ items }}</textarea>
+  <br>
+  {% comment %}
+  The assets column counts what you hold in one region. The dropdown offers only
+  the regions your assets sit in. Both controls ride with the paste, so the
+  choice survives a submit.
+  {% endcomment %}
+  <label for="assets-region">assets in</label>
+  <select name="assets_region" id="assets-region">
+    <option value="">no region</option>
+    {% for region_id, name in asset_regions %}
+      <option value="{{ region_id }}"
+              {% if region_id == asset_region_id %}selected{% endif %}>{{ name }}</option>
+    {% endfor %}
+  </select>
+  <label for="assets-fitted">
+    <input type="checkbox" name="assets_fitted" id="assets-fitted" value="1"
+           {% if asset_fitted %}checked{% endif %}>
+    count fitted items
+  </label>
   <br>
   <button type="submit">{% if shopping_list %}replace this list{% else %}submit{% endif %}</button>
   {% if not shopping_list %}
