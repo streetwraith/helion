@@ -72,7 +72,7 @@ document.addEventListener('DOMContentLoaded', () => {
     // the whole page again. The figures stay out of it, so a term like "50"
     // matches a bonus rather than every capacitor on the page.
     const haystacks = new Map(cards.map((card) => {
-        const name = card.querySelector('h4').textContent;
+        const name = card.dataset.name;
         const traits = card.querySelector('.hull-traits');
         return [card, (name + ' ' + (traits ? traits.textContent : '')).toLowerCase()];
     }));
