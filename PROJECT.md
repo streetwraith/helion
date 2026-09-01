@@ -1551,9 +1551,10 @@ in `market/`, because `sde` is the only schema it touches.
 
 **The page queries `sde` on each request and caches nothing.** The schema changes when the importer
 runs, which no signal here can observe, and a stale hull page is worse than a slow one. The cost is
-bounded instead: eleven reads whatever the hull count, assembled in Python, because a per-hull query
-over 400 hulls would be hundreds of round trips. A test pins that count against a growing hull list.
-A render of all 401 hulls costs about 0.3 s in the queries and about 1 s in total.
+bounded instead: twenty-five reads whatever the hull count, assembled in Python, because a per-hull
+query over 400 hulls would be hundreds of round trips. A test pins that count against a growing hull
+list. A render of every hull costs about 1 s in total, of which the bonus classification is fourteen
+of the reads.
 
 ### The grouping is the owner's, because the SDE has none
 
@@ -1630,6 +1631,116 @@ writes of `localStorage` are wrapped, because a private window throws instead of
 Two figure rows are shaped for width rather than for symmetry: the sensor row takes the sensor type
 as its **label** (`Ladar 8`, not `Sensors 8 ladar`), and drone capacity and bandwidth are two rows.
 Both were long enough to overflow their box and collide with the next column.
+
+### The bonus filter reads dogma, not the trait text
+
+A form above the figures filters the page by what a hull bonuses: `weapon bonuses`
+(any / none / turret / missile / drone), `turret type`
+(energy / hybrid / projectile / precursor / vorton), `tank bonuses`
+(any / none / shield / armor), a box that widens a weapon group to the hulls that bonus no weapon,
+a box that keeps the empire hulls alone, and a checkbox per faction with a count beside it. The filter runs on the server and lives in the
+query string, so a filtered page is a link. Only the name box and the figure toggles stay in the
+browser, because both of those only hide what the page already carries.
+
+`evesde/hull_bonuses.py` derives the tags. The trait text a card shows is prose, so the tags come
+from the dogma wiring behind that text instead: `type_dogma__dogma_effects` names the effects of a
+type, and `dogma_effects__modifier_info` says what each effect changes. A weapon family comes from
+the weapon skill or the module group a modifier applies to. A tank layer comes from the attribute a
+modifier changes, or from the skill or group of the local tank module it applies to.
+
+Four traps live in that data, and each one costs a wrong tag:
+
+- **`domain` says whose attribute changes.** A drone hit point bonus raises `armorHP`,
+  `shieldCapacity` and `hp` of the **drone**, with `domain=charID`. Only `domain=shipID` with
+  `ItemModifier` is the hull's own layer. Without that rule the Vexor reads as an armor and shield
+  hull.
+- **`rechargeRate` is the capacitor**, not the shield. Shield recharge is `shieldRechargeRate`. The
+  Vengeance has a capacitor recharge bonus and is an armor hull.
+- **A repair drone rides the plain `Drones` skill.** CCP keys the logistics drone bonuses of the
+  Guardian to `Drones`, exactly like a damage bonus, so the skill alone reads a logistics cruiser as
+  a drone boat. The attribute separates them: a bonus to `armorDamageAmount`, `shieldBonus` or
+  `structureDamageAmount` is repair, not damage.
+- **`Defender Missiles` is point defence.** The Draugur and the Outrider bonus it and carry no
+  launcher hardpoint at all.
+
+**A hardpoint is part of the match.** A turret bonus with no turret hardpoint is a match nobody can
+fly, and the drone equivalent is a drone bay. This is not a hypothetical: every tech 1 hauler
+carries a drone damage role bonus and has no drone bay, which is 26 hulls that must stay out of the
+drone group.
+
+**What counts as a tank bonus is a decision, not a fact.** A bonus to the hull's own layer counts,
+and so does a bonus to a local tank module - a shield booster, an armor plate, a hardener. A remote
+repairer, a command burst and a bulkhead do not: the first two tank another ship, and the third is
+structure, which is neither armor nor shield. Every logistics hull and every Triglavian hull
+therefore reads as having no tank bonus, because remote repair is all they bonus.
+
+**Two bonuses are ignored outright,** because each one buffs armor and shield in a single line and
+therefore says nothing about the layer a hull flies:
+
+- the **tech 1 battleship buffer role bonus** (`IGNORED_EFFECTS`), which buffs armor plates, shield
+  extenders and bulkheads in one effect that all 40 of those hulls carry. Nothing else rides it, so
+  the whole effect goes.
+- the **deep space transport overheating role bonus** (`IGNORED_BONUSES`), which improves the
+  overheating of armor repairers, armor hardeners, shield boosters and shield hardeners alike. One
+  attribute, `roleBonusOverheatDST`, sizes every effect of that role bonus, which makes it the
+  signature to match on. With it out the five transports read their racial layer: Impel and Occator
+  armor, Bustard, Mastodon and Torrent shield.
+
+With both out, and the dormant hook below out too, 10 hulls carry both tags: the Svipul and the Loki
+through a mode and a subsystem that really do bonus both layers, the Vargur and the Marshal through
+an armor repairer line beside a shield booster line, and the Monitor, the Muninn and four Alliance
+Tournament hulls through plain resistance bonuses on both.
+
+**Some hulls keep their bonuses somewhere else,** so the tags are the union over the hull and every
+item attached to it.
+
+- **A strategic cruiser carries no bonus of its own.** The Legion, the Loki, the Proteus and the
+  Tengu hold everything in the four subsystems, which also bring the hardpoints and the drone bay.
+  The subsystem names its hull in `fitsToShipType`. Only the `subsystemBonus...` effects count: every
+  defensive subsystem also carries `armorHPBonusAddPassive` and `shieldCapacityAddPassive`, which are
+  its own hit points rather than a bonus, and reading those would tank all four hulls.
+- **A tactical destroyer keeps its tank in its modes.** The bare Hecate hull bonuses hybrid turrets
+  and nothing else; `Hecate Defense Mode` is what makes it an armor hull. A mode is an unpublished
+  type in the `Ship Modifiers` group and carries **no** `fitsToShipType`, so the name is the only
+  link: the mode word and the kind word come off `Hecate Defense Mode` and leave the hull. A renamed
+  mode therefore drops out of the union instead of attaching to the wrong hull. The Anhinga works
+  the same way, and its three modes carry missile bonuses only. Result: Confessor and Hecate armor,
+  Jackdaw and Skua shield, Svipul both - its defense mode really does bonus both layers.
+
+**A bonus of zero is not a bonus.** A modifier is ignored when the attribute that sizes it reads 0 on
+the item carrying the effect. Two dormant hooks live in this data and both would lie about a hull:
+every tactical destroyer carries `proximityDbuffTacticalDestroyerHPAddEffect`, which adds armor,
+shield and structure hit points through an attribute reading 0 - that hook alone put the Hecate under
+both tank types - and 31 tech 1 haulers carry a drone damage role bonus that reads 0 as well. A
+**missing** value is left alone rather than read as zero, because ten interceptors carry a role bonus
+effect whose attribute is absent from the hull and nothing says the bonus is off.
+
+**An unbonused hull joins a group only when the box is checked.** 92 hulls bonus no weapon at all,
+the four strategic cruisers aside: the explorers, the logistics hulls, the mining hulls, the
+Scorpion. A weapon group means "the hull bonuses it" by default, and the box widens it to "the hull
+can fly it".
+
+**A faction is a veto rather than a pick.** A hull belongs to a faction when it needs one of that
+faction's ship skills, or when it carries a bonus block for one; the requirement is the wider
+source, since the Gnosis and the Praxis carry no bonus block. Unchecking Amarr therefore drops the
+Astero as well, though its Gallente half stays checked - that is what "filter these out" means. ORE
+names none of its skills after itself, so those ten skills are listed by hand. `Other` catches the
+hulls that need only a generic skill: the Society of Conscious Thought line, the Upwell hulls and
+the oddities.
+
+**`empire only` asks a stricter question than the four empire boxes.** A hull passes it when it
+answers to exactly one empire, so a pirate hull fails: the Astero, the Machariel and the Gila each
+need two empire skills. The box keeps 258 of 356 hulls and drops 98 - the pirate line, the
+Triglavian, EDENCOM, ORE, Society of Conscious Thought and Upwell lines, and the hulls that need
+more than two empires: the Monitor wants all four cruiser skills, the Python all four battleship
+skills, and every faction battlecruiser wants two. The box and the faction checkboxes both apply, so
+`empire only` with Amarr and Caldari checked gives the Amarr hulls and the Caldari hulls, and nothing
+mixed.
+
+**A count is per faction, under the rest of the form.** Setting armor plus turrets and reading the
+eight numbers side by side is the question the form is for. A hull with two lineages counts under
+both, so the numbers sum above the hull count. An unchecked faction reads zero, because its hulls
+are gone.
 
 ### The price is an approximation, on purpose
 

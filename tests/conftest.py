@@ -104,6 +104,31 @@ CREATE TABLE IF NOT EXISTS sde.dogma_attributes (
     display_name_en text,
     unit_id bigint
 );
+-- The dogma wiring behind a ship trait: which effects a type carries, and what
+-- each effect changes.
+CREATE TABLE IF NOT EXISTS sde.dogma_effects (
+    _key bigint PRIMARY KEY,
+    name text NOT NULL
+);
+CREATE TABLE IF NOT EXISTS sde.dogma_effects__modifier_info (
+    _parent_key bigint NOT NULL,
+    _ordinal_1 integer NOT NULL,
+    domain text NOT NULL,
+    func text NOT NULL,
+    group_id bigint,
+    modified_attribute_id bigint,
+    modifying_attribute_id bigint,
+    operation bigint,
+    skill_type_id bigint,
+    PRIMARY KEY (_parent_key, _ordinal_1)
+);
+CREATE TABLE IF NOT EXISTS sde.type_dogma__dogma_effects (
+    _parent_key bigint NOT NULL,
+    _ordinal_1 integer NOT NULL,
+    effect_id bigint NOT NULL,
+    is_default boolean NOT NULL,
+    PRIMARY KEY (_parent_key, _ordinal_1)
+);
 CREATE TABLE IF NOT EXISTS sde.dogma_units (
     _key bigint PRIMARY KEY,
     display_name_en text

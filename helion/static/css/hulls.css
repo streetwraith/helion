@@ -31,6 +31,30 @@
 }
 
 /* --- the control bar --- */
+#hull-form {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.2em 0.9em;
+    margin-top: 0.8em;
+    font-size: 80%;
+}
+
+#hull-form select,
+#hull-form button {
+    font-size: inherit;
+}
+
+#hull-form-factions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.2em 0.7em;
+}
+
+#hull-form .hull-form-box {
+    white-space: nowrap;
+}
+
 #hull-bar {
     position: sticky;
     top: 0;

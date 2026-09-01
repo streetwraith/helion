@@ -213,6 +213,67 @@ class DogmaUnit(models.Model):
         return str(self.unit_id) + " " + (self.display_name or "")
 
 
+# The three tables below are the dogma wiring behind a ship trait: which effects
+# a type carries, and what each effect changes. The trait text says "bonus to
+# armor resistances" in prose; these tables say it as an attribute id, a domain
+# and a skill, which is what code can match on.
+
+
+class DogmaEffect(models.Model):
+    """The definition of one dogma effect. `name` is the internal name.
+
+    A subsystem carries flat stat adds beside its real bonuses, and only the
+    name tells them apart, so the name is read rather than skipped.
+    """
+    effect_id = models.BigIntegerField(primary_key=True, db_column="_key")
+    name = models.CharField(max_length=256)
+
+    class Meta:
+        managed = False
+        db_table = 'sde"."dogma_effects'
+
+    def __str__(self):
+        return str(self.effect_id) + " " + self.name
+
+
+class DogmaEffectModifier(models.Model):
+    """One modifier row of one effect: what it changes, and on whom.
+
+    `domain` and `func` decide the target. `shipID` with `ItemModifier` is the
+    ship's own attribute; `charID` with `OwnerRequiredSkillModifier` is an item
+    the character owns, which is how a drone bonus reaches its drones. A
+    `skill_type_id` or a `group_id` narrows the modifier to the modules that
+    need that skill or sit in that group.
+    """
+    pk = models.CompositePrimaryKey("effect_id", "ordinal")
+    effect_id = models.BigIntegerField(db_column="_parent_key")
+    ordinal = models.IntegerField(db_column="_ordinal_1")
+    domain = models.TextField()
+    func = models.TextField()
+    group_id = models.BigIntegerField(null=True)
+    modified_attribute_id = models.BigIntegerField(null=True)
+    modifying_attribute_id = models.BigIntegerField(null=True)
+    operation = models.BigIntegerField(null=True)
+    skill_type_id = models.BigIntegerField(null=True)
+
+    class Meta:
+        managed = False
+        db_table = 'sde"."dogma_effects__modifier_info'
+
+
+class TypeDogmaEffect(models.Model):
+    """One effect of one type: the join between a hull and its bonuses."""
+    pk = models.CompositePrimaryKey("type_id", "ordinal")
+    type_id = models.BigIntegerField(db_column="_parent_key")
+    ordinal = models.IntegerField(db_column="_ordinal_1")
+    effect_id = models.BigIntegerField()
+    is_default = models.BooleanField()
+
+    class Meta:
+        managed = False
+        db_table = 'sde"."type_dogma__dogma_effects'
+
+
 # The three tables below are the ship traits: the bonus text the in-game ship
 # info window lists. sdemanager flattens each record array of the typeBonus
 # entity into its own child table, keyed by the ship type id and the position

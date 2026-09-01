@@ -6,7 +6,9 @@ no rigs and no subsystems.
 """
 import math
 import re
+from dataclasses import dataclass, field
 
+from evesde import hull_bonuses
 from evesde.models import (
     DogmaAttribute,
     DogmaUnit,
@@ -445,6 +447,136 @@ ATTRIBUTE_NAMES = frozenset(
        "jumpDriveRange", "rigSlots"]
 )
 
+# --- the filter form ---
+# Every dropdown reads any / none / a group, and "any" is the default, so an
+# unfiltered page is the page that was there before the form existed.
+WEAPON_CHOICES = (("any", "any"), ("none", "none"), ("turret", "turret"),
+                  ("missile", "missile"), ("drone", "drone"))
+TURRET_CHOICES = (("any", "any"),
+                  *[(key, label.lower()) for key, label, _, _ in hull_bonuses.TURRET_TYPES])
+TANK_CHOICES = (("any", "any"), ("none", "none"), ("shield", "shield"), ("armor", "armor"))
+# What a hull must be able to fit to answer to a weapon group. Drones need a
+# bay rather than a hardpoint.
+WEAPON_MOUNTS = {"turret": "turret", "missile": "launcher", "drone": "drone"}
+
+
+@dataclass(frozen=True)
+class HullFilter:
+    """What the form asks for. The defaults show every hull.
+
+    `unbonused` widens a weapon group to the hulls that carry no weapon bonus at
+    all: a Gnosis bonuses no weapon, so it fits any of the three equally well.
+    Without the box a group means "the hull bonuses it".
+
+    `empire_only` keeps the hulls of one empire alone. A pirate hull needs two
+    empire skills and a Triglavian hull needs none, so neither is an empire hull.
+    """
+    weapon: str = "any"
+    turret: str = "any"
+    tank: str = "any"
+    unbonused: bool = False
+    empire_only: bool = False
+    factions: frozenset = field(default_factory=lambda: frozenset(hull_bonuses.FACTION_KEYS))
+
+
+def read_filter(query):
+    """The filter a query string asks for. An unknown value falls back to "any"."""
+    factions = frozenset(query.getlist("faction")) & frozenset(hull_bonuses.FACTION_KEYS)
+    return HullFilter(
+        weapon=_choice(WEAPON_CHOICES, query.get("weapon")),
+        turret=_choice(TURRET_CHOICES, query.get("turret")),
+        tank=_choice(TANK_CHOICES, query.get("tank")),
+        unbonused=bool(query.get("unbonused")),
+        empire_only=bool(query.get("empire")),
+        # An unchecked box sends nothing at all, so a marker field tells "the
+        # reader cleared every faction" from "no form was submitted".
+        factions=factions if query.get("factions") else frozenset(hull_bonuses.FACTION_KEYS),
+    )
+
+
+def _choice(choices, value):
+    return value if value in [key for key, _ in choices] else choices[0][0]
+
+
+def _matches(tags, hull_filter):
+    """Whether one hull answers to the whole form.
+
+    A faction is a veto rather than a pick: unchecking Amarr drops every hull
+    that needs an Amarr skill, the Astero included, though its Gallente half
+    stays checked. That is what "filter these out" means.
+    """
+    return (_weapon_matches(tags, hull_filter)
+            and _tank_matches(tags, hull_filter)
+            and _faction_matches(tags, hull_filter))
+
+
+def _faction_matches(tags, hull_filter):
+    if hull_filter.empire_only and not (
+            len(tags.faction) == 1 and tags.faction <= hull_bonuses.EMPIRE_KEYS):
+        return False
+    return tags.faction <= hull_filter.factions
+
+
+def _weapon_matches(tags, hull_filter):
+    if hull_filter.weapon == "any":
+        return True
+    if hull_filter.weapon == "none":
+        return not tags.weapon
+    if WEAPON_MOUNTS[hull_filter.weapon] not in tags.mounts:
+        return False
+    if _wanted_weapons(hull_filter) & tags.weapon:
+        return True
+    return hull_filter.unbonused and not tags.weapon
+
+
+def _wanted_weapons(hull_filter):
+    """The weapon tags one dropdown pair asks for."""
+    if hull_filter.weapon != "turret":
+        return {hull_filter.weapon}
+    if hull_filter.turret == "any":
+        return {f"turret:{key}" for key, *_ in hull_bonuses.TURRET_TYPES}
+    return {f"turret:{hull_filter.turret}"}
+
+
+def _tank_matches(tags, hull_filter):
+    if hull_filter.tank == "any":
+        return True
+    if hull_filter.tank == "none":
+        return not tags.tank
+    return hull_filter.tank in tags.tank
+
+
+def _form(hull_filter, matched_tags):
+    """The form as the template reads it: the options, and a count per faction.
+
+    A faction count is the matching hulls of that faction under the rest of the
+    form, so armor plus turrets can be read race by race. An unchecked faction
+    reads zero, because its hulls are filtered out.
+    """
+    counts = {key: 0 for key in hull_bonuses.FACTION_KEYS}
+    for tags in matched_tags:
+        for key in tags.faction:
+            counts[key] += 1
+    return {
+        "weapon": _options(WEAPON_CHOICES, hull_filter.weapon),
+        "turret": _options(TURRET_CHOICES, hull_filter.turret),
+        "tank": _options(TANK_CHOICES, hull_filter.tank),
+        # The turret type only means something under a turret filter. It opens
+        # once that filter is applied, so the page needs no script.
+        "turret_enabled": hull_filter.weapon == "turret",
+        "unbonused": hull_filter.unbonused,
+        "empire_only": hull_filter.empire_only,
+        "factions": [{"key": key, "label": label, "count": counts[key],
+                      "selected": key in hull_filter.factions}
+                     for key, label in hull_bonuses.FACTIONS],
+    }
+
+
+def _options(choices, selected):
+    return [{"value": value, "label": label, "selected": value == selected}
+            for value, label in choices]
+
+
 _TAG = re.compile(r"<[^>]+>")
 
 
@@ -633,16 +765,20 @@ def _anchor(*parts):
     return re.sub(r"[^a-z0-9]+", "-", "-".join(parts).lower()).strip("-")
 
 
-def get_hull_page(price_lookup=None):
-    """Every published hull, grouped size, then tier, then class.
+def get_hull_page(price_lookup=None, hull_filter=None):
+    """Every published hull the filter keeps, grouped size, then tier, then class.
 
-    A fixed number of queries, whatever the hull count: ten reads of the sde
+    A fixed number of queries, whatever the hull count: twenty-five reads of the sde
     schema, assembled in Python. The taxonomy above sets the running order; the
     sde only says which hulls exist and what their figures are.
 
     `price_lookup` takes the type ids and returns {type_id: price}. It is passed
     in rather than imported, because a market price comes from the `market`
     schema and this module reads only `sde`. Without it the page shows no prices.
+
+    `hull_filter` is a `HullFilter`; without one the page shows every hull. The
+    filter runs here rather than in the browser, because a match reads bonus
+    wiring the cards do not carry.
     """
     group_names = {group_id: name for group_id, name
                    in Group.objects.filter(category_id=SHIP_CATEGORY_ID)
@@ -656,6 +792,7 @@ def get_hull_page(price_lookup=None):
     role_bonuses = _grouped_bonuses(TypeBonusRoleBonus, hull_ids)
     misc_bonuses = _grouped_bonuses(TypeBonusMiscBonus, hull_ids)
     skill_bonuses = _skill_bonuses(hull_ids)
+    tags = hull_bonuses.classify(hull_ids, attributes)
 
     cards = {}
     for hull in hulls:
@@ -674,16 +811,21 @@ def get_hull_page(price_lookup=None):
             "traits": _traits(type_id, role_bonuses, misc_bonuses, skill_bonuses, units),
         }
 
-    sections = _sections(HULL_TAXONOMY, cards)
-    leftovers = sorted(set(cards) - {name for _, tiers in HULL_TAXONOMY
-                                     for _, classes in tiers
-                                     for _, names in classes for name in names})
+    hull_filter = hull_filter or HullFilter()
+    matched = {name: card for name, card in cards.items()
+               if _matches(tags[card["type_id"]], hull_filter)}
+    sections = _sections(HULL_TAXONOMY, matched)
+    leftovers = sorted(set(matched) - {name for _, tiers in HULL_TAXONOMY
+                                      for _, classes in tiers
+                                      for _, names in classes for name in names})
     if leftovers:
-        sections += _sections(((LEFTOVER_SIZE, (("", (("", tuple(leftovers)),)),)),), cards)
+        sections += _sections(((LEFTOVER_SIZE, (("", (("", tuple(leftovers)),)),)),), matched)
     if price_lookup is not None:
         _apply_prices(sections, price_lookup)
     return {
         "total": len(hulls),
+        "shown": len(matched),
+        "form": _form(hull_filter, [tags[card["type_id"]] for card in matched.values()]),
         "sizes": sections,
         "stat_toggles": [{"key": key, "label": label} for key, label in STAT_TOGGLES],
         # The bar legend: the same four types the cards draw, in the same order.

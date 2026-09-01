@@ -102,10 +102,12 @@ def hull_reference(request):
 
     No character and no market data, so nothing here is per user. The sde schema
     changes only when sdemanager imports, and the page is not cached: a render
-    costs one fixed set of queries.
+    costs one fixed set of queries. The bonus filter arrives in the query string,
+    so a filtered page is a link.
     """
     return render(request, "hulls.html",
-                  hulls.get_hull_page(price_lookup=orders.get_jita_mean_asks))
+                  hulls.get_hull_page(price_lookup=orders.get_jita_mean_asks,
+                                      hull_filter=hulls.read_filter(request.GET)))
 
 
 def characters(request, *args, **kwargs):

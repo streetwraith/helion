@@ -30,6 +30,42 @@
     {% endfor %}
 </nav>
 
+<form id="hull-form" method="get">
+    <label>weapon bonuses
+        <select name="weapon">
+            {% for option in form.weapon %}
+            <option value="{{ option.value }}"{% if option.selected %} selected{% endif %}>{{ option.label }}</option>
+            {% endfor %}
+        </select>
+    </label>
+    <label>turret type
+        <select name="turret"{% if not form.turret_enabled %} disabled{% endif %}>
+            {% for option in form.turret %}
+            <option value="{{ option.value }}"{% if option.selected %} selected{% endif %}>{{ option.label }}</option>
+            {% endfor %}
+        </select>
+    </label>
+    <label>tank bonuses
+        <select name="tank">
+            {% for option in form.tank %}
+            <option value="{{ option.value }}"{% if option.selected %} selected{% endif %}>{{ option.label }}</option>
+            {% endfor %}
+        </select>
+    </label>
+    <label class="hull-form-box"><input type="checkbox" name="unbonused" value="1"{% if form.unbonused %} checked{% endif %}> unbonused hulls too</label>
+    <label class="hull-form-box"><input type="checkbox" name="empire" value="1"{% if form.empire_only %} checked{% endif %}> empire only</label>
+    {# The marker tells an empty selection from an unsubmitted form: an unchecked box sends nothing. #}
+    <input type="hidden" name="factions" value="1">
+    <span id="hull-form-factions">
+        {% for faction in form.factions %}
+        <label class="hull-form-box"><input type="checkbox" name="faction" value="{{ faction.key }}"{% if faction.selected %} checked{% endif %}> {{ faction.label }} <span class="count">{{ faction.count }}</span></label>
+        {% endfor %}
+    </span>
+    <button type="submit">apply</button>
+    <a href="{% url 'hulls' %}">reset</a>
+    <span class="count">{{ shown }} of {{ total }} hulls</span>
+</form>
+
 <div id="hull-bar">
     <input id="hull-filter" type="search" placeholder="filter hulls" autocomplete="off"
            aria-label="Filter hulls by name or bonus">
