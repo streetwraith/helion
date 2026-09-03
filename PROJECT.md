@@ -1551,7 +1551,7 @@ in `market/`, because `sde` is the only schema it touches.
 
 **The page queries `sde` on each request and caches nothing.** The schema changes when the importer
 runs, which no signal here can observe, and a stale hull page is worse than a slow one. The cost is
-bounded instead: twenty-five reads whatever the hull count, assembled in Python, because a per-hull
+bounded instead: thirty-one reads whatever the hull count, assembled in Python, because a per-hull
 query over 400 hulls would be hundreds of round trips. A test pins that count against a growing hull
 list. A render of every hull costs about 1 s in total, of which the bonus classification is fourteen
 of the reads.
@@ -1741,6 +1741,57 @@ mixed.
 eight numbers side by side is the question the form is for. A hull with two lineages counts under
 both, so the numbers sum above the hull count. An unchecked faction reads zero, because its hulls
 are gone.
+
+### A strategic cruiser shows its subsystems, not its trait text
+
+A strategic cruiser states nothing about itself. Its four trait blocks each carry one line -
+`bonus to all Minmatar Core Systems effectiveness` - and its fitting line reads `0H 0M 0L`, because
+the slots, the hardpoints, the drone bay and every real bonus sit in the twelve subsystems that fit
+the hull. The page therefore replaces those four lines with the subsystems behind them.
+
+**The link is dogma.** A subsystem names its hull in the `fitsToShipType` attribute, which
+`hull_bonuses.subsystems_by_hull` already reads to tag the hull's weapons and tank. The map is read
+once and passed to both the classifier and the card, so the page pays for it once.
+
+**A block is matched by its skill.** A hull's trait block and a subsystem both name a skill type id,
+and both resolve it through the same table, so the page pairs them by the resolved name: the block
+called `Minmatar Core Systems` takes the subsystems whose own bonus block carries that skill. A
+block that pairs with nothing keeps the line the sde gives it, so a data change costs a useless line
+rather than a blank card. A subsystem the sde gives no per-skill block has no block to sit under and
+drops out.
+
+**The fitting line comes from dogma, the bonuses from the prose.** The header above a subsystem's
+bonuses reads `1M 3L`, or `7H · 5 launcher · 2 turret · 40m3/40 dr`, from the slot and hardpoint
+modifiers and the drone attributes. The larger hardpoint count leads, because the count is what
+tells two offensive subsystems apart. CCP also writes those three facts into the role bonus prose,
+so three kinds of line are dropped as duplicates: the pure slot or hardpoint line, the drone bay
+line, and the markup-only `Additional Base Stats` separator. **The match reads the wording**, which
+is upstream text, so it is deliberately timid: only a line with no figure of its own can go, and a
+reword prints a line twice rather than losing a real bonus.
+
+**The blocks sort by name, the subsystems by type id.** The sde orders the four blocks differently
+from one hull to the next - the Legion ships `Defensive, Offensive, Propulsion, Core` and its three
+siblings ship `Defensive, Core, Offensive, Propulsion` - which stops a reader comparing the four
+cards. A block name carries the faction and then the slot, so sorting the names alone reads
+`core, defensive, offensive, propulsion` on every card, with no second attribute to read. Only the
+subsystem blocks sort, and each keeps a place the sde already gave a subsystem block, so no other
+trait block moves: a Gila still reads `Gallente Cruiser` before `Caldari Cruiser`. The subsystems
+inside one block run by type id, which the sde does not state, so the page sorts by it to hold the
+order steady from one render to the next.
+
+**A block ships closed.** Twelve subsystems are about a hundred lines of bonus, which would make a
+card twenty times the height of its neighbours, so each block is a `<details>` with its subsystem
+count in the summary. The free-text filter reads the collapsed text as well, and opens a block whose
+text matches the term. It closes again only the blocks it opened, so a block opened by hand stays
+open.
+
+### The order of a bonus line is ascending importance
+
+The sde gives every trait line an `importance`, and 1 is the headline bonus: the Rifter's
+`7.5% bonus to Small Projectile Turret rate of fire` is 1 and its falloff bonus is 2, which is the
+order the game lists them in. The page sorted descending until 2026-09-03 and therefore printed
+every multi-line block backwards. No row in any of the three bonus tables carries a null importance,
+so the ascending sort has no undefined case.
 
 ### The price is an approximation, on purpose
 

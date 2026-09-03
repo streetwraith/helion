@@ -77,8 +77,29 @@ document.addEventListener('DOMContentLoaded', () => {
         return [card, (name + ' ' + (traits ? traits.textContent : '')).toLowerCase()];
     }));
 
+    // A strategic cruiser keeps its subsystem bonuses in closed blocks, so a
+    // match on that text would show a card with nothing to read. The filter
+    // opens such a block, and closes again only the blocks it opened itself.
+    const blocks = new Map([...document.querySelectorAll('.trait-subsystems')]
+        .map((block) => [block, block.textContent.toLowerCase()]));
+    const opened = new Set();
+
+    function applyBlocks(term) {
+        for (const [block, haystack] of blocks) {
+            if (term && haystack.includes(term)) {
+                if (!block.open) {
+                    block.open = true;
+                    opened.add(block);
+                }
+            } else if (opened.delete(block)) {
+                block.open = false;
+            }
+        }
+    }
+
     field.addEventListener('input', () => {
         const term = field.value.trim().toLowerCase();
+        applyBlocks(term);
         for (const card of cards) {
             card.classList.toggle('hull-hidden', term && !haystacks.get(card).includes(term));
         }

@@ -112,12 +112,29 @@
                     {% if hull.traits %}
                     <div class="hull-traits">
                         {% for trait in hull.traits %}
+                        {% if trait.subsystems %}
+                        <details class="trait-subsystems">
+                            <summary>{{ trait.name }} <span class="count">({{ trait.subsystems|length }})</span></summary>
+                            {% for subsystem in trait.subsystems %}
+                            <p class="subsystem-name">{{ subsystem.name }}{% if subsystem.fitting %}: <span class="subsystem-fitting">{% for part in subsystem.fitting %}{% if not forloop.first %} &middot; {% endif %}{{ part }}{% endfor %}</span>{% endif %}</p>
+                            {% for group in subsystem.groups %}
+                            <p class="subsystem-group">{{ group.label }}</p>
+                            <ul>
+                                {% for line in group.lines %}
+                                <li>{% if line.value %}<span class="trait-value">{{ line.value }}</span> {% endif %}{{ line.text }}</li>
+                                {% endfor %}
+                            </ul>
+                            {% endfor %}
+                            {% endfor %}
+                        </details>
+                        {% else %}
                         <p class="trait-name">{{ trait.name }}</p>
                         <ul>
                             {% for line in trait.lines %}
                             <li>{% if line.value %}<span class="trait-value">{{ line.value }}</span> {% endif %}{{ line.text }}</li>
                             {% endfor %}
                         </ul>
+                        {% endif %}
                         {% endfor %}
                     </div>
                     {% endif %}

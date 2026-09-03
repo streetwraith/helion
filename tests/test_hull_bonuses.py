@@ -143,7 +143,8 @@ def drone_bonus(attribute, skill_name="Drones"):
 
 
 def tags_of(type_id, attributes=None):
-    return hull_bonuses.classify([type_id], {type_id: attributes or {}})[type_id]
+    subsystems = hull_bonuses.subsystems_by_hull([type_id])
+    return hull_bonuses.classify([type_id], {type_id: attributes or {}}, subsystems)[type_id]
 
 
 # --- the weapon tags ---

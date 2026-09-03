@@ -60,6 +60,8 @@ from evesde.models import (
 
 # A subsystem's real bonuses all carry this prefix; see the module docstring.
 SUBSYSTEM_BONUS_PREFIX = "subsystemBonus"
+# The attribute a subsystem names its hull in.
+SUBSYSTEM_HULL_ATTRIBUTE = "fitsToShipType"
 # One effect buffs armor plates, shield extenders and bulkheads together, and
 # every tech 1 battleship carries it. It would tag all 40 of them with both tank
 # types and say nothing about how a hull is flown, so it counts as no tank bonus
@@ -187,11 +189,13 @@ class Modifier:
     bonus_attribute_id: int
 
 
-def classify(hull_ids, attributes):
+def classify(hull_ids, attributes, subsystems):
     """The tags of every hull, as {type_id: HullTags}.
 
     `attributes` is {type_id: {attribute name: value}} as the hull page already
-    reads it, so the hardpoint counts are not queried twice.
+    reads it, so the hardpoint counts are not queried twice. `subsystems` is the
+    map `subsystems_by_hull` returns, passed in for the same reason: the page
+    renders those subsystems as well as classifying them.
 
     A fixed number of queries, whatever the hull count.
     """
@@ -200,7 +204,6 @@ def classify(hull_ids, attributes):
     # needs a name per id, the lookups need an id per name.
     names = dict(DogmaAttribute.objects.values_list("attribute_id", "name"))
     attribute_ids = {name: attribute_id for attribute_id, name in names.items()}
-    subsystems = _subsystems_by_hull(hull_ids, attribute_ids)
     modes = _modes_by_hull(hull_ids)
     subsystem_ids = [type_id for ids in subsystems.values() for type_id in ids]
     mode_ids = [type_id for ids in modes.values() for type_id in ids]
@@ -341,13 +344,14 @@ def _resolve(rows, attribute_names):
     return modifiers
 
 
-def _subsystems_by_hull(hull_ids, attribute_ids):
+def subsystems_by_hull(hull_ids):
     """The subsystems that fit each hull, as {hull type_id: [subsystem type_id]}.
 
     A subsystem names its hull in the `fitsToShipType` attribute, so the link is
     dogma rather than the name it shares with the hull.
     """
-    fits = attribute_ids.get("fitsToShipType")
+    fits = (DogmaAttribute.objects.filter(name=SUBSYSTEM_HULL_ATTRIBUTE)
+            .values_list("attribute_id", flat=True).first())
     if fits is None:
         return {}
     subsystems = defaultdict(list)

@@ -276,6 +276,30 @@
     white-space: nowrap;
 }
 
+/* A strategic cruiser carries twelve subsystems, which is a hundred lines of
+   bonus. Each block stays closed until it is wanted. */
+.trait-subsystems summary {
+    color: #666;
+    cursor: pointer;
+}
+
+.trait-subsystems .subsystem-name {
+    padding-left: 0.8em;
+}
+
+.trait-subsystems .subsystem-fitting {
+    color: #666;
+}
+
+.trait-subsystems .subsystem-group {
+    padding-left: 1.6em;
+    color: #666;
+}
+
+.trait-subsystems ul {
+    padding-left: 2.4em;
+}
+
 .hull-hidden {
     display: none;
 }
@@ -292,7 +316,10 @@
     .hull-resists .layer-name,
     .hull-stats dt,
     .hull-stats dd i,
-    .hull-traits .trait-name {
+    .hull-traits .trait-name,
+    .trait-subsystems summary,
+    .trait-subsystems .subsystem-fitting,
+    .trait-subsystems .subsystem-group {
         color: #9a9793;
     }
 

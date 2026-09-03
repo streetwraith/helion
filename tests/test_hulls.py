@@ -7,7 +7,7 @@ from django.test.utils import CaptureQueriesContext
 from django.urls import reverse
 from django.utils import timezone
 
-from evesde import hulls
+from evesde import hull_bonuses, hulls
 from market.services import orders
 from marketdata.models import Order
 from evesde.models import (
@@ -42,12 +42,18 @@ TRIGLAVIAN = 500026
 
 RIFTER = 587
 WOLF = 11371
+LOKI = 29990
 MINMATAR_FRIGATE_SKILL = 3331
+MINMATAR_CORE_SKILL = 30547
+MINMATAR_OFFENSIVE_SKILL = 30551
+STRATEGIC_CRUISER_GROUP = 963
+SUBSYSTEM_GROUP = 958
 
 # Every attribute the page reads gets an id here; the ones a test asserts on
 # keep a recognisable one.
-ATTRIBUTE_IDS = {name: 1000 + index
-                 for index, name in enumerate(sorted(hulls.ATTRIBUTE_NAMES))}
+ATTRIBUTE_IDS = {name: 1000 + index for index, name in enumerate(sorted(
+    hulls.ATTRIBUTE_NAMES | hulls.SUBSYSTEM_ATTRIBUTE_NAMES
+    | {hull_bonuses.SUBSYSTEM_HULL_ATTRIBUTE}))}
 
 
 def attribute_id(name):
@@ -62,6 +68,9 @@ def sde_ships(db):
     Group.objects.create(group_id=CRUISER_GROUP, name="Cruiser", category_id=6)
     Group.objects.create(group_id=CORVETTE_GROUP, name="Corvette", category_id=6)
     Group.objects.create(group_id=TITAN_GROUP, name="Titan", category_id=6)
+    Group.objects.create(group_id=STRATEGIC_CRUISER_GROUP, name="Strategic Cruiser",
+                         category_id=6)
+    Group.objects.create(group_id=SUBSYSTEM_GROUP, name="Core Subsystem", category_id=32)
     # A module group: the page must never reach outside category 6.
     Group.objects.create(group_id=18, name="Afterburner", category_id=7)
     MetaGroup.objects.create(meta_group_id=TECH_I, name="Tech I")
@@ -71,6 +80,11 @@ def sde_ships(db):
     for name, dogma_id in ATTRIBUTE_IDS.items():
         DogmaAttribute.objects.create(attribute_id=dogma_id, name=name)
     Type.objects.create(type_id=MINMATAR_FRIGATE_SKILL, name="Minmatar Frigate",
+                        group_id=255, published=True, portion_size=1)
+    Type.objects.create(type_id=MINMATAR_CORE_SKILL, name="Minmatar Core Systems",
+                        group_id=255, published=True, portion_size=1)
+    Type.objects.create(type_id=MINMATAR_OFFENSIVE_SKILL,
+                        name="Minmatar Offensive Systems",
                         group_id=255, published=True, portion_size=1)
     return None
 
@@ -83,6 +97,41 @@ def add_ship(type_id, name, group_id=FRIGATE_GROUP, meta_group_id=TECH_I, factio
     for ordinal, (attribute, value) in enumerate(sorted((attributes or {}).items())):
         TypeDogmaAttribute.objects.create(type_id=type_id, ordinal=ordinal,
                                           attribute_id=attribute_id(attribute), value=value)
+
+
+def add_subsystem(type_id, name, hull_id, skill_type_id=None, attributes=None,
+                  role=(), per_skill=()):
+    """A subsystem that fits `hull_id`, with the bonus blocks of its own.
+
+    A bonus row is (bonus, importance, unit_id, text), as the sde carries it.
+    """
+    Type.objects.create(type_id=type_id, name=name, group_id=SUBSYSTEM_GROUP,
+                        published=True, portion_size=1)
+    values = dict(attributes or {})
+    values[hull_bonuses.SUBSYSTEM_HULL_ATTRIBUTE] = float(hull_id)
+    for ordinal, (attribute, value) in enumerate(sorted(values.items())):
+        TypeDogmaAttribute.objects.create(type_id=type_id, ordinal=ordinal,
+                                          attribute_id=attribute_id(attribute), value=value)
+    for ordinal, (bonus, importance, unit_id, text) in enumerate(role):
+        TypeBonusRoleBonus.objects.create(type_id=type_id, ordinal=ordinal, bonus=bonus,
+                                          importance=importance, unit_id=unit_id,
+                                          bonus_text=text)
+    if skill_type_id is not None:
+        TypeBonusSkill.objects.create(type_id=type_id, ordinal=0,
+                                      skill_type_id=skill_type_id)
+    for ordinal, (bonus, importance, unit_id, text) in enumerate(per_skill):
+        TypeBonusSkillBonus.objects.create(type_id=type_id, ordinal=0, sub_ordinal=ordinal,
+                                           bonus=bonus, importance=importance,
+                                           unit_id=unit_id, bonus_text=text)
+
+
+def add_subsystem_block(hull_id, ordinal, skill_type_id):
+    """The hull's own trait block for one subsystem skill: one useless line."""
+    TypeBonusSkill.objects.create(type_id=hull_id, ordinal=ordinal,
+                                  skill_type_id=skill_type_id)
+    TypeBonusSkillBonus.objects.create(
+        type_id=hull_id, ordinal=ordinal, sub_ordinal=0, bonus=None, importance=1,
+        unit_id=None, bonus_text="bonus to all <a href=showinfo:1>Systems</a> effectiveness")
 
 
 RIFTER_ATTRIBUTES = {
@@ -344,9 +393,10 @@ def test_skill_bonuses_carry_the_skill_name_and_lose_the_markup(sde_ships):
     hull = find_hull(hulls.get_hull_page(), "Rifter")
 
     assert [trait["name"] for trait in hull["traits"]] == ["Minmatar Frigate"]
+    # Importance 1 is the headline bonus, as the game lists it.
     assert hull["traits"][0]["lines"] == [
-        {"value": "10%", "text": "bonus to Small Projectile Turret falloff"},
         {"value": "7.5%", "text": "bonus to rate of fire"},
+        {"value": "10%", "text": "bonus to Small Projectile Turret falloff"},
     ]
 
 
@@ -370,8 +420,8 @@ def test_role_and_misc_bonuses_follow_the_skill_blocks(sde_ships):
         "Minmatar Frigate", "Role bonus", "Misc bonus"]
     # Most important line first, and a line with no value keeps its text alone.
     assert hull["traits"][1]["lines"] == [
-        {"value": "", "text": "can fit a covert ops cloak"},
         {"value": "3x", "text": "cloak speed"},
+        {"value": "", "text": "can fit a covert ops cloak"},
     ]
     assert hull["traits"][2]["lines"] == [{"value": "50%", "text": "bonus to hacking"}]
 
@@ -387,6 +437,180 @@ def test_bonus_block_with_a_dangling_skill_keeps_its_lines(sde_ships):
 
     assert hull["traits"][0]["name"] == "skill 999999"
     assert hull["traits"][0]["lines"] == [{"value": "5%", "text": "bonus to something"}]
+
+
+# --- the subsystems of a strategic cruiser ---
+
+LOKI_CORE = 45632
+LOKI_CORE_FIRST = 45631
+LOKI_OFFENSIVE = 45608
+
+CORE_FITTING = {"hiSlotModifier": 0.0, "medSlotModifier": 1.0, "lowSlotModifier": 3.0}
+OFFENSIVE_FITTING = {"hiSlotModifier": 7.0, "launcherHardPointModifier": 5.0,
+                     "turretHardPointModifier": 2.0,
+                     "droneCapacity": 40.0, "droneBandwidth": 40.0}
+
+
+def add_loki():
+    """A Loki hull: no slot of its own, three rig slots, one subsystem block."""
+    add_ship(LOKI, "Loki", group_id=STRATEGIC_CRUISER_GROUP,
+             attributes={"hiSlots": 0.0, "medSlots": 0.0, "lowSlots": 0.0,
+                         "upgradeSlotsLeft": 3.0})
+    add_subsystem_block(LOKI, 0, MINMATAR_CORE_SKILL)
+
+
+def test_a_subsystem_block_replaces_the_line_the_sde_gives_it(sde_ships):
+    add_loki()
+    add_subsystem(LOKI_CORE, "Loki Core - Augmented Nuclear Reactor", LOKI,
+                  skill_type_id=MINMATAR_CORE_SKILL, attributes=CORE_FITTING,
+                  role=[(20.0, 1, PERCENT_UNIT, "bonus to ship power output")],
+                  per_skill=[(5.0, 1, PERCENT_UNIT, "bonus to capacitor recharge time"),
+                             (3.0, 2, PERCENT_UNIT, "bonus to energy warfare resistance")])
+
+    trait = find_hull(hulls.get_hull_page(), "Loki")["traits"][0]
+
+    assert trait["name"] == "Minmatar Core Systems"
+    assert "lines" not in trait
+    # The hull prefix goes: the card and the block already name both halves.
+    assert trait["subsystems"] == [{
+        "name": "Augmented Nuclear Reactor",
+        "fitting": ["1M 3L"],
+        "groups": [
+            {"label": "Role",
+             "lines": [{"value": "20%", "text": "bonus to ship power output"}]},
+            {"label": "Per skill level",
+             "lines": [{"value": "5%", "text": "bonus to capacitor recharge time"},
+                       {"value": "3%", "text": "bonus to energy warfare resistance"}]},
+        ],
+    }]
+
+
+def test_the_subsystems_of_a_block_run_in_type_id_order(sde_ships):
+    add_loki()
+    add_subsystem(LOKI_CORE, "Loki Core - Augmented Nuclear Reactor", LOKI,
+                  skill_type_id=MINMATAR_CORE_SKILL, attributes=CORE_FITTING,
+                  per_skill=[(5.0, 1, PERCENT_UNIT, "bonus to capacitor recharge time")])
+    add_subsystem(LOKI_CORE_FIRST, "Loki Core - Dissolution Sequencer", LOKI,
+                  skill_type_id=MINMATAR_CORE_SKILL,
+                  attributes={"medSlotModifier": 2.0, "lowSlotModifier": 2.0},
+                  per_skill=[(5.0, 1, PERCENT_UNIT, "bonus to max targeting range")])
+
+    trait = find_hull(hulls.get_hull_page(), "Loki")["traits"][0]
+
+    assert [subsystem["name"] for subsystem in trait["subsystems"]] == [
+        "Dissolution Sequencer", "Augmented Nuclear Reactor"]
+
+
+def test_the_subsystem_blocks_sort_by_name_and_move_nothing_else(sde_ships):
+    add_ship(LOKI, "Loki", group_id=STRATEGIC_CRUISER_GROUP,
+             attributes={"upgradeSlotsLeft": 3.0})
+    # The sde order: offensive, a block with no subsystems, then core.
+    add_subsystem_block(LOKI, 0, MINMATAR_OFFENSIVE_SKILL)
+    TypeBonusSkill.objects.create(type_id=LOKI, ordinal=1,
+                                  skill_type_id=MINMATAR_FRIGATE_SKILL)
+    TypeBonusSkillBonus.objects.create(type_id=LOKI, ordinal=1, sub_ordinal=0, bonus=5.0,
+                                       importance=1, unit_id=PERCENT_UNIT,
+                                       bonus_text="bonus to something")
+    add_subsystem_block(LOKI, 2, MINMATAR_CORE_SKILL)
+    add_subsystem(LOKI_CORE, "Loki Core - Augmented Nuclear Reactor", LOKI,
+                  skill_type_id=MINMATAR_CORE_SKILL, attributes=CORE_FITTING,
+                  per_skill=[(5.0, 1, PERCENT_UNIT, "bonus to capacitor recharge time")])
+    add_subsystem(LOKI_OFFENSIVE, "Loki Offensive - Projectile Scoping Array", LOKI,
+                  skill_type_id=MINMATAR_OFFENSIVE_SKILL, attributes=OFFENSIVE_FITTING,
+                  per_skill=[(17.5, 1, PERCENT_UNIT, "bonus to turret damage")])
+
+    traits = find_hull(hulls.get_hull_page(), "Loki")["traits"]
+
+    # Core before offensive, and the block between them keeps its place.
+    assert [trait["name"] for trait in traits] == [
+        "Minmatar Core Systems", "Minmatar Frigate", "Minmatar Offensive Systems"]
+    assert "lines" in traits[1]
+
+
+def test_the_subsystem_fitting_line_reads_slots_hardpoints_and_drones(sde_ships):
+    add_loki()
+    add_subsystem(LOKI_OFFENSIVE, "Loki Offensive - Launcher Efficiency Configuration",
+                  LOKI, skill_type_id=MINMATAR_CORE_SKILL, attributes=OFFENSIVE_FITTING,
+                  per_skill=[(10.0, 1, PERCENT_UNIT, "bonus to rate of fire")])
+
+    trait = find_hull(hulls.get_hull_page(), "Loki")["traits"][0]
+
+    # The larger hardpoint count leads: it is what tells two of these apart.
+    assert trait["subsystems"][0]["fitting"] == ["7H", "5 launcher", "2 turret",
+                                                "40m3/40 dr"]
+
+
+def test_a_role_line_the_fitting_line_already_states_is_dropped(sde_ships):
+    add_loki()
+    add_subsystem(
+        LOKI_OFFENSIVE, "Loki Offensive - Launcher Efficiency Configuration", LOKI,
+        skill_type_id=MINMATAR_CORE_SKILL, attributes=OFFENSIVE_FITTING,
+        role=[(None, 1, None, "<b><u>Additional Base Stats</b></u>"),
+              (None, 2, None, "+7 High Slots, +5 Launcher Hardpoints, +2 Turret Hardpoints"),
+              (None, 3, None, "+40mbit Drone Bandwidth, +40m3 Drone Bay"),
+              (None, 4, None, "+150 PWG, +150 CPU"),
+              (25.0, 5, PERCENT_UNIT, "reduction in launcher fitting costs")],
+        per_skill=[(10.0, 1, PERCENT_UNIT, "bonus to rate of fire")])
+
+    trait = find_hull(hulls.get_hull_page(), "Loki")["traits"][0]
+
+    assert trait["subsystems"][0]["groups"][0] == {"label": "Role", "lines": [
+        {"value": "", "text": "+150 PWG, +150 CPU"},
+        {"value": "25%", "text": "reduction in launcher fitting costs"},
+    ]}
+
+
+def test_only_a_role_line_without_a_figure_of_its_own_can_be_dropped(sde_ships):
+    add_loki()
+    add_subsystem(LOKI_CORE, "Loki Core - Augmented Nuclear Reactor", LOKI,
+                  skill_type_id=MINMATAR_CORE_SKILL, attributes=CORE_FITTING,
+                  role=[(10.0, 1, PERCENT_UNIT, "bonus to Turret Hardpoint tracking")],
+                  per_skill=[(5.0, 1, PERCENT_UNIT, "bonus to capacitor recharge time")])
+
+    trait = find_hull(hulls.get_hull_page(), "Loki")["traits"][0]
+
+    assert trait["subsystems"][0]["groups"][0] == {"label": "Role", "lines": [
+        {"value": "10%", "text": "bonus to Turret Hardpoint tracking"}]}
+
+
+def test_a_hull_with_subsystems_drops_its_zero_slots(sde_ships):
+    add_loki()
+    add_subsystem(LOKI_CORE, "Loki Core - Augmented Nuclear Reactor", LOKI,
+                  skill_type_id=MINMATAR_CORE_SKILL, attributes=CORE_FITTING,
+                  per_skill=[(5.0, 1, PERCENT_UNIT, "bonus to capacitor recharge time")])
+    add_ship(RIFTER, "Rifter", attributes=RIFTER_ATTRIBUTES)
+
+    page = hulls.get_hull_page()
+
+    assert find_hull(page, "Loki")["slots"] == "3R"
+    assert find_hull(page, "Rifter")["slots"] == "3H 3M 4L 3R"
+
+
+def test_a_block_the_page_has_no_subsystems_for_keeps_its_line(sde_ships):
+    add_loki()
+    add_subsystem_block(LOKI, 1, MINMATAR_OFFENSIVE_SKILL)
+    # A subsystem with no skill block of its own has no block to sit under.
+    add_subsystem(LOKI_CORE, "Loki Core - Augmented Nuclear Reactor", LOKI,
+                  attributes=CORE_FITTING,
+                  role=[(20.0, 1, PERCENT_UNIT, "bonus to ship power output")])
+
+    traits = find_hull(hulls.get_hull_page(), "Loki")["traits"]
+
+    assert [trait["name"] for trait in traits] == ["Minmatar Core Systems",
+                                                   "Minmatar Offensive Systems"]
+    assert all("subsystems" not in trait for trait in traits)
+    assert traits[0]["lines"] == [{"value": "", "text": "bonus to all Systems effectiveness"}]
+
+
+def test_a_subsystem_name_with_no_hull_prefix_stays_whole(sde_ships):
+    add_loki()
+    add_subsystem(LOKI_CORE, "Augmented Nuclear Reactor", LOKI,
+                  skill_type_id=MINMATAR_CORE_SKILL, attributes=CORE_FITTING,
+                  per_skill=[(5.0, 1, PERCENT_UNIT, "bonus to capacitor recharge time")])
+
+    trait = find_hull(hulls.get_hull_page(), "Loki")["traits"][0]
+
+    assert trait["subsystems"][0]["name"] == "Augmented Nuclear Reactor"
 
 
 def test_page_renders(auth_client, sde_ships):
@@ -412,6 +636,24 @@ def test_page_renders(auth_client, sde_ships):
     # The table of contents links every class, and a toggle exists per figure.
     assert 'href="#frigates-tech-i-combat"' in body
     assert 'data-stat="align"' in body
+
+
+def test_the_page_renders_a_subsystem_block_closed(auth_client, sde_ships):
+    add_loki()
+    add_subsystem(LOKI_CORE, "Loki Core - Augmented Nuclear Reactor", LOKI,
+                  skill_type_id=MINMATAR_CORE_SKILL, attributes=CORE_FITTING,
+                  per_skill=[(5.0, 1, PERCENT_UNIT, "bonus to capacitor recharge time")])
+
+    body = auth_client.get(reverse("hulls")).content.decode()
+
+    assert '<details class="trait-subsystems">' in body
+    assert 'Minmatar Core Systems <span class="count">(1)</span>' in body
+    assert "Augmented Nuclear Reactor" in body
+    assert "1M 3L" in body
+    # The block ships closed, so the card stays card-sized.
+    assert "<details open" not in body
+    # The hull states its rig slots and nothing else.
+    assert ">3R<" in body
 
 
 def test_query_count_does_not_grow_with_the_hull_count(auth_client, sde_ships):

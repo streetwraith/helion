@@ -435,6 +435,27 @@ SLOT_ATTRIBUTES = (
 )
 HARDPOINTS = (("turret", "turretSlotsLeft"), ("launcher", "launcherSlotsLeft"))
 
+# What one subsystem adds to the hull it fits. A strategic cruiser hull holds no
+# slots, no hardpoints and no drone bay of its own, so these modifiers are the
+# whole fitting story of the ship.
+SUBSYSTEM_SLOTS = (("H", "hiSlotModifier"), ("M", "medSlotModifier"),
+                   ("L", "lowSlotModifier"))
+SUBSYSTEM_HARDPOINTS = (("turret", "turretHardPointModifier"),
+                        ("launcher", "launcherHardPointModifier"))
+SUBSYSTEM_ATTRIBUTE_NAMES = frozenset(
+    [name for _, name in SUBSYSTEM_SLOTS]
+    + [name for _, name in SUBSYSTEM_HARDPOINTS]
+    + ["droneCapacity", "droneBandwidth"]
+)
+# CCP writes a subsystem's slot changes, its hardpoints and its drone bay into
+# the role bonus prose as well as into dogma. The fitting line above the bonuses
+# carries all three, so those lines are dropped. The match reads the wording, so
+# a reword prints the line twice rather than losing a real bonus, and only a
+# line without a figure of its own can go.
+SUBSYSTEM_FITTING_LINE = re.compile(r"\bSlots?\b|\bHardpoints?\b|Drone Bandwidth|Drone Bay")
+# A markup-only separator CCP puts above a subsystem's flat stat lines.
+SUBSYSTEM_STAT_HEADING = "Additional Base Stats"
+
 ATTRIBUTE_NAMES = frozenset(
     [name for _, _, name, *_ in STAT_ROWS]
     + [name for _, name in SENSORS]
@@ -613,12 +634,19 @@ def _align_time(mass, agility):
     return -math.log(0.25) * agility * mass / 1_000_000
 
 
-def _slots(attributes):
-    """The slot layout as the fitting window writes it: 3H 3M 4L 3R."""
+def _slots(attributes, has_subsystems):
+    """The slot layout as the fitting window writes it: 3H 3M 4L 3R.
+
+    A hull with subsystems holds no high, mid or low slot of its own, so its
+    zeros state nothing. They are dropped, and the rig slots remain.
+    """
     counts = {key: attributes.get(name) for key, name in SLOT_ATTRIBUTES}
     # A few hulls carry no upgradeSlotsLeft, and the older rigSlots instead.
     counts["R"] = counts["R"] if counts["R"] is not None else attributes.get("rigSlots")
-    return " ".join(f"{int(counts[key] or 0)}{key}" for key, _ in SLOT_ATTRIBUTES)
+    parts = [(key, int(counts[key] or 0)) for key, _ in SLOT_ATTRIBUTES]
+    if has_subsystems:
+        parts = [(key, count) for key, count in parts if count]
+    return " ".join(f"{count}{key}" for key, count in parts)
 
 
 def _short_isk(value):
@@ -698,10 +726,101 @@ def _bonus_line(row, units):
             "text": _TAG.sub("", row["bonus_text"]).strip()}
 
 
-def _traits(type_id, role_bonuses, misc_bonuses, skill_bonuses, units):
-    """The trait blocks of one hull: the skill blocks first, then role and misc."""
-    blocks = [{"name": name, "lines": [_bonus_line(row, units) for row in rows]}
-              for name, rows in skill_bonuses.get(type_id, [])]
+def _subsystem_fitting(attributes):
+    """What one subsystem brings: `1M 3L`, or `7H`, `5 launcher`, `40m3/40 dr`.
+
+    The hardpoints run from the larger count down, because the count is what
+    tells two offensive subsystems apart.
+    """
+    slots = " ".join(f"{int(attributes[name])}{key}"
+                     for key, name in SUBSYSTEM_SLOTS if attributes.get(name))
+    hardpoints = sorted(((int(attributes[name]), label)
+                         for label, name in SUBSYSTEM_HARDPOINTS if attributes.get(name)),
+                        key=lambda pair: -pair[0])
+    return [part for part in (slots, *(f"{count} {label}" for count, label in hardpoints),
+                              _drones(attributes)) if part]
+
+
+def _drops_into_fitting(line):
+    """True for a role line the subsystem fitting line already states."""
+    if line["value"]:
+        return False
+    return (line["text"] == SUBSYSTEM_STAT_HEADING
+            or bool(SUBSYSTEM_FITTING_LINE.search(line["text"])))
+
+
+def _subsystem(type_id, names, attributes, role_bonuses, skill_rows, units):
+    """One subsystem entry: its own name, what it fits, and what it grants."""
+    head, separator, tail = names.get(type_id, "").partition(" - ")
+    role_lines = [line for line in (_bonus_line(row, units)
+                                    for row in role_bonuses.get(type_id, ()))
+                  if not _drops_into_fitting(line)]
+    groups = [{"label": label, "lines": lines} for label, lines in
+              (("Role", role_lines),
+               ("Per skill level", [_bonus_line(row, units) for row in skill_rows]))
+              if lines]
+    return {
+        # `Loki Core - Augmented Nuclear Reactor`: the hull and the slot are
+        # already named by the card and by the block the subsystem sits in.
+        "name": tail if separator else head,
+        "fitting": _subsystem_fitting(attributes.get(type_id, {})),
+        "groups": groups,
+    }
+
+
+def _subsystem_blocks(subsystems, attributes, units):
+    """The subsystems of each hull, as {hull id: {skill name: [subsystem]}}.
+
+    The skill name is the key, because it is what the hull's own trait block is
+    called: the block and the subsystem resolve the same skill id, so their
+    names match whenever the ids do.
+
+    A subsystem the sde gives no per-skill bonus block has no block to sit
+    under, and drops out. Its hull then keeps the trait line the sde gives it.
+    """
+    subsystem_ids = [type_id for ids in subsystems.values() for type_id in ids]
+    if not subsystem_ids:
+        return {}
+    names = dict(Type.objects.filter(type_id__in=subsystem_ids)
+                 .values_list("type_id", "name"))
+    role_bonuses = _grouped_bonuses(TypeBonusRoleBonus, subsystem_ids)
+    skill_bonuses = _skill_bonuses(subsystem_ids)
+    blocks = {}
+    for hull_id, ids in subsystems.items():
+        by_skill = {}
+        # The sde states no order for the subsystems of a hull, so the type id
+        # is the order, and it holds from one render to the next.
+        for type_id in sorted(ids):
+            for skill_name, rows in skill_bonuses.get(type_id, ()):
+                by_skill.setdefault(skill_name, []).append(
+                    _subsystem(type_id, names, attributes, role_bonuses, rows, units))
+        blocks[hull_id] = by_skill
+    return blocks
+
+
+def _traits(type_id, role_bonuses, misc_bonuses, skill_bonuses, subsystem_blocks, units):
+    """The trait blocks of one hull: the skill blocks first, then role and misc.
+
+    A skill block the page holds subsystems for shows those subsystems in place
+    of its own line, which reads `bonus to all Minmatar Core Systems
+    effectiveness` and states nothing. Every other block keeps its lines.
+    """
+    blocks = []
+    for name, rows in skill_bonuses.get(type_id, []):
+        subsystems = subsystem_blocks.get(type_id, {}).get(name)
+        if subsystems:
+            blocks.append({"name": name, "subsystems": subsystems})
+        else:
+            blocks.append({"name": name,
+                           "lines": [_bonus_line(row, units) for row in rows]})
+    # The sde orders the subsystem blocks of one hull differently from the next.
+    # A block name carries the faction and then the slot, so sorting the names
+    # reads core, defensive, offensive, propulsion on every card. The blocks
+    # keep the places the sde gives them, so no other block moves.
+    places = [index for index, block in enumerate(blocks) if "subsystems" in block]
+    for index, block in zip(places, sorted((blocks[place] for place in places),
+                                           key=lambda block: block["name"])):
+        blocks[index] = block
     for name, source in (("Role bonus", role_bonuses), ("Misc bonus", misc_bonuses)):
         rows = source.get(type_id)
         if rows:
@@ -709,22 +828,31 @@ def _traits(type_id, role_bonuses, misc_bonuses, skill_bonuses, units):
     return blocks
 
 
-def _attribute_values(hull_ids):
-    """Every attribute the page shows, per hull, as {type_id: {name: value}}."""
-    names = dict(DogmaAttribute.objects.filter(name__in=ATTRIBUTE_NAMES)
+def _attribute_values(type_ids, attribute_names):
+    """Every attribute the page shows, per type, as {type_id: {name: value}}.
+
+    Hulls and subsystems are read together, because a subsystem's fitting sits
+    in the same table and a second pass would cost a second pair of queries.
+    """
+    names = dict(DogmaAttribute.objects.filter(name__in=attribute_names)
                  .values_list("attribute_id", "name"))
     values = {}
     rows = TypeDogmaAttribute.objects.filter(
-        type_id__in=hull_ids, attribute_id__in=names).values("type_id", "attribute_id", "value")
+        type_id__in=type_ids, attribute_id__in=names).values("type_id", "attribute_id", "value")
     for row in rows:
         values.setdefault(row["type_id"], {})[names[row["attribute_id"]]] = row["value"]
     return values
 
 
-def _grouped_bonuses(model, hull_ids):
-    """The bonus rows of one table, per hull, most important line first."""
-    rows = model.objects.filter(type_id__in=hull_ids).order_by(
-        "type_id", "-importance", "ordinal").values(
+def _grouped_bonuses(model, type_ids):
+    """The bonus rows of one table, per type, most important line first.
+
+    Importance 1 is the headline bonus, so the order is ascending: the game
+    lists a hull's bonuses that way round. A subsystem carries the same rows,
+    so it reads them here too.
+    """
+    rows = model.objects.filter(type_id__in=type_ids).order_by(
+        "type_id", "importance", "ordinal").values(
         "type_id", "bonus", "bonus_text", "unit_id")
     grouped = {}
     for row in rows:
@@ -732,22 +860,22 @@ def _grouped_bonuses(model, hull_ids):
     return grouped
 
 
-def _skill_bonuses(hull_ids):
-    """The per-skill bonus blocks, per hull, as [(skill name, [rows])].
+def _skill_bonuses(type_ids):
+    """The per-skill bonus blocks, per type, as [(skill name, [rows])].
 
     The skill is a type id with no foreign key behind it, and the upstream data
     can dangle, so an id that resolves to no type keeps its block under a
     placeholder name rather than dropping the bonus.
     """
-    blocks = list(TypeBonusSkill.objects.filter(type_id__in=hull_ids)
+    blocks = list(TypeBonusSkill.objects.filter(type_id__in=type_ids)
                   .order_by("type_id", "ordinal")
                   .values("type_id", "ordinal", "skill_type_id"))
     skill_names = dict(
         Type.objects.filter(type_id__in={block["skill_type_id"] for block in blocks})
         .values_list("type_id", "name"))
     lines = {}
-    rows = TypeBonusSkillBonus.objects.filter(type_id__in=hull_ids).order_by(
-        "type_id", "ordinal", "-importance", "sub_ordinal").values(
+    rows = TypeBonusSkillBonus.objects.filter(type_id__in=type_ids).order_by(
+        "type_id", "ordinal", "importance", "sub_ordinal").values(
         "type_id", "ordinal", "bonus", "bonus_text", "unit_id")
     for row in rows:
         lines.setdefault((row["type_id"], row["ordinal"]), []).append(row)
@@ -768,7 +896,7 @@ def _anchor(*parts):
 def get_hull_page(price_lookup=None, hull_filter=None):
     """Every published hull the filter keeps, grouped size, then tier, then class.
 
-    A fixed number of queries, whatever the hull count: twenty-five reads of the sde
+    A fixed number of queries, whatever the hull count: thirty-one reads of the sde
     schema, assembled in Python. The taxonomy above sets the running order; the
     sde only says which hulls exist and what their figures are.
 
@@ -788,11 +916,15 @@ def get_hull_page(price_lookup=None, hull_filter=None):
                  .values("type_id", "name", "faction_id", "mass", "capacity"))
     units = dict(DogmaUnit.objects.values_list("unit_id", "display_name"))
     hull_ids = [hull["type_id"] for hull in hulls]
-    attributes = _attribute_values(hull_ids)
+    subsystems = hull_bonuses.subsystems_by_hull(hull_ids)
+    attributes = _attribute_values(
+        hull_ids + [type_id for ids in subsystems.values() for type_id in ids],
+        ATTRIBUTE_NAMES | SUBSYSTEM_ATTRIBUTE_NAMES)
     role_bonuses = _grouped_bonuses(TypeBonusRoleBonus, hull_ids)
     misc_bonuses = _grouped_bonuses(TypeBonusMiscBonus, hull_ids)
     skill_bonuses = _skill_bonuses(hull_ids)
-    tags = hull_bonuses.classify(hull_ids, attributes)
+    subsystem_blocks = _subsystem_blocks(subsystems, attributes, units)
+    tags = hull_bonuses.classify(hull_ids, attributes, subsystems)
 
     cards = {}
     for hull in hulls:
@@ -802,13 +934,14 @@ def get_hull_page(price_lookup=None, hull_filter=None):
             "type_id": type_id,
             "name": hull["name"],
             "faction": FACTION_KEYS.get(hull["faction_id"], ""),
-            "slots": _slots(hull_attributes),
+            "slots": _slots(hull_attributes, type_id in subsystems),
             "hardpoints": [f'{int(hull_attributes[name])} {label}'
                            for label, name in HARDPOINTS if hull_attributes.get(name)],
             "drones": _drones(hull_attributes),
             "stats": _stats(hull, hull_attributes),
             "resists": _resists(hull_attributes),
-            "traits": _traits(type_id, role_bonuses, misc_bonuses, skill_bonuses, units),
+            "traits": _traits(type_id, role_bonuses, misc_bonuses, skill_bonuses,
+                              subsystem_blocks, units),
         }
 
     hull_filter = hull_filter or HullFilter()
