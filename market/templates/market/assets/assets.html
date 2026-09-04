@@ -10,15 +10,25 @@
 
 {% block js %}
 <script src="{% static 'market/js/asset_filters.js' %}"></script>
+<script src="{% static 'market/js/history_dialog.js' %}"></script>
 {% endblock %}
 
 {% block content %}
 <h1>Assets</h1>
 
-{% comment %}No form and no submit: the whole table is on the page, so both
-filters run in the browser.
+{% comment %}Only the container select submits: it names what the server has to
+price. The other controls carry no name attribute, so they never reach the URL,
+and they filter the rendered rows in the browser.
 {% endcomment %}
-<div id="asset-filters">
+<form id="asset-filters" method="GET" action="{% url 'market_assets' %}">
+  <label for="container">Container</label>
+  <select id="container" name="container">
+    <option value="">all assets</option>
+    {% for option in containers %}
+    <option value="{{ option.item_id }}"{% if option.item_id == container.item_id %} selected{% endif %}>{{ option.label }}</option>
+    {% endfor %}
+  </select>
+  {% if not container %}
   <label for="owner">Owner</label>
   <select id="owner">
     <option value="">all owners</option>
@@ -33,13 +43,21 @@ filters run in the browser.
     <option value="{{ option }}">{{ option }}</option>
     {% endfor %}
   </select>
+  {% endif %}
   <label for="item">Item</label>
   <input type="search" id="item" placeholder="item name">
   <span id="asset-count"></span>
-</div>
+</form>
+
+{% if container_error %}
+<p class="warning">that container is gone: it was emptied, renamed or moved out of a trade hub.</p>
+{% endif %}
 
 <br>
 
+{% if container %}
+{% include "market/assets/_appraisal.html" %}
+{% else %}
 <table id="assets" class="market sticky-head" style="width: auto;">
   <thead>
     <tr>
@@ -73,4 +91,5 @@ filters run in the browser.
     {% endfor %}
   </tbody>
 </table>
+{% endif %}
 {% endblock %}

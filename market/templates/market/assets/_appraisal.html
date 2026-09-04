@@ -1,0 +1,82 @@
+{% load custom_filters item_tags %}
+
+{% comment %}The priced contents of one container. The prices are asymmetric on
+purpose: a bid counts when its order reaches the hub, an ask only in the hub
+station itself. The level columns describe the local hub alone; the reference
+hub is summarised by the one ref column.
+{% endcomment %}
+<p class="appraisal-note">
+  {{ totals.rows }} item{{ totals.rows|pluralize }} in {{ container.label }}.
+  {% if totals.unpriced %}{{ totals.unpriced }} of them have no order in either hub.{% endif %}
+</p>
+
+<table id="assets" class="market sticky-head" style="width: auto;">
+  <thead>
+    <tr>
+      <th colspan="2"></th>
+      <th colspan="2">{{ hub.name }}</th>
+      <th colspan="2">{{ reference_hub.name }}</th>
+      <th></th>
+      <th colspan="2">180d chart</th>
+      <th colspan="3">level in {{ hub.name }}</th>
+      <th></th>
+      <th colspan="2">value</th>
+    </tr>
+    <tr>
+      <th>item</th>
+      <th>qty</th>
+      <th>bid</th>
+      <th>ask</th>
+      <th>bid</th>
+      <th>ask</th>
+      <th>ref</th>
+      <th>{{ hub.name }}</th>
+      <th>{{ reference_hub.name }}</th>
+      <th>7d</th>
+      <th>180d</th>
+      <th>pct</th>
+      <th>last paid</th>
+      <th>dump</th>
+      <th>list</th>
+    </tr>
+  </thead>
+  <tbody>
+    {% for row in rows %}
+    <tr data-type-id="{{ row.type_id }}">
+      <td class="text item">{% item_name row.type_id row.item region_id=hub.region_id %}</td>
+      <td>{{ row.quantity }}</td>
+      <td>{{ row.bid|isk_value_blank }}</td>
+      <td{% if row.flag %} class="{{ row.flag }}"{% endif %}>{{ row.ask|isk_value_blank }}</td>
+      <td>{{ row.reference_bid|isk_value_blank }}</td>
+      <td>{{ row.reference_ask|isk_value_blank }}</td>
+      <td>{{ row.reference_delta|pct_value }}</td>
+      {% comment %}peity takes the stroke as an option, so no stylesheet can
+      reach it. A light stroke reads on either theme.
+      {% endcomment %}
+      <td class="chart"{% if row.chart %} title="low {{ row.chart.low|isk_value }}, high {{ row.chart.high|isk_value }} ({{ row.chart.weeks }} weeks)"{% endif %}>
+        {% if row.chart %}<span class="chart-values" data-peity='{"height":24,"width":100,"fill":false,"stroke":"lightskyblue"}'>{{ row.chart.values }}</span>{% endif %}
+      </td>
+      <td class="chart"{% if row.reference_chart %} title="low {{ row.reference_chart.low|isk_value }}, high {{ row.reference_chart.high|isk_value }} ({{ row.reference_chart.weeks }} weeks)"{% endif %}>
+        {% if row.reference_chart %}<span class="chart-values" data-peity='{"height":24,"width":100,"fill":false,"stroke":"lightskyblue"}'>{{ row.reference_chart.values }}</span>{% endif %}
+      </td>
+      <td>{{ row.short_ratio|pct_value }}</td>
+      <td>{{ row.median_ratio|pct_value }}</td>
+      <td>{{ row.percentile|floatformat:0 }}</td>
+      <td class="history-last-price"{% if row.last_paid_date %} title="{{ row.last_paid_date|date:'Y-m-d' }}"{% endif %}>
+        {% if row.last_paid %}<a href="#">{{ row.last_paid|isk_value }}</a>{% endif %}
+      </td>
+      <td>{{ row.dump_value|isk_value_blank }}</td>
+      <td>{{ row.list_value|isk_value_blank }}</td>
+    </tr>
+    {% empty %}
+    <tr><td colspan="15">this container is empty</td></tr>
+    {% endfor %}
+  </tbody>
+  <tfoot>
+    <tr>
+      <th colspan="13">total</th>
+      <th>{{ totals.dump_value|isk_value }}</th>
+      <th>{{ totals.list_value|isk_value }}</th>
+    </tr>
+  </tfoot>
+</table>

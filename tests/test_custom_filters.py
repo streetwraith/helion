@@ -4,7 +4,8 @@ from decimal import Decimal
 import pytest
 from django.utils import timezone
 
-from market.templatetags.custom_filters import isk_value, since_dhms, until_dhms
+from market.templatetags.custom_filters import (
+    isk_value, pct_value, since_dhms, until_dhms)
 
 
 @pytest.mark.parametrize("value, expected", [
@@ -65,3 +66,19 @@ def test_until_dhms_names_an_order_past_its_expiry(now):
 @pytest.mark.parametrize("filter_function", [since_dhms, until_dhms])
 def test_the_duration_filters_render_nothing_for_no_value(filter_function):
     assert filter_function(None) == ""
+
+
+@pytest.mark.parametrize("value, expected", [
+    (31.4, "+31%"),
+    (0.0, "+0%"),
+    (-8.6, "-9%"),
+    (1234.5, "+1,234%"),
+])
+def test_pct_value_signs_every_distance(value, expected):
+    assert pct_value(value) == expected
+
+
+def test_pct_value_leaves_an_unknown_distance_empty():
+    """Empty, not zero: no median to compare against is a different statement
+    from level with the median."""
+    assert pct_value(None) == ''

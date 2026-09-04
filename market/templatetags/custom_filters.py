@@ -80,6 +80,14 @@ def isk_value_blank(value):
         return ''
     return isk_value(value)
 
+@register.filter(name='pct_value')
+def pct_value(value):
+    """A distance from a reference, in percent, signed. An unknown value stays
+    empty: "no median to compare against" is not "level with the median"."""
+    if value is None:
+        return ''
+    return "{:+,.0f}%".format(value)
+
 @register.filter(name='isk_value_k')
 def isk_value_k(value):
     if(value == 0 or value == None or isinstance(value, dict) or value == ''):

@@ -7,3 +7,15 @@
 #asset-count {
     margin-left: 1em;
 }
+
+/* The sparklines sit in the middle of the row, where the numbers on both sides
+   are right-aligned. */
+#assets td.chart {
+    text-align: center;
+    padding: 0 0.5em;
+}
+
+.appraisal-note {
+    margin: 0 0 0.5em 0;
+    font-size: 80%;
+}

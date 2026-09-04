@@ -990,6 +990,56 @@ Six queries answer the page, whatever the characters hold: the rows, the type da
 groups, the categories, the station names and the token names. A player structure or a
 ship in space adds one each.
 
+### The container appraisal
+
+`/market/assets?container=<item_id>` renders the same page in a second mode: one container,
+priced. The dropdown offers every named container that sits directly in the hangar of a trade
+hub, which is the four container groups (12, 340, 448, 649) — never a ship, and never a
+container inside one. The label carries the hub, because the same name sits in two hubs. An
+unnamed container drops out, since the reader cannot tell two of them apart.
+
+The mode replaces the table rather than extending it. The owner and category dropdowns leave
+with it, because a container has one owner, and the item box keeps filtering in the browser.
+Only the container select submits, so the URL names what the page shows. A parameter that names
+no container renders the full table and says so: a container gets emptied or renamed, and an old
+link must answer with the page rather than with an error.
+
+- **One row per type.** The price is per type, so the 127 blueprint copies of one container are
+  59 rows. A type the market cannot price keeps its row and empty cells, and the footer counts
+  those rows.
+- **The two price sides are asymmetric, because `orders_hub` already is.** The ask is the
+  cheapest sell in the hub station. The bid is the best buy order whose range reaches the hub.
+  That pair is what you can act on standing in that station.
+- **The second hub is Jita, or Amarr when the container sits in Jita.** It carries its own bid,
+  ask and sparkline, plus one `ref` column: how far its ask stands above the local ask.
+- **The sparklines draw 26 weekly means, not 180 daily prices.** Postgres averages the buckets.
+  A peity sparkline is about 100 px wide, so 180 points sit two to a pixel and read as noise. A
+  week without a trade draws no point, because repeating the week before would draw a price that
+  nobody paid.
+- **Every window anchors on the newest history row, and the page reads that anchor first.** A
+  date the planner cannot see as a constant costs it the partition pruning of `market.history`:
+  the level and chart queries took 4.4 s with the anchor as a joined CTE and 0.5 s with it as a
+  parameter. The anchor itself is one `max(date)` per region, because a `GROUP BY region_id`
+  cannot walk the index backwards and stop at the first row (1.4 s against 10 ms).
+- **The level columns describe the local hub only.** `7d` compares the live ask against the mean
+  of the last seven daily averages, `180d` against the 180 day median, and `pct` ranks the newest
+  daily average inside that window. All three stay empty under `MEDIAN_MIN_DAYS` priced days,
+  which is the rule the history service already applies.
+- **The ask stands above the traded average, so both ratios carry a bias, and the bias is not
+  constant.** On the current data the median `180d` ratio is +28% for a loot container and +79%
+  for a SKIN container: over a thin book the gap measures the spread as much as the price level.
+  The green flag (an ask at or above 1.10 x the median) therefore fires on 98 of 160 loot rows
+  and on 176 of 229 SKIN rows. `pct` compares one measure with itself over time and carries no
+  such bias, so it is the column that discriminates.
+- **`last paid` is the newest buy of the type, from any wallet and any station**, and the cell
+  opens the shared transaction dialog. Loot carries none, which is the normal case.
+- **The value columns are the two questions.** `dump` is the quantity times the bid, `list` is
+  the quantity times the ask, and the footer sums both over the rows that carry a price.
+
+Ten queries answer the mode: the contents, the reference hub, one anchor and one chart per
+region, the orders, the levels, the last buys and the type names. The dropdown costs three more.
+The heaviest container on the current data, 229 types, renders in 0.27 s.
+
 ## The hauling scans
 
 Two pages, two algorithms, one `MarketDeal` row type. Both buy the source hub's sell orders; they
