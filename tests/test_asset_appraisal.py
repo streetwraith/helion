@@ -263,9 +263,18 @@ class TestLevels:
         assert row['short_ratio'] == pytest.approx(0.0)
 
     def test_the_percentile_ranks_the_newest_day_in_the_window(self, loot):
+        # Rising to a new high: 39 of the 40 days sit strictly below the newest,
+        # and the newest ties itself, so the midpoint rank is (39 + 40) / 80.
         add_history_days(TRITANIUM, [float(day) for day in range(1, 41)])
 
-        assert row_of(appraise(loot), "Tritanium")['percentile'] == pytest.approx(100.0)
+        assert row_of(appraise(loot), "Tritanium")['percentile'] == pytest.approx(98.75)
+
+    def test_a_price_that_never_moved_ranks_in_the_middle(self, loot):
+        # Every day ties, so the midpoint splits them. Counting the ties whole
+        # would rank an unmoved price at the top of its own range.
+        add_history_days(TRITANIUM, [10.0] * 40)
+
+        assert row_of(appraise(loot), "Tritanium")['percentile'] == pytest.approx(50.0)
 
     def test_a_thin_history_gets_no_level_at_all(self, loot):
         add_history_days(TRITANIUM, [10.0] * 29)
@@ -291,23 +300,44 @@ class TestLevels:
 
 
 class TestFlag:
-    def test_an_ask_well_above_the_median_reads_green(self, loot):
-        add_history_days(TRITANIUM, [10.0] * 40)
-        add_order(1, TRITANIUM, 11.0)
+    def test_a_price_near_its_own_high_reads_green(self, loot):
+        add_history_days(TRITANIUM, [float(day) for day in range(1, 41)])
+        add_order(1, TRITANIUM, 40.0)
 
         assert row_of(appraise(loot), "Tritanium")['flag'] == 'green'
 
-    def test_an_ask_well_below_the_median_reads_red(self, loot):
-        add_history_days(TRITANIUM, [10.0] * 40)
-        add_order(1, TRITANIUM, 9.0)
+    def test_a_price_near_its_own_low_reads_red(self, loot):
+        add_history_days(TRITANIUM, [float(day) for day in range(40, 0, -1)])
+        add_order(1, TRITANIUM, 1.0)
 
         assert row_of(appraise(loot), "Tritanium")['flag'] == 'red'
 
-    def test_an_ask_inside_the_band_reads_plain(self, loot):
+    def test_a_price_in_the_middle_of_its_range_reads_plain(self, loot):
         add_history_days(TRITANIUM, [10.0] * 40)
-        add_order(1, TRITANIUM, 10.5)
+        add_order(1, TRITANIUM, 10.0)
 
         assert row_of(appraise(loot), "Tritanium")['flag'] == ''
+
+    def test_the_ask_still_gates_the_colour(self, loot):
+        # The item stands at its own high, but nobody sells it in this hub: a
+        # level you cannot sell into is not an opportunity.
+        add_history_days(TRITANIUM, [float(day) for day in range(1, 41)])
+
+        row = row_of(appraise(loot), "Tritanium")
+
+        assert row['percentile'] == pytest.approx(98.75)
+        assert row['flag'] == ''
+
+    def test_a_high_ask_over_a_falling_price_still_reads_red(self, loot):
+        # The ask stands far above the median, which the old rule painted green.
+        # The item is nonetheless at the bottom of its own six months.
+        add_history_days(TRITANIUM, [float(day) for day in range(40, 0, -1)])
+        add_order(1, TRITANIUM, 100.0)
+
+        row = row_of(appraise(loot), "Tritanium")
+
+        assert row['median_ratio'] > 100
+        assert row['flag'] == 'red'
 
 
 class TestChart:
@@ -414,16 +444,16 @@ class TestValues:
 
 class TestPage:
     def test_the_page_prices_the_container_the_url_names(self, auth_client, loot):
-        add_history_days(TRITANIUM, [10.0] * 40)
-        add_order(1, TRITANIUM, 11.0)
-        add_order(2, TRITANIUM, 9.0, is_buy=True)
+        add_history_days(TRITANIUM, [float(day) for day in range(1, 41)])
+        add_order(1, TRITANIUM, 41.0)
+        add_order(2, TRITANIUM, 39.0, is_buy=True)
 
         content = auth_client.get(
             f"/market/assets?container={loot.item_id}").content.decode()
 
         assert "Tritanium" in content
         assert "level in Amarr" in content
-        assert 'class="green"' in content  # the ask stands above the median
+        assert 'class="green"' in content  # the price stands at its own high
         assert "in loot - Amarr (Ummae)" in content
 
     def test_no_container_renders_the_full_table(self, auth_client, loot):

@@ -1036,12 +1036,18 @@ link must answer with the page rather than with an error.
   of the last seven daily averages, `180d` against the 180 day median, and `pct` ranks the newest
   daily average inside that window. All three stay empty under `MEDIAN_MIN_DAYS` priced days,
   which is the rule the history service already applies.
-- **The ask stands above the traded average, so both ratios carry a bias, and the bias is not
-  constant.** On the current data the median `180d` ratio is +28% for a loot container and +79%
-  for a SKIN container: over a thin book the gap measures the spread as much as the price level.
-  The green flag (an ask at or above 1.10 x the median) therefore fires on 98 of 160 loot rows
-  and on 176 of 229 SKIN rows. `pct` compares one measure with itself over time and carries no
-  such bias, so it is the column that discriminates.
+- **`pct` colours the ask cell, and the two ratios deliberately do not.** An ask stands above the
+  traded average by a gap that is item-specific and often larger than any threshold worth
+  setting: on the current data the median `180d` ratio is +28% for a loot container and +79% for
+  a SKIN container, because over a thin book that gap measures the spread as much as the price
+  level. A flag built on it painted 98 of 160 loot rows and 176 of 229 SKIN rows green, which
+  ranks nothing. `pct` compares one measure with itself over time and carries no such bias, so
+  the colour reads green at `HIGH_PERCENTILE` and red at `LOW_PERCENTILE` (80 and 20): 38 green
+  and 21 red of the 160 loot rows, 48 and 43 of the 229 SKIN rows. A missing ask still leaves the
+  cell plain, because a level you cannot sell into is not an opportunity.
+- **`pct` splits a tie instead of counting it whole.** The rank is the midpoint of the days
+  strictly below the newest and the days at or below it. A price that never moved then ranks 50,
+  where the inclusive count alone would rank it 100 and paint every unmoved item green.
 - **`last paid` is the newest buy of the type, from any wallet and any station**, and the cell
   opens the shared transaction dialog. Loot carries none, which is the normal case.
 - **The value columns are the two questions.** `dump` is the quantity times the bid, `list` is

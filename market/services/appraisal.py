@@ -32,9 +32,10 @@ HISTORY_DAYS = 180
 CHART_BUCKET_DAYS = 7
 # The window the short ratio compares the live ask against.
 SHORT_WINDOW_DAYS = 7
-# The ask reads as high or as low at these multiples of the 180 day median.
-HIGH_RATIO = 1.10
-LOW_RATIO = 0.90
+# Where the newest daily average has to rank inside its own 180 day window for
+# the item to read as dear or as cheap.
+HIGH_PERCENTILE = 80
+LOW_PERCENTILE = 20
 
 
 @dataclass(frozen=True)
@@ -206,7 +207,12 @@ SELECT p.type_id,
        count(*) AS priced_days,
        percentile_cont(0.5) WITHIN GROUP (ORDER BY p.average) AS median_average,
        avg(p.average) FILTER (WHERE p.date > %s) AS short_average,
-       100.0 * count(*) FILTER (WHERE p.average <= n.average) / count(*)
+       -- The midpoint of the days below and the days at or below, so a tie
+       -- splits instead of counting whole. A price that never moved then ranks
+       -- 50 rather than 100, which is what "no move" means; the strict count
+       -- alone would rank it 0 and the inclusive count 100.
+       50.0 * (count(*) FILTER (WHERE p.average < n.average)
+               + count(*) FILTER (WHERE p.average <= n.average)) / count(*)
            AS percentile
 FROM priced p JOIN newest n USING (type_id)
 GROUP BY p.type_id, n.average
@@ -311,7 +317,7 @@ def _row(type_id, quantity, names, prices, levels, charts, paid, hub,
         'short_ratio': _ratio(ask, level.get('short')),
         'median_ratio': _ratio(ask, level.get('median')),
         'percentile': level.get('percentile'),
-        'flag': _flag(ask, level.get('median')),
+        'flag': _flag(ask, level.get('percentile')),
         'last_paid': price,
         'last_paid_date': moment,
         'dump_value': None if bid is None else bid * quantity,
@@ -327,13 +333,25 @@ def _ratio(value, base):
     return (value - base) / base * 100
 
 
-def _flag(ask, median):
-    """The colour of the ask cell against the 180 day median."""
-    if ask is None or not median:
+def _flag(ask, percentile):
+    """The colour of the ask cell, from where the newest daily average ranks in
+    its own 180 day window.
+
+    The ratio columns cannot carry this. An ask stands above the traded average
+    by a gap that is item-specific and often larger than any threshold worth
+    setting, so the ask against the median measures the spread of a thin book as
+    much as the price level: it painted 98 of 160 loot rows and 176 of 229 SKIN
+    rows green. The percentile compares one measure with itself over time and
+    carries no such bias.
+
+    The ask still gates the colour, because a level you cannot sell into is not
+    an opportunity.
+    """
+    if ask is None or percentile is None:
         return ''
-    if ask >= median * HIGH_RATIO:
+    if percentile >= HIGH_PERCENTILE:
         return 'green'
-    if ask <= median * LOW_RATIO:
+    if percentile <= LOW_PERCENTILE:
         return 'red'
     return ''
 
