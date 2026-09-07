@@ -6,7 +6,7 @@ import pytest
 from django.utils import timezone
 
 from evesde.models import Type
-from market.models import CharacterAsset, MarketTransaction
+from market.models import CharacterAsset, EveName, MarketTransaction
 from market.services import appraisal
 from marketdata.models import History, Order
 
@@ -74,6 +74,7 @@ def types(db):
     add_type(SHIP, "Sunesis", group_id=420)
     add_type(TRITANIUM, "Tritanium")
     add_type(DATACORE, "Datacore - Nanite Engineering")
+    EveName.objects.create(entity_id=CHARACTER, name="Ummae", category="character")
 
 
 @pytest.fixture
@@ -94,13 +95,13 @@ def row_of(result, item):
 
 
 class TestContainerOptions:
-    def test_a_named_container_in_a_hub_is_offered_with_its_hub(self, types,
-                                                                trade_hubs):
+    def test_a_named_container_reads_its_hub_and_its_owner(self, types,
+                                                           trade_hubs):
         add_asset(1, CONTAINER, name="loot")
 
         options = appraisal.hub_containers()
 
-        assert [option.label for option in options] == ["loot - Amarr"]
+        assert [option.label for option in options] == ["loot - Amarr (Ummae)"]
 
     def test_the_same_name_in_two_hubs_stays_apart(self, types, trade_hubs):
         add_asset(1, CONTAINER, name="loot")
@@ -108,7 +109,28 @@ class TestContainerOptions:
 
         options = appraisal.hub_containers()
 
-        assert [option.label for option in options] == ["loot - Amarr", "loot - Jita"]
+        assert [option.label for option in options] == [
+            "loot - Amarr (Ummae)", "loot - Jita (Ummae)"]
+
+    def test_two_owners_naming_one_container_alike_stay_apart(self, types,
+                                                              trade_hubs):
+        EveName.objects.create(entity_id=CORPORATION, name="Silk Road",
+                               category="corporation")
+        add_asset(1, CONTAINER, name="loot")
+        add_asset(2, CONTAINER, name="loot", character_id=None,
+                  corporation_id=CORPORATION)
+
+        options = appraisal.hub_containers()
+
+        assert [option.label for option in options] == [
+            "loot - Amarr (Silk Road)", "loot - Amarr (Ummae)"]
+
+    def test_an_owner_with_no_name_falls_back_to_its_id(self, types, trade_hubs):
+        add_asset(1, CONTAINER, name="loot", character_id=902222)
+
+        options = appraisal.hub_containers()
+
+        assert [option.label for option in options] == ["loot - Amarr (902222)"]
 
     def test_a_container_outside_a_trade_hub_is_not_offered(self, types, trade_hubs):
         add_asset(1, CONTAINER, name="loot", location_id=NON_HUB_STATION)
@@ -402,12 +424,12 @@ class TestPage:
         assert "Tritanium" in content
         assert "level in Amarr" in content
         assert 'class="green"' in content  # the ask stands above the median
-        assert "in loot - Amarr" in content
+        assert "in loot - Amarr (Ummae)" in content
 
     def test_no_container_renders_the_full_table(self, auth_client, loot):
         content = auth_client.get("/market/assets").content.decode()
 
-        assert '<option value="1">loot - Amarr</option>' in content
+        assert '<option value="1">loot - Amarr (Ummae)</option>' in content
         assert "<th>location</th>" in content
         assert "level in Amarr" not in content
 

@@ -18,6 +18,7 @@ from evesde.models import Type
 from market.constants import REGION_ID_DOMAIN, REGION_ID_FORGE
 from market.models import CharacterAsset, MarketTransaction, TradeHub
 from market.services.history import MEDIAN_MIN_DAYS
+from market.services.names import owner_labels
 from marketdata.models import History, OrdersHub
 
 # The container groups a player can carry or anchor: Cargo Container, Secure
@@ -42,12 +43,14 @@ class Container:
     item_id: int
     name: str
     hub: TradeHub
+    owner: str
 
     @property
     def label(self):
-        # The hub belongs in the label: the same name sits in two hubs, and the
-        # dropdown would then offer the same word twice.
-        return f'{self.name} - {self.hub.name}'
+        # The hub and the owner both belong in the label: one owner names the
+        # same container in two hubs, and two owners name it in one. The owner
+        # reads as a qualifier, which is what the parentheses say elsewhere.
+        return f'{self.name} - {self.hub.name} ({self.owner})'
 
 
 def hub_containers():
@@ -66,9 +69,13 @@ def hub_containers():
         Type.objects.filter(type_id__in={row.type_id for row in rows},
                             group_id__in=CONTAINER_GROUP_IDS)
         .values_list('type_id', flat=True))
-    containers = [Container(item_id=row.item_id, name=row.name,
-                            hub=hubs[row.location_id])
-                  for row in rows if row.type_id in container_types]
+    # A row carries one owner or the other, never both, as everywhere else.
+    owners = owner_labels({row.corporation_id or row.character_id for row in rows})
+    containers = [
+        Container(item_id=row.item_id, name=row.name, hub=hubs[row.location_id],
+                  owner=owners.get(row.corporation_id or row.character_id, ''))
+        for row in rows if row.type_id in container_types]
+    # The name leads, so the same container in two hubs still reads as a pair.
     return sorted(containers, key=lambda container: container.label.lower())
 
 

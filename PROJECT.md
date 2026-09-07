@@ -995,8 +995,19 @@ ship in space adds one each.
 `/market/assets?container=<item_id>` renders the same page in a second mode: one container,
 priced. The dropdown offers every named container that sits directly in the hangar of a trade
 hub, which is the four container groups (12, 340, 448, 649) — never a ship, and never a
-container inside one. The label carries the hub, because the same name sits in two hubs. An
-unnamed container drops out, since the reader cannot tell two of them apart.
+container inside one. An unnamed container drops out, since the reader cannot tell two of them
+apart.
+
+The label reads `loot - Amarr (Ummae)`: the name, the hub, then the owner. One owner names the
+same container in two hubs, and two owners name it alike in one, so neither qualifier is
+optional. The owner resolves through the shared `owner_labels`, so a corporation reads as its
+own name and an id with no name anywhere reads as itself. The list sorts on the whole label, so
+the name still leads and the copies of one container stay adjacent.
+
+A corporation container cannot reach this list yet. ESI hangs a corporation's assets off an
+`OfficeFolder` row, so its containers carry `CorpSAG1`..`CorpSAG7` and a parent item id, not the
+station — the `location_type='station'` filter excludes them by construction. The owner in the
+label is therefore forward-looking for corporations and immediate for a second character.
 
 The mode replaces the table rather than extending it. The owner and category dropdowns leave
 with it, because a container has one owner, and the item box keeps filtering in the browser.
@@ -1037,8 +1048,9 @@ link must answer with the page rather than with an error.
   the quantity times the ask, and the footer sums both over the rows that carry a price.
 
 Ten queries answer the mode: the contents, the reference hub, one anchor and one chart per
-region, the orders, the levels, the last buys and the type names. The dropdown costs three more.
-The heaviest container on the current data, 229 types, renders in 0.27 s.
+region, the orders, the levels, the last buys and the type names. The dropdown costs five more:
+the hubs, the rows, the container types, and the two `owner_labels` reads. The heaviest
+container on the current data, 229 types, renders in 0.27 s.
 
 ## The hauling scans
 
