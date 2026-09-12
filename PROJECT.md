@@ -684,9 +684,15 @@ column now do too.
 
 ## The profit statistics
 
-The wallet table on `/market/` sums four metrics over five rolling windows (0-7, 7-14, 14-21, 21-28
-and 0-28 days, anchored on `now`). `WalletStatistics` owns which rows form which metric; the view
-passes it two querysets already narrowed to the owners that count.
+`/market/` carries two tables of the same shape. The first is headed **overall** and the second
+**flipping**; one template partial renders both. The overall table sums four metrics over eight
+windows anchored on `now`: the weekly slices 0-7, 7-14, 14-21 and 21-28, then 30d, 90d, 365d and
+`full`. The first four do not overlap; the last four count back from now and do. `full` leaves the
+start open and reaches the first stored row. `WalletStatistics` owns which rows form which metric;
+the view passes it two querysets already narrowed to the owners that count.
+
+Each metric costs one aggregate per window, so eight windows cost 40 queries. `WALLET-4` in the
+TODO replaces that loop with one pass, the way `ice_stats` already works.
 
 **Two owner guards, both on the index view.** A row counts only when a **trader** made it and the
 row is **personal**. `TrackedCharacter.is_trader` marks a trader, so an alt that only hauls or runs
@@ -732,6 +738,54 @@ else, `market_escrow` and the mission and bounty rows included, is ignored):
   first. Only `player_donation` and `corporation_account_withdrawal` collide today and neither
   reaches a metric, so the statistics are unaffected. A per-character wallet view would need one row
   per wallet first.
+
+### The flipping table
+
+The second table holds station trading alone: the paired buy and sell transactions, matched oldest
+lot first. The overall table cannot answer that question, because it mixes trading with refining
+and with contracts.
+
+**A pair is a quantity, not a type.** A sell consumes the oldest unmatched buy units of the same
+`type_id`, and only the units that a buy and a sell both cover reach the table. The looser rule -
+count every sell of an item you also buy - was measured and rejected. It reports about four times
+the profit, because it credits refined ice and built goods to trading: 251B against 58B on the
+stored data.
+
+**A pair lands in the window of its sell**, and the cost of the buy travels with it, however old
+that buy is. That is realized profit. Holding both legs inside the window was measured and
+rejected: the median hold is 4.5 days but the tail is long, so only 19.6% of the value sold in a
+week was bought in that same week. The first row is therefore named **cost** and not **buy**. It
+holds what the sold units cost, which is not the ISK that left the wallet in the window.
+
+**The lots pool across the trader characters**, one queue per `type_id`. A separate queue per
+character changed the result by under 1%, and it breaks when one character buys what another sells.
+The two owner guards are the overall table's, unchanged.
+
+**The replay reads every stored transaction.** A sell that finds no lot drops out, and so does
+everything that carries no buy: mined ore, refined ice, built goods, and stock bought before the
+wallet feed started. Stock that is still unsold waits for its sale, so this table never shows ISK
+that sits in inventory.
+
+**The sales tax is measured; the broker fee is not.** A `transaction_tax` row names no item, but it
+shares its exact second with the sales it was charged on. No stored second mixes two characters, so
+one rate applies and the split by value is exact. A `brokers_fee` row carries no `context_id` and
+no `context_id_type`, and EVE charges it when an order is placed or relisted rather than when it
+fills, so it shares a second with nothing. The real fee of the window therefore splits by the
+matched share of the value sold, and the row says "(approx.)". Modelling it at the rate was
+rejected: the real fees run about 37% above `get_brokers_fee()` times the traded value, because a
+relisted order pays again.
+
+**Contracts stay out.** Every contract row lives in the journal, and `CharacterContract` stores no
+item lines, so no courier reward can be tied to an item. Flipping profit is gross of shipping, and
+the tooltip on the heading says so. The courier costs stay in the overall table.
+
+**No start date is pinned.** `TrackedCharacter.is_trader` already sets the range, because the
+earliest trader transaction is the day the trading moved to the current character. A second rule in
+the code would repeat that statement and could later disagree with the flags.
+
+**The fee totals cost no query.** The view passes the memoized `WalletStatistics.brokers_fee` into
+`flipping.build_rows`, so the window sums the overall table already made are reused. The table adds
+two queries: one replay of the transactions and one read of the tax rows.
 
 ## The ice profit block
 

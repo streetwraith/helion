@@ -1,0 +1,25 @@
+{% load custom_filters %}
+<table>
+    <thead>
+        <tr>
+            <th></th>
+            {% for window in windows %}
+            <th>{{ window.0 }}</th>
+            {% endfor %}
+        </tr>
+    </thead>
+    <tbody>
+        {% for row in rows %}
+        <tr>
+            <th>{{ row.label }}</th>
+            {% for cell in row.cells %}
+            {% if row.format == 'percent' %}
+            <td>{{ cell|floatformat:1 }}</td>
+            {% else %}
+            <td>{{ cell|isk_value }}</td>
+            {% endif %}
+            {% endfor %}
+        </tr>
+        {% endfor %}
+    </tbody>
+</table>

@@ -7,30 +7,13 @@
 {% block content %}
 <h1>Market data</h1>
 
-<table>
-    <thead>
-        <tr>
-            <th></th>
-            {% for window in wallet_windows %}
-            <th>{{ window.0 }}-{{ window.1 }}</th>
-            {% endfor %}
-        </tr>
-    </thead>
-    <tbody>
-        {% for row in wallet_table %}
-        <tr>
-            <th>{{ row.label }}</th>
-            {% for cell in row.cells %}
-            {% if row.format == 'percent' %}
-            <td>{{ cell|floatformat:1 }}</td>
-            {% else %}
-            <td>{{ cell|isk_value }}</td>
-            {% endif %}
-            {% endfor %}
-        </tr>
-        {% endfor %}
-    </tbody>
-</table>
+<h2>overall</h2>
+
+{% include "market/_stats_table.html" with windows=wallet_windows rows=wallet_table %}
+
+<h2>flipping <i class="bi bi-info-circle" title="Paired buy and sell transactions only, matched against the oldest lot first. A pair lands in the window of its sell, and the cost of the buy travels with it, however old that buy is. Goods you refined, built or mined carry no buy, so they never reach this table.&#10;&#10;The broker fee is the one approximate figure. No journal row attributes a broker fee to an item, so the real fee splits by the matched share of the value sold. Sales tax is measured, and it splits by the second it was charged in.&#10;&#10;Profit is gross of shipping. A courier contract names no item, so contract costs stay in the overall table."></i></h2>
+
+{% include "market/_stats_table.html" with windows=wallet_windows rows=flip_table %}
 <br>
 <table>
     <thead>

@@ -69,7 +69,14 @@ def test_market_index(auth_client, trade_hubs):
     wallet_table = response.context["wallet_table"]
     assert [row["label"] for row in wallet_table] == [
         "buy", "sell", "taxes", "fees", "profit", "fees/profit"]
-    assert all(len(row["cells"]) == 5 for row in wallet_table)
+    assert all(len(row["cells"]) == 8 for row in wallet_table)
+    # The flipping table repeats the windows with the matched pairs only. Its
+    # first row is named "cost", because it holds what the sold units cost and
+    # not the ISK that left the wallet in the window.
+    flip_table = response.context["flip_table"]
+    assert [row["label"] for row in flip_table] == [
+        "cost", "sell", "taxes", "fees (approx.)", "profit", "fees/profit"]
+    assert all(len(row["cells"]) == 8 for row in flip_table)
 
 
 class TestShoppingList:

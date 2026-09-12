@@ -206,6 +206,24 @@ def get_sales_tax_by_second(seconds):
 def get_average_transaction_price(type_id, days_back=90, is_buy=False):
     return get_average_transaction_price_bulk([type_id], days_back=days_back, is_buy=is_buy)[type_id]
 
+def window_bounds(days_to, days_from):
+    """(start, end) of a statistics window, in UTC.
+
+    A `days_from` of None leaves the start open, which is what the `full` column
+    means: back to the first stored row.
+    """
+    # Swapped arguments silently produce empty windows and all-zero rows.
+    assert days_from is None or days_to < days_from, "days_to is the near edge of the window"
+    now = datetime.now(timezone.utc)
+    start = None if days_from is None else now - timedelta(days=days_from)
+    return start, now - timedelta(days=days_to)
+
+def in_window(rows, days_to, days_from):
+    """`rows` narrowed to the window on their `date` column."""
+    start, end = window_bounds(days_to, days_from)
+    rows = rows.filter(date__lt=end)
+    return rows if start is None else rows.filter(date__gte=start)
+
 def _memoized(method):
     """Per-(metric, window) cache: profit and fee_to_profit re-derive the
     base metrics, and each aggregate is one query."""
@@ -250,15 +268,9 @@ class WalletStatistics():
         self.transaction_data = transaction_data
         self._cache = {}
 
-    def _window(self, days_to, days_from):
-        # Swapped arguments silently produce empty windows and all-zero rows.
-        assert days_to < days_from, "days_to is the near edge of the window"
-        now = datetime.now(timezone.utc)
-        return now - timedelta(days=days_from), now - timedelta(days=days_to)
-
     def _journal_sum(self, condition, days_to, days_from):
-        start, end = self._window(days_to, days_from)
-        total = self.journal_data.filter(condition, date__gte=start, date__lt=end).aggregate(total=Sum('amount'))['total']
+        total = in_window(self.journal_data.filter(condition), days_to, days_from).aggregate(
+            total=Sum('amount'))['total']
         return 0 if total is None else total
 
     @_memoized
@@ -278,9 +290,10 @@ class WalletStatistics():
         # A market buy writes no journal line: the ISK leaves through
         # market_escrow, which also holds ISK still locked in unfilled orders.
         # The transaction table is therefore the only honest source for it.
-        start, end = self._window(days_to, days_from)
         contracts = self._journal_sum(BUY_FILTER, days_to, days_from)
-        transactions = self.transaction_data.filter(date__gte=start, date__lt=end, is_buy=True).aggregate(total=Sum(F('quantity') * F('unit_price')))['total'] or 0
+        transactions = in_window(
+            self.transaction_data.filter(is_buy=True), days_to, days_from
+        ).aggregate(total=Sum(F('quantity') * F('unit_price')))['total'] or 0
         # The contract amounts read from the wallet: a cost is negative and a
         # refund is positive. Subtracting adds the cost and removes the refund.
         return transactions - contracts
