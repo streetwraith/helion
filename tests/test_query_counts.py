@@ -3,12 +3,15 @@ number of queries, independent of how many items they display."""
 from datetime import timedelta
 
 import pytest
+from django.contrib.auth.models import User
 from django.db import connection
 from django.test.utils import CaptureQueriesContext, override_settings
 from django.urls import reverse
 from django.utils import timezone
 
-from market.models import MarketOrderUndercut, TradeHub, TradeItem
+from esi.models import Token
+from market.models import (
+    MarketOrderUndercut, TrackedCharacter, TradeHub, TradeItem)
 from marketdata.models import History
 from market.services import market_service, station_trading
 
@@ -164,10 +167,24 @@ def test_ice_page_query_ceiling(character_client, trade_hubs, monkeypatch):
 
 
 def test_index_wallet_table_query_ceiling(auth_client, trade_hubs):
-    auth_client.get("/")  # warm the ticker cache
-    # 6 metrics x 5 windows through the memoized WalletStatistics methods: one
-    # aggregate per base metric and window (profit and f/p reuse the cache).
-    assert count_queries(auth_client, "/") <= 40
+    # The page is /market/, not /. A trader must also exist: with an empty set
+    # Django resolves `character_id__in=set()` without a query, so every
+    # aggregate disappears and the ceiling guards nothing.
+    user = User.objects.get(username="tester")
+    Token.objects.create(
+        user=user, character_id=CHARACTER_ID, character_name="Main",
+        character_owner_hash="h", token_type="Character",
+        access_token="a", refresh_token="r")
+    TrackedCharacter.objects.create(
+        character_name="Main", tracks="wallet", is_trader=True)
+
+    auth_client.get("/market/")  # warm the ticker cache
+    # Five queries per window through the memoized WalletStatistics methods:
+    # brokers_fee, taxes, sell, and two for buy (profit and f/p reuse the
+    # cache). Eight windows make 40. The flipping table adds two: one replay of
+    # the transactions and one read of the tax rows. WALLET-4 in TODO.md
+    # replaces the 40 with a single pass.
+    assert count_queries(auth_client, "/market/") <= 55
 
 
 def test_lp_data_queries_do_not_grow_with_offers(auth_client, trade_hubs, monkeypatch):
