@@ -4,10 +4,13 @@ The first two tests are the reason this module exists: they pin the engine
 against the fullerite spreadsheet it replaces, site by site.
 """
 import math
+from datetime import date, timedelta
 from types import SimpleNamespace
 
 import pytest
+from django.db import connection
 from django.http import QueryDict
+from django.test.utils import CaptureQueriesContext, override_settings
 from django.urls import reverse
 from django.utils.html import escape
 
@@ -26,13 +29,22 @@ from market.gas_constants import (
     MINING_FOREMAN_MINDLINK,
     MINING_LASER_OPTIMIZATION_CHARGE,
     MINING_SURVEY_CHIPSET_II,
+    MYKOSEROCIN_RAW,
     OUTRIDER,
+    PRICE_TABLE_FAMILIES,
     PROSPECT,
     SYNDICATE_GAS_CLOUD_SCOOP,
 )
+from market.models import CharacterAsset
 from market.services import gas, gas_fleet
+from marketdata.models import History, Order
 
 from .test_market_service_db import JITA_REGION, add_order, add_type
+from .test_views_smoke import AMARR_REGION, AMARR_STATION, AMARR_SYSTEM
+
+# The history anchor of the price table tests: every window ends on the newest
+# row, never on today.
+PRICE_LATEST = date(2026, 8, 11)
 
 # The spreadsheet's own four inputs.
 SHEET_SETUP = gas.fleet_setup(boost_rate=3.3, frigate_rate=23.2, hold=70000,
@@ -693,3 +705,205 @@ class TestPage:
         body = response.content.decode()
         assert 'Vital Core Reservoir' not in body
         assert 'form-errors' in body
+
+
+class TestPriceTable:
+    """The gas price table under the calculator."""
+
+    pytestmark = pytest.mark.django_db
+
+    @pytest.fixture(autouse=True)
+    def types(self, db, trade_hubs):
+        for family, raw, compressed in PRICE_TABLE_FAMILIES:
+            for gas_label in raw:
+                add_type(raw[gas_label], f'{family} {gas_label}')
+                add_type(compressed[gas_label], f'Compressed {family} {gas_label}')
+
+    def add_amarr_order(self, order_id, type_id, price, is_buy=False):
+        return add_order(order_id, type_id, price, is_buy=is_buy,
+                         region_id=AMARR_REGION, location_id=AMARR_STATION,
+                         system_id=AMARR_SYSTEM)
+
+    def add_history_days(self, type_id, highs, region_id=JITA_REGION):
+        """One row per daily high, oldest first. The average sits under the
+        high, so a cell that read the average would show a different number."""
+        for offset, highest in enumerate(reversed(highs)):
+            History.objects.create(
+                region_id=region_id, type_id=type_id,
+                date=PRICE_LATEST - timedelta(days=offset), highest=highest,
+                average=highest * 0.9, lowest=highest * 0.8, volume=10, order_count=1)
+
+    def row_of(self, type_id):
+        return next(row for row in gas.price_table()['rows'] if row['type_id'] == type_id)
+
+    def test_raw_gas_comes_before_its_compressed_twin_family_by_family(self):
+        rows = gas.price_table()['rows']
+
+        assert len(rows) == 34
+        assert [row['type_id'] for row in rows[:4]] == [
+            FULLERITE_RAW['C28'], FULLERITE_COMPRESSED['C28'],
+            FULLERITE_RAW['C32'], FULLERITE_COMPRESSED['C32']]
+        assert rows[17]['family'] == 'Fullerite'
+        assert rows[18] ['type_id'] == MYKOSEROCIN_RAW['Amber']
+        assert rows[18]['name'] == 'Mykoserocin Amber'
+
+    def test_each_hub_block_reads_its_own_book(self):
+        c28 = FULLERITE_RAW['C28']
+        add_order(1, c28, price=13000)
+        add_order(2, c28, price=12000, is_buy=True)
+        self.add_amarr_order(3, c28, price=12500, is_buy=True)
+
+        jita, amarr = self.row_of(c28)['hubs']
+
+        assert (jita['ask'], jita['bid']) == (13000.0, 12000.0)
+        assert (amarr['ask'], amarr['bid']) == (None, 12500.0)
+
+    def test_the_hub_that_pays_more_reads_green_per_side(self):
+        c28 = FULLERITE_RAW['C28']
+        add_order(1, c28, price=13000)
+        add_order(2, c28, price=12000, is_buy=True)
+        self.add_amarr_order(3, c28, price=12500)
+        self.add_amarr_order(4, c28, price=12000, is_buy=True)
+
+        jita, amarr = self.row_of(c28)['hubs']
+
+        assert (jita['ask_best'], amarr['ask_best']) == (True, False)
+        assert (jita['bid_best'], amarr['bid_best']) == (True, True)  # a tie
+
+    def test_a_side_only_one_hub_quotes_marks_that_hub(self):
+        c28 = FULLERITE_RAW['C28']
+        self.add_amarr_order(1, c28, price=12500, is_buy=True)
+
+        jita, amarr = self.row_of(c28)['hubs']
+
+        assert (jita['bid_best'], amarr['bid_best']) == (False, True)
+        assert (jita['ask_best'], amarr['ask_best']) == (False, False)
+
+    def test_a_median_under_the_hub_ask_reads_green(self):
+        c28 = FULLERITE_RAW['C28']
+        add_order(1, c28, price=15.0)
+        self.add_history_days(c28, [10.0] * 7 + [20.0] * 7)
+        self.add_history_days(c28, [10.0] * 7, region_id=AMARR_REGION)
+
+        jita, amarr = self.row_of(c28)['hubs']
+
+        # The 7d median is 20, over the ask; the 30d median is 15, level with it.
+        assert [window['under_ask'] for window in jita['windows']] == [False] * 4
+        Order.objects.filter(order_id=1).update(price=15.01)
+        jita = self.row_of(c28)['hubs'][0]
+        assert [window['under_ask'] for window in jita['windows']] == [False, True, True, True]
+        # Amarr has no ask, so nothing there compares.
+        assert [window['under_ask'] for window in amarr['windows']] == [False] * 4
+
+    def test_stock_counts_every_location_type_and_owner(self):
+        c28 = FULLERITE_RAW['C28']
+        for item_id, location_type, owner in (
+                (1, 'station', {'character_id': 900001}),
+                (2, 'item', {'character_id': 900001}),
+                (3, 'structure', {'corporation_id': 98000001})):
+            CharacterAsset.objects.create(
+                item_id=item_id, type_id=c28, quantity=100, location_id=1000 + item_id,
+                location_type=location_type, location_flag='Hangar',
+                is_singleton=False, **owner)
+
+        assert self.row_of(c28)['stock'] == 300
+        assert self.row_of(FULLERITE_RAW['C32'])['stock'] is None
+
+    def test_a_window_median_shows_from_one_priced_day(self):
+        c28 = FULLERITE_RAW['C28']
+        self.add_history_days(c28, [10.0, 20.0, 40.0])
+
+        jita, amarr = self.row_of(c28)['hubs']
+
+        assert [window['median'] for window in jita['windows']] == [20.0] * 4
+        assert [window['priced_days'] for window in jita['windows']] == [3] * 4
+        assert (jita['percentile'], jita['percentile_gradient']) == (None, None)
+        assert [window['median'] for window in amarr['windows']] == [None] * 4
+
+    def test_the_percentile_needs_thirty_priced_days(self):
+        thin, dense = FULLERITE_RAW['C28'], FULLERITE_RAW['C32']
+        self.add_history_days(thin, [float(day) for day in range(1, 30)])
+        self.add_history_days(dense, [float(day) for day in range(1, 31)])
+
+        assert self.row_of(thin)['hubs'][0]['percentile'] is None
+        jita = self.row_of(dense)['hubs'][0]
+        assert jita['percentile'] == pytest.approx(50.0 * (29 + 30) / 30)
+        assert jita['percentile_gradient'] == 0  # 98.3 rounds to the greenest step
+        assert jita['priced_days'] == 30
+        assert jita['newest_date'] == PRICE_LATEST
+
+    def test_each_hub_block_draws_one_point_per_week_of_its_own_window(self):
+        c28 = FULLERITE_RAW['C28']
+        self.add_history_days(c28, [10.0] * 200)
+        self.add_history_days(c28, [1.0] * 7 + [2.0] * 7, region_id=AMARR_REGION)
+
+        jita, amarr = self.row_of(c28)['hubs']
+
+        assert jita['chart']['weeks'] == 26  # 180 days, seven days to the point
+        assert amarr['chart']['values'] == '1.00,2.00'
+        assert (amarr['chart']['low'], amarr['chart']['high']) == (1.0, 2.0)
+
+    def test_a_single_week_draws_no_chart(self):
+        c28 = FULLERITE_RAW['C28']
+        self.add_history_days(c28, [10.0] * 5)
+
+        assert self.row_of(c28)['hubs'][0]['chart'] is None
+
+    @pytest.mark.parametrize('highs, step', [
+        ([10.0] * 40, 50),                            # unmoved: 50 -> the middle step
+        ([float(day) for day in range(40, 0, -1)], 100),  # at its low: 1.25 -> reddest
+        ([float(day) for day in range(1, 41)], 0),    # at its high: 98.75 -> greenest
+        ([10.0] * 30 + [12.0] * 6 + [11.0], 20),      # 30 below, 6 above: 82.4 -> 20
+    ])
+    def test_the_percentile_picks_its_gradient_step(self, highs, step):
+        c28 = FULLERITE_RAW['C28']
+        self.add_history_days(c28, highs)
+
+        assert self.row_of(c28)['hubs'][0]['percentile_gradient'] == step
+
+    def test_the_page_prints_both_hubs_and_every_gas(self, auth_client, fleet_sde):
+        c28 = FULLERITE_RAW['C28']
+        add_order(1, c28, price=13000)
+        self.add_history_days(c28, [10.0] * 40)
+        CharacterAsset.objects.create(
+            item_id=1, character_id=900001, type_id=c28, quantity=40612,
+            location_id=60003760, location_type='station', location_flag='Hangar',
+            is_singleton=False)
+
+        body = auth_client.get(reverse('market_gas_index')).content.decode()
+
+        assert '>Gas prices<' in body
+        assert '<th colspan="8">Jita</th>' in body
+        assert '<th colspan="8">Amarr</th>' in body
+        assert body.count('class="chart-values"') == 1
+        assert '"min":10.0,"max":10.0' in body
+        assert 'class="gradient_50"' in body
+        assert "peity('line')" in body
+        assert '>Fullerite<' in body and '>Mykoserocin<' in body
+        assert 'Compressed Mykoserocin Viridian' in body
+        assert '>40,612<' in body
+        assert '>13,000<' in body
+
+    def test_the_page_runs_a_fixed_number_of_queries(self, auth_client, fleet_sde):
+        url = reverse('market_gas_index')
+        auth_client.get(url)  # warm the ticker cache
+
+        def count():
+            with override_settings(SESSION_SAVE_EVERY_REQUEST=False):
+                with CaptureQueriesContext(connection) as ctx:
+                    assert auth_client.get(url).status_code == 200
+            return len(ctx.captured_queries)
+
+        def seed(index, type_id):
+            add_order(index + 1, type_id, price=1000)
+            self.add_history_days(type_id, [10.0] * 40)
+            self.add_history_days(type_id, [10.0] * 40, region_id=AMARR_REGION)
+
+        # One priced type first: a hub with no history at all skips its level
+        # query, which is a different page and not the growth this test bounds.
+        first, *rest = FULLERITE_RAW.values()
+        seed(0, first)
+        with_one = count()
+        for index, type_id in enumerate(rest, start=1):
+            seed(index, type_id)
+        assert count() == with_one

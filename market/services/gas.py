@@ -1,9 +1,18 @@
 """The gas huffing calculator: what a gas site holds, and what a hub pays for it.
+Under it, the gas price table: what Jita and Amarr pay for every gas now, and
+where that price stands against its own history.
 
-The arithmetic takes its prices as an argument, so it runs without an order book.
-Only `gas_quotes` reads the database.
+The calculator arithmetic takes its prices as an argument, so it runs without an
+order book. Only `gas_quotes` and `price_table` read the database.
 """
+from django.db.models import Sum
+
 from evesde.models import Type
+from market.constants import REGION_ID_DOMAIN, REGION_ID_FORGE
+from market.gas_constants import PRICE_TABLE_FAMILIES
+from market.models import CharacterAsset
+from market.services import history
+from market.services.history import MEDIAN_MIN_DAYS
 from market.services.orders import best_orders_by_type, get_orders_in_hub_range
 
 PRICE_BASES = ('bid', 'ask', 'mid')
@@ -173,3 +182,96 @@ def _cloud_row(cloud, quotes, setup):
         'isk_per_hour': None if value is None else value / (minutes / 60),
         'value': value,
     }
+
+
+# The hubs of the price table, in column order.
+PRICE_REGION_IDS = (REGION_ID_FORGE, REGION_ID_DOMAIN)
+# The medians the table shows. The percentile ranks inside the longest one.
+PRICE_WINDOWS = (7, 30, 90, 180)
+# The daily price every history cell reads: the day's top trade, as on the ice
+# page, because a seller compares it against an ask.
+PRICE_COLUMN = 'highest'
+
+
+def price_table():
+    """The rows of the gas price table, raw gas before its compressed twin.
+
+    Every price is per unit. One raw unit compresses to one compressed unit,
+    so the two rows of one gas compare directly. A window median shows from one
+    priced day upward, with the day count beside it; the percentile stays None
+    under MEDIAN_MIN_DAYS priced days, because a rank over a handful of days
+    reads as fact and is noise.
+
+    The stock is every asset row of the type, in any location and of any
+    tracked owner: gas waits in a ship hold or a container as often as in a
+    hangar.
+    """
+    type_ids = [type_id for _, raw, compressed in PRICE_TABLE_FAMILIES
+                for gas_label in raw for type_id in (raw[gas_label], compressed[gas_label])]
+    names = dict(Type.objects.filter(type_id__in=type_ids).values_list('type_id', 'name'))
+    stock = dict(CharacterAsset.objects.filter(type_id__in=type_ids)
+                 .values_list('type_id').annotate(quantity=Sum('quantity')))
+    anchors = history.history_anchors(PRICE_REGION_IDS)
+    charts = history.weekly_averages(type_ids, anchors, PRICE_WINDOWS[-1], PRICE_COLUMN)
+    hubs = {region_id: (_best_quotes(region_id, type_ids),
+                        history.get_price_levels(region_id, type_ids, anchors.get(region_id),
+                                                 PRICE_WINDOWS, PRICE_COLUMN))
+            for region_id in PRICE_REGION_IDS}
+    rows = []
+    for family, raw, compressed in PRICE_TABLE_FAMILIES:
+        for gas_label in raw:
+            for type_id in (raw[gas_label], compressed[gas_label]):
+                cells = [_price_cell(quotes[type_id], levels.get(type_id),
+                                     charts.get((region_id, type_id)))
+                         for region_id, (quotes, levels) in hubs.items()]
+                _mark_best_hub(cells)
+                rows.append({
+                    'family': family,
+                    'type_id': type_id,
+                    'name': names.get(type_id, str(type_id)),
+                    'stock': stock.get(type_id),
+                    'hubs': cells,
+                })
+    # The width of a family row: type and stock, then ask, bid, the chart, the
+    # windows and the percentile per hub.
+    columns = 2 + len(PRICE_REGION_IDS) * (len(PRICE_WINDOWS) + 4)
+    return {'windows': PRICE_WINDOWS, 'columns': columns, 'rows': rows}
+
+
+def _price_cell(quote, levels, chart_values):
+    """One hub block of one row: the live book, the history levels and the
+    weekly sparkline over the same window the percentile ranks."""
+    windows = [{'days': days, 'median': None, 'priced_days': 0, 'under_ask': False}
+               for days in PRICE_WINDOWS]
+    cell = {'bid': quote['bid'], 'ask': quote['ask'], 'windows': windows,
+            'chart': history.sparkline(chart_values),
+            'percentile': None, 'percentile_gradient': None,
+            'priced_days': 0, 'newest_date': None}
+    if levels is None:
+        return cell
+    for window in windows:
+        level = levels.windows[window['days']]
+        # A median under the live ask reads green, the ice page's rule: the
+        # hub pays more today than it did over that window.
+        window.update(median=level.median, priced_days=level.priced_days,
+                      under_ask=(level.median is not None and quote['ask'] is not None
+                                 and level.median < quote['ask']))
+    priced_days = levels.windows[PRICE_WINDOWS[-1]].priced_days
+    cell.update(priced_days=priced_days, newest_date=levels.newest_date)
+    if priced_days >= MEDIAN_MIN_DAYS:
+        # The trade hub's map: the value itself picks the step, 0 is greenest
+        # and 100 reddest, so a percentile of 100 reads greenest.
+        cell.update(percentile=levels.percentile,
+                    percentile_gradient=100 - round(levels.percentile / 5) * 5)
+    return cell
+
+
+def _mark_best_hub(cells):
+    """Per side, the hub that pays most reads green. A seller wants the higher
+    bid and the higher ask alike. A tie paints both, and a side that only one
+    hub quotes paints that hub, as the ice page does."""
+    for side in ('ask', 'bid'):
+        prices = [cell[side] for cell in cells if cell[side] is not None]
+        best = max(prices) if prices else None
+        for cell in cells:
+            cell[f'{side}_best'] = cell[side] is not None and cell[side] == best

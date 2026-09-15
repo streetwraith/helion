@@ -68,6 +68,25 @@ FULLERITE_COMPRESSED = {
 }
 
 
+# The eight mykoserocin colours, raw and compressed, from the SDE. The price
+# table lists them; no site data exists for them here, so nothing huffs them.
+MYKOSEROCIN_RAW = {
+    'Amber': 28694, 'Azure': 28695, 'Celadon': 28696, 'Golden': 28697,
+    'Lime': 28698, 'Malachite': 28699, 'Vermillion': 28700, 'Viridian': 28701,
+}
+MYKOSEROCIN_COMPRESSED = {
+    'Amber': 62377, 'Azure': 62379, 'Celadon': 62380, 'Golden': 62381,
+    'Lime': 62382, 'Malachite': 62383, 'Vermillion': 62384, 'Viridian': 62385,
+}
+
+# The price table, family by family: the family name, then the raw and the
+# compressed type id per gas label, in the order the rows print.
+PRICE_TABLE_FAMILIES = (
+    ('Fullerite', FULLERITE_RAW, FULLERITE_COMPRESSED),
+    ('Mykoserocin', MYKOSEROCIN_RAW, MYKOSEROCIN_COMPRESSED),
+)
+
+
 def _cloud(gas, units, radius):
     return GasCloud(FULLERITE_RAW[gas], units, gas, {'radius': radius})
 

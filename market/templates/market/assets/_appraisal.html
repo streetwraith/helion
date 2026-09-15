@@ -51,13 +51,14 @@ hub is summarised by the one ref column.
       <td>{{ row.reference_ask|isk_value_blank }}</td>
       <td>{{ row.reference_delta|pct_value }}</td>
       {% comment %}peity takes the stroke as an option, so no stylesheet can
-      reach it. A light stroke reads on either theme.
+      reach it. A light stroke reads on either theme. Without min and max the
+      line scales from zero and a price band draws flat.
       {% endcomment %}
       <td class="chart"{% if row.chart %} title="low {{ row.chart.low|isk_value }}, high {{ row.chart.high|isk_value }} ({{ row.chart.weeks }} weeks)"{% endif %}>
-        {% if row.chart %}<span class="chart-values" data-peity='{"height":24,"width":100,"fill":false,"stroke":"lightskyblue"}'>{{ row.chart.values }}</span>{% endif %}
+        {% if row.chart %}<span class="chart-values" data-peity='{"height":24,"width":100,"fill":false,"min":{{ row.chart.low }},"max":{{ row.chart.high }},"stroke":"lightskyblue"}'>{{ row.chart.values }}</span>{% endif %}
       </td>
       <td class="chart"{% if row.reference_chart %} title="low {{ row.reference_chart.low|isk_value }}, high {{ row.reference_chart.high|isk_value }} ({{ row.reference_chart.weeks }} weeks)"{% endif %}>
-        {% if row.reference_chart %}<span class="chart-values" data-peity='{"height":24,"width":100,"fill":false,"stroke":"lightskyblue"}'>{{ row.reference_chart.values }}</span>{% endif %}
+        {% if row.reference_chart %}<span class="chart-values" data-peity='{"height":24,"width":100,"fill":false,"min":{{ row.reference_chart.low }},"max":{{ row.reference_chart.high }},"stroke":"lightskyblue"}'>{{ row.reference_chart.values }}</span>{% endif %}
       </td>
       <td>{{ row.short_ratio|pct_value }}</td>
       <td>{{ row.median_ratio|pct_value }}</td>

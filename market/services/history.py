@@ -1,8 +1,9 @@
 """Market history queries and the statistics computed over them."""
 import statistics
 from dataclasses import dataclass
-from datetime import datetime, timedelta, timezone
+from datetime import date, datetime, timedelta, timezone
 
+from django.db import connection
 from django.db.models import Aggregate, Count, FloatField, Max, Sum
 
 from market.services import wallet
@@ -303,3 +304,206 @@ def get_history_levels_bulk(region_id, type_ids, days_back=90):
     }
     return {type_id: levels.get(type_id, HistoryLevels(0.0, None))
             for type_id in type_ids}
+
+
+def history_anchors(region_ids):
+    """{region_id: newest history date}, the anchor of every window built on it.
+
+    Never today: EVE Ref publishes a day's history one to two days late, so a
+    calendar window would end in gaps. The dates are also read here rather than
+    inside the window queries, because a date the planner cannot see as a
+    constant costs it the partition pruning of market.history.
+
+    One query per region rather than one grouped query: a single region walks
+    the (region_id, date) index backwards and stops at the first row, and the
+    grouped form cannot (1.4 s against 10 ms on the dev dump).
+
+    A region the ingestion service never filled has no anchor and drops out.
+    """
+    latest_dates = {region_id: History.objects.filter(region_id=region_id)
+                    .aggregate(latest=Max('date'))['latest']
+                    for region_id in region_ids}
+    return {region_id: latest for region_id, latest in latest_dates.items()
+            if latest is not None}
+
+
+# Where the newest daily average has to rank inside its own window for the
+# price to read as dear or as cheap.
+HIGH_PERCENTILE = 80
+LOW_PERCENTILE = 20
+
+
+def percentile_flag(percentile):
+    """The colour class of a percentile: green near the top of its own window,
+    red near the bottom, empty in between and for no percentile at all."""
+    if percentile is None:
+        return ''
+    if percentile >= HIGH_PERCENTILE:
+        return 'green'
+    if percentile <= LOW_PERCENTILE:
+        return 'red'
+    return ''
+
+
+@dataclass(frozen=True)
+class WindowLevel:
+    """One history window of one type, over the days that carry a price."""
+    median: float | None
+    mean: float | None
+    priced_days: int
+
+
+@dataclass(frozen=True)
+class PriceLevels:
+    """Where one type's daily average stands.
+
+    `windows` maps a window length in days to its level. `percentile` ranks the
+    newest priced day inside the longest window; `newest_date` is that day. The
+    callers apply their own floor: a percentile over a handful of days is noise,
+    and `windows[longest].priced_days` says how many days stand behind it.
+    """
+    windows: dict[int, WindowLevel]
+    percentile: float
+    newest_date: date
+
+
+# The daily columns a level or a chart can read. A caller names one; the SQL
+# below interpolates it, so the name never comes from outside this list.
+PRICE_COLUMNS = ('average', 'highest')
+
+# Every window is a FILTER over one pass of the longest window, so no daily row
+# leaves the database. The newest daily price is what the percentile ranks, so
+# the pass carries it twice: once as the set, once as the value ranked against
+# the set.
+_PRICE_LEVELS_QUERY = """
+WITH priced AS (
+    SELECT h.type_id, h.date, h.{column} AS average
+    FROM market.history h
+    WHERE h.region_id = %s
+      AND h.type_id IN ({types})
+      AND h.date > %s
+      AND h.{column} IS NOT NULL
+), newest AS (
+    SELECT DISTINCT ON (type_id) type_id, date, average
+    FROM priced ORDER BY type_id, date DESC
+)
+SELECT p.type_id,
+       n.date,
+       -- The midpoint of the days below and the days at or below, so a tie
+       -- splits instead of counting whole. A price that never moved then ranks
+       -- 50 rather than 100, which is what "no move" means; the strict count
+       -- alone would rank it 0 and the inclusive count 100.
+       50.0 * (count(*) FILTER (WHERE p.average < n.average)
+               + count(*) FILTER (WHERE p.average <= n.average)) / count(*)
+           AS percentile{window_columns}
+FROM priced p JOIN newest n USING (type_id)
+GROUP BY p.type_id, n.date, n.average
+"""
+
+_WINDOW_COLUMNS = """,
+       percentile_cont(0.5) WITHIN GROUP (ORDER BY p.average)
+           FILTER (WHERE p.date > %s),
+       avg(p.average) FILTER (WHERE p.date > %s),
+       count(*) FILTER (WHERE p.date > %s)"""
+
+
+def get_price_levels(region_id, type_ids, latest, windows, column='average'):
+    """{type_id: PriceLevels} over one daily price column, in one query.
+
+    `column` names the daily price the levels read: the `average`, close to mid
+    market, or the `highest`, the day's top trade, which a seller compares
+    against an ask. Each window ends on `latest` and covers that many days. A
+    type with no priced day in the longest window is absent from the result. A
+    shorter window can be empty while a longer one is full: an item that traded
+    for months and then stopped keeps its long median and loses its short mean.
+    """
+    assert windows, 'at least one window is required'
+    assert all(days > 0 for days in windows), 'a window must be longer than zero days'
+    if column not in PRICE_COLUMNS:
+        raise ValueError(f'unknown price column: {column}')
+    if not type_ids or latest is None:
+        return {}
+    windows = sorted(set(windows))
+    query = _PRICE_LEVELS_QUERY.format(
+        column=column,
+        types=", ".join(["%s"] * len(type_ids)),
+        window_columns=_WINDOW_COLUMNS * len(windows))
+    params = [region_id, *type_ids, latest - timedelta(days=windows[-1])]
+    for days in windows:
+        params += [latest - timedelta(days=days)] * 3
+    with connection.cursor() as cursor:
+        cursor.execute(query, params)
+        rows = cursor.fetchall()
+
+    levels = {}
+    for type_id, newest_date, percentile, *window_values in rows:
+        window_levels = {}
+        for days, (median, mean, priced_days) in zip(
+                windows, zip(*[iter(window_values)] * 3)):
+            window_levels[days] = WindowLevel(
+                median=None if median is None else float(median),
+                mean=None if mean is None else float(mean),
+                priced_days=priced_days)
+        levels[type_id] = PriceLevels(windows=window_levels,
+                                      percentile=float(percentile),
+                                      newest_date=newest_date)
+    return levels
+
+
+# One sparkline point per week. A peity sparkline is about 100 px wide, so the
+# 180 daily points it would otherwise draw sit two to a pixel and read as noise.
+CHART_BUCKET_DAYS = 7
+
+# Bucket 0 is the newest week, so the buckets come back newest first and the
+# reader reverses them. Postgres does the averaging: the rows behind one
+# sparkline are 180, the values it draws are 26.
+_CHART_QUERY = """
+SELECT h.type_id,
+       floor((%s::date - h.date) / %s)::int AS bucket,
+       avg(h.{column}) AS average
+FROM market.history h
+WHERE h.region_id = %s
+  AND h.type_id IN ({types})
+  AND h.date > %s
+  AND h.{column} IS NOT NULL
+GROUP BY h.type_id, bucket
+ORDER BY h.type_id, bucket DESC
+"""
+
+
+def weekly_averages(type_ids, anchors, days, column='average'):
+    """{(region_id, type_id): [weekly mean of one daily price, oldest first]}
+    over the newest `days` of each region. `column` is as in get_price_levels.
+
+    One query per region: each anchors on its own newest day, and a literal date
+    keeps the partition pruning that a joined one loses.
+
+    A week the item never traded carries no point. Repeating the week before it
+    would draw a price that nobody paid, and peity cannot draw a hole.
+    """
+    assert days > 0, 'the window must be longer than zero days'
+    if column not in PRICE_COLUMNS:
+        raise ValueError(f'unknown price column: {column}')
+    if not type_ids:
+        return {}
+    query = _CHART_QUERY.format(column=column, types=", ".join(["%s"] * len(type_ids)))
+    series = {}
+    for region_id, latest in anchors.items():
+        params = [latest, CHART_BUCKET_DAYS, region_id, *type_ids,
+                  latest - timedelta(days=days)]
+        with connection.cursor() as cursor:
+            cursor.execute(query, params)
+            for type_id, _bucket, average in cursor.fetchall():
+                series.setdefault((region_id, type_id), []).append(float(average))
+    return series
+
+
+def sparkline(values):
+    """One sparkline: the values peity draws, and the band for its tooltip.
+
+    A single week draws no line, so it reads as no chart at all.
+    """
+    if not values or len(values) < 2:
+        return None
+    return {'values': ",".join(f'{value:.2f}' for value in values),
+            'weeks': len(values), 'low': min(values), 'high': max(values)}

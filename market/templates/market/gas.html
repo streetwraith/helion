@@ -168,4 +168,63 @@ split the two cloud rows that make up one site.
 </table>
 {% endif %}
 
+<h2>Gas prices</h2>
+{% comment %}
+No class="market" here either: the family rows would sort into the data rows.
+A blank cell is an unknown value, never a zero: no order on that side, no
+priced day in that window, or too few priced days for a percentile.
+{% endcomment %}
+<table style="width: auto;">
+    <thead>
+        <tr>
+            <th colspan="2"></th>
+            {% for hub in price_hubs %}<th colspan="{{ prices.windows|length|add:4 }}">{{ hub.name }}</th>{% endfor %}
+        </tr>
+        <tr>
+            <th>type</th>
+            <th title="units held anywhere, every tracked owner">stock</th>
+            {% for hub in price_hubs %}
+            <th>ask</th>
+            <th>bid</th>
+            <th title="weekly mean of the daily high over the newest 180 history days">chart</th>
+            {% for days in prices.windows %}<th title="median of the daily high over the newest {{ days }} history days">{{ days }}d</th>{% endfor %}
+            <th title="where the newest daily high ranks inside its own 180 history days: 0 is the low, 100 the high">pct</th>
+            {% endfor %}
+        </tr>
+    </thead>
+    <tbody>
+        {% for row in prices.rows %}
+        {% ifchanged row.family %}
+        <tr><th colspan="{{ prices.columns }}">{{ row.family }}</th></tr>
+        {% endifchanged %}
+        <tr>
+            <td class="item-name">{% item_name row.type_id row.name %}</td>
+            <td>{% if row.stock %}{{ row.stock|floatformat:"0g" }}{% endif %}</td>
+            {% for hub in row.hubs %}
+            <td{% if hub.ask_best %} class="green"{% endif %}>{{ hub.ask|isk_value_blank }}</td>
+            <td{% if hub.bid_best %} class="green"{% endif %}>{{ hub.bid|isk_value_blank }}</td>
+            {% comment %}
+            The tooltip sits on the cell: peity hides the span it draws from. The
+            stroke is an option, so no stylesheet can reach it; a light stroke
+            reads on either theme. Without min and max the line scales from zero
+            and a price band draws flat.
+            {% endcomment %}
+            <td class="chart"{% if hub.chart %} title="low {{ hub.chart.low|isk_value }}, high {{ hub.chart.high|isk_value }} ({{ hub.chart.weeks }} weeks)"{% endif %}>
+                {% if hub.chart %}<span class="chart-values" data-peity='{"height":24,"width":100,"fill":false,"min":{{ hub.chart.low }},"max":{{ hub.chart.high }},"stroke":"lightskyblue"}'>{{ hub.chart.values }}</span>{% endif %}
+            </td>
+            {% for window in hub.windows %}
+            <td{% if window.under_ask %} class="green"{% endif %}{% if window.median != None %} title="{{ window.priced_days }} priced day{{ window.priced_days|pluralize }}"{% endif %}>{{ window.median|isk_value_blank }}</td>
+            {% endfor %}
+            <td{% if hub.percentile_gradient != None %} class="gradient_{{ hub.percentile_gradient }}"{% endif %}{% if hub.percentile != None %} title="newest priced day {{ hub.newest_date|date:'Y-m-d' }}, {{ hub.priced_days }} priced days"{% endif %}>{{ hub.percentile|floatformat:0 }}</td>
+            {% endfor %}
+        </tr>
+        {% endfor %}
+    </tbody>
+</table>
+
+<script type="text/javascript">
+    $(document).ready(function() {
+        $('.chart-values').peity('line');
+    });
+</script>
 {% endblock %}

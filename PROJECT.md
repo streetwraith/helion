@@ -1664,6 +1664,63 @@ given". The form writes a hidden `submitted` marker, which says that the query c
 and that an absent checkbox is therefore off. A hand-written query string carries no marker, so
 every field it leaves out keeps its default.
 
+### The gas price table
+
+Under the calculator, a second table answers a different question: is now a good time to sell the
+gas you hold. It lists every fullerite and every mykoserocin, raw and compressed, for Jita and
+Amarr. Cytoserocin stays out: its eight colours move independently of each other, so no reading
+about one of them says anything about the next. Per hub it shows the best ask, the best bid, the
+median of the daily average over the newest 7, 30, 90 and 180 history days, and a percentile.
+
+Every price is per unit. One raw unit compresses to one compressed unit, so the two rows of one gas
+compare directly, and the table needs no m3 column. The type list is data in `gas_constants.py`,
+like the fullerite site contents; the SDE market group 2814 mixes all three compressed families, so a
+group lookup cannot draw the line the table draws.
+
+Every history cell of the table reads the **daily `highest`**, the day's top trade, as the ice
+page does: the reader compares these cells against an ask, and the daily average sits under the ask
+by an item-specific gap. The window statistic is a **median**, not the ice page's mean, because a
+median ignores the dump days that drag a thin gas around. The medians, the percentile and the chart
+read the same column on purpose, so one hub block tells one story; the container appraisal keeps
+the daily `average`, which is what its ratios were measured against. Both pass the column to the
+shared functions in `history`, which accept only the names they list. Every window ends on the
+newest history row of that region, never on today: EVE Ref publishes a day one to two days late.
+
+The **percentile** ranks the newest daily high inside its own 180 day window, exactly as the
+container appraisal does with the daily average. A fixed ratio against a median would paint a volatile gas red and green
+by turns and a calm one never; the rank compares one measure with itself over time and carries no
+such bias. The cell takes the trade hub's gradient rather than the appraisal's two-colour flag: the
+value itself picks one of the 21 steps, 100 greenest and 0 reddest, so 47 and 93 read as different
+shades where a threshold would show the same plain cell for 21 and 79. Both pages call one function,
+`history.get_price_levels`, which computes every window as a `FILTER` over one pass of the longest
+window. The floor differs on purpose: the appraisal drops an item under 30 priced days, because its
+ratios build on the median; this table keeps every median that has one priced day and prints the
+day count on hover, and blanks only the percentile, because a rank over a handful of days reads as
+fact. Amarr needs this: compressed mykoserocin trades there on 10 to 70 of 180 days.
+
+The percentile has no gate on the live book, unlike the appraisal's ask gate. The ask and the bid
+sit beside it in the same block, so an empty book shows itself. A blank cell is always an unknown
+value, never a zero.
+
+The **stock** column sums every asset row of the type: any location type, any tracked owner. Gas
+waits in a ship hold or a container as often as in a hangar, so the station-only rule of the ice
+page would miss most of it.
+
+The **chart** per hub is the appraisal's sparkline, not the ice page's: 26 weekly means of the daily
+high over the same 180 days the percentile ranks, with a fixed stroke and no live point. The line
+then shows the window the number beside it describes, and the direction already sits in the colour
+of the percentile cell. Postgres buckets the weeks (`history.weekly_averages`), so the page carries
+26 points per chart and the query count stays one per hub whatever the row count.
+Both pages pass the low and the high of the series as peity's `min` and `max`: the line chart
+scales from zero otherwise, and a price band of 12,500 to 13,400 then draws as a flat line at the
+top of the cell.
+
+Two more colours follow the ice page. Per side, the hub that pays more reads green: the higher bid
+and the higher ask alike, because a seller wants both, a tie paints both hubs, and a side only one
+hub quotes paints that hub. A window median reads green when it sits under that hub's live ask: the
+hub pays more today than it did over the window. The percentile says where the market stands in its
+own history; these two say where the live book stands against the other hub and against the window.
+
 ## The hull datasheets
 
 `/hulls/` (menu entry **ships**) lists every published ship hull with its base attributes, its

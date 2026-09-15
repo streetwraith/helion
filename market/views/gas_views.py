@@ -15,7 +15,11 @@ HUB_ORDER = ['Jita', 'Amarr', 'Dodixie', 'Hek', 'Rens']
 def market_gas_index(request):
     hubs = _hubs()
     form = GasFleetForm.from_query(request.GET, hubs, REGION_ID_FORGE)
-    context = {'form': form, 'family': FULLERITE}
+    context = {'form': form, 'family': FULLERITE,
+               'prices': gas.price_table(),
+               # The price table's hub columns, in the order its cells hold.
+               'price_hubs': [hub for region_id in gas.PRICE_REGION_IDS
+                              for hub in hubs if hub.region_id == region_id]}
     if form.is_valid():
         params = form.cleaned_data
         fleet = _fleet_figures(params)

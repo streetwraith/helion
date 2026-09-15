@@ -11,15 +11,15 @@ range reaches the hub. That is what you can act on standing in that station.
 from dataclasses import dataclass
 from datetime import timedelta
 
-from django.db import connection
 from django.db.models import Max, Min, Sum
 
 from evesde.models import Type
 from market.constants import REGION_ID_DOMAIN, REGION_ID_FORGE
 from market.models import CharacterAsset, MarketTransaction, TradeHub
+from market.services import history
 from market.services.history import MEDIAN_MIN_DAYS
 from market.services.names import owner_labels
-from marketdata.models import History, OrdersHub
+from marketdata.models import OrdersHub
 
 # The container groups a player can carry or anchor: Cargo Container, Secure
 # Cargo Container, Audit Log Secure Container, Freight Container. Group ids, not
@@ -27,15 +27,8 @@ from marketdata.models import History, OrdersHub
 CONTAINER_GROUP_IDS = (12, 340, 448, 649)
 
 HISTORY_DAYS = 180
-# One sparkline point per week. A peity sparkline is about 100 px wide, so the
-# 180 daily points it would otherwise draw sit two to a pixel and read as noise.
-CHART_BUCKET_DAYS = 7
 # The window the short ratio compares the live ask against.
 SHORT_WINDOW_DAYS = 7
-# Where the newest daily average has to rank inside its own 180 day window for
-# the item to read as dear or as cheap.
-HIGH_PERCENTILE = 80
-LOW_PERCENTILE = 20
 
 
 @dataclass(frozen=True)
@@ -106,10 +99,10 @@ def get_container_appraisal(container):
     regions = [hub.region_id]
     if reference_hub:
         regions.append(reference_hub.region_id)
-    anchors = _history_anchors(regions)
+    anchors = history.history_anchors(regions)
     prices = _best_prices(type_ids, regions)
     levels = _history_levels(hub.region_id, type_ids, anchors.get(hub.region_id))
-    charts = _weekly_averages(type_ids, anchors)
+    charts = history.weekly_averages(type_ids, anchors, HISTORY_DAYS)
     paid = _last_paid(type_ids)
     names = dict(Type.objects.filter(type_id__in=type_ids)
                  .values_list('type_id', 'name'))
@@ -167,119 +160,20 @@ def _best_prices(type_ids, region_ids):
     return prices
 
 
-def _history_anchors(region_ids):
-    """{region_id: newest history date}, the anchor of every window below.
-
-    Never today: EVE Ref publishes a day's history one to two days late, so a
-    calendar window would end in gaps. The dates are also read here rather than
-    inside the queries below, because a date the planner cannot see as a
-    constant costs it the partition pruning of market.history.
-
-    One query per region rather than one grouped query: a single region walks
-    the (region_id, date) index backwards and stops at the first row, and the
-    grouped form cannot (1.4 s against 10 ms on the dev dump).
-
-    A region the ingestion service never filled has no anchor and drops out, so
-    it reaches no window below.
-    """
-    latest_dates = {region_id: History.objects.filter(region_id=region_id)
-                    .aggregate(latest=Max('date'))['latest']
-                    for region_id in region_ids}
-    return {region_id: latest for region_id, latest in latest_dates.items()
-            if latest is not None}
-
-
-# The newest daily average is what the percentile ranks, so the window carries
-# it twice: once as the set, once as the value ranked against the set.
-_LEVELS_QUERY = """
-WITH priced AS (
-    SELECT h.type_id, h.date, h.average
-    FROM market.history h
-    WHERE h.region_id = %s
-      AND h.type_id IN ({types})
-      AND h.date > %s
-      AND h.average IS NOT NULL
-), newest AS (
-    SELECT DISTINCT ON (type_id) type_id, average
-    FROM priced ORDER BY type_id, date DESC
-)
-SELECT p.type_id,
-       count(*) AS priced_days,
-       percentile_cont(0.5) WITHIN GROUP (ORDER BY p.average) AS median_average,
-       avg(p.average) FILTER (WHERE p.date > %s) AS short_average,
-       -- The midpoint of the days below and the days at or below, so a tie
-       -- splits instead of counting whole. A price that never moved then ranks
-       -- 50 rather than 100, which is what "no move" means; the strict count
-       -- alone would rank it 0 and the inclusive count 100.
-       50.0 * (count(*) FILTER (WHERE p.average < n.average)
-               + count(*) FILTER (WHERE p.average <= n.average)) / count(*)
-           AS percentile
-FROM priced p JOIN newest n USING (type_id)
-GROUP BY p.type_id, n.average
-"""
-
-
 def _history_levels(region_id, type_ids, latest):
     """Per type: the 180 day median, the short window mean, and where the newest
     daily average ranks inside the window.
 
-    All three are aggregates, so no daily row leaves the database. Under
-    MEDIAN_MIN_DAYS priced days the type gets nothing: a median over a handful
-    of days is not a level, and a ratio built on it reads as a fact.
+    Under MEDIAN_MIN_DAYS priced days the type gets nothing: a median over a
+    handful of days is not a level, and a ratio built on it reads as a fact.
     """
-    if latest is None:
-        return {}
-    query = _LEVELS_QUERY.format(types=", ".join(["%s"] * len(type_ids)))
-    params = [region_id, *type_ids, latest - timedelta(days=HISTORY_DAYS),
-              latest - timedelta(days=SHORT_WINDOW_DAYS)]
-    with connection.cursor() as cursor:
-        cursor.execute(query, params)
-        rows = cursor.fetchall()
-    # The short window can be empty while the long one is full: an item that
-    # traded for months and then stopped keeps its median and loses its mean.
-    return {type_id: {'median': float(median),
-                      'short': None if short is None else float(short),
-                      'percentile': float(percentile)}
-            for type_id, priced_days, median, short, percentile in rows
-            if priced_days >= MEDIAN_MIN_DAYS}
-
-
-# Bucket 0 is the newest week, so the buckets come back newest first and the
-# reader reverses them. Postgres does the averaging: the rows behind one
-# sparkline are 180, the values it draws are 26.
-_CHART_QUERY = """
-SELECT h.type_id,
-       floor((%s::date - h.date) / %s)::int AS bucket,
-       avg(h.average) AS average
-FROM market.history h
-WHERE h.region_id = %s
-  AND h.type_id IN ({types})
-  AND h.date > %s
-  AND h.average IS NOT NULL
-GROUP BY h.type_id, bucket
-ORDER BY h.type_id, bucket DESC
-"""
-
-
-def _weekly_averages(type_ids, anchors):
-    """{(region_id, type_id): [weekly mean, oldest first]}.
-
-    One query per region: each anchors on its own newest day, and a literal date
-    keeps the partition pruning that a joined one loses.
-
-    A week the item never traded carries no point. Repeating the week before it
-    would draw a price that nobody paid, and peity cannot draw a hole.
-    """
-    query = _CHART_QUERY.format(types=", ".join(["%s"] * len(type_ids)))
-    series = {}
-    for region_id, latest in anchors.items():
-        params = [latest, CHART_BUCKET_DAYS, region_id, *type_ids,
-                  latest - timedelta(days=HISTORY_DAYS)]
-        with connection.cursor() as cursor:
-            cursor.execute(query, params)
-            for type_id, _bucket, average in cursor.fetchall():
-                series.setdefault((region_id, type_id), []).append(float(average))
-    return series
+    levels = history.get_price_levels(region_id, type_ids, latest,
+                                      windows=(SHORT_WINDOW_DAYS, HISTORY_DAYS))
+    return {type_id: {'median': level.windows[HISTORY_DAYS].median,
+                      'short': level.windows[SHORT_WINDOW_DAYS].mean,
+                      'percentile': level.percentile}
+            for type_id, level in levels.items()
+            if level.windows[HISTORY_DAYS].priced_days >= MEDIAN_MIN_DAYS}
 
 
 def _last_paid(type_ids):
@@ -311,9 +205,9 @@ def _row(type_id, quantity, names, prices, levels, charts, paid, hub,
         'reference_bid': reference[0],
         'reference_ask': reference[1],
         'reference_delta': _ratio(reference[1], ask),
-        'chart': _chart(charts.get((hub.region_id, type_id))),
+        'chart': history.sparkline(charts.get((hub.region_id, type_id))),
         'reference_chart': (None if reference_hub is None else
-                            _chart(charts.get((reference_hub.region_id, type_id)))),
+                            history.sparkline(charts.get((reference_hub.region_id, type_id)))),
         'short_ratio': _ratio(ask, level.get('short')),
         'median_ratio': _ratio(ask, level.get('median')),
         'percentile': level.get('percentile'),
@@ -347,24 +241,9 @@ def _flag(ask, percentile):
     The ask still gates the colour, because a level you cannot sell into is not
     an opportunity.
     """
-    if ask is None or percentile is None:
+    if ask is None:
         return ''
-    if percentile >= HIGH_PERCENTILE:
-        return 'green'
-    if percentile <= LOW_PERCENTILE:
-        return 'red'
-    return ''
-
-
-def _chart(values):
-    """One sparkline: the values peity draws, and the band for its tooltip.
-
-    A single week draws no line, so it reads as no chart at all.
-    """
-    if not values or len(values) < 2:
-        return None
-    return {'values': ",".join(f'{value:.2f}' for value in values),
-            'weeks': len(values), 'low': min(values), 'high': max(values)}
+    return history.percentile_flag(percentile)
 
 
 def _totals(rows):
