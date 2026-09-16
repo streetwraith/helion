@@ -788,12 +788,12 @@ class TestPriceTable:
         jita, amarr = self.row_of(c28)['hubs']
 
         # The 7d median is 20, over the ask; the 30d median is 15, level with it.
-        assert [window['under_ask'] for window in jita['windows']] == [False] * 4
+        assert [window['under_ask'] for window in jita['windows']] == [False] * 5
         Order.objects.filter(order_id=1).update(price=15.01)
         jita = self.row_of(c28)['hubs'][0]
-        assert [window['under_ask'] for window in jita['windows']] == [False, True, True, True]
+        assert [window['under_ask'] for window in jita['windows']] == [False, True, True, True, True]
         # Amarr has no ask, so nothing there compares.
-        assert [window['under_ask'] for window in amarr['windows']] == [False] * 4
+        assert [window['under_ask'] for window in amarr['windows']] == [False] * 5
 
     def test_stock_counts_every_location_type_and_owner(self):
         c28 = FULLERITE_RAW['C28']
@@ -815,10 +815,10 @@ class TestPriceTable:
 
         jita, amarr = self.row_of(c28)['hubs']
 
-        assert [window['median'] for window in jita['windows']] == [20.0] * 4
-        assert [window['priced_days'] for window in jita['windows']] == [3] * 4
+        assert [window['median'] for window in jita['windows']] == [20.0] * 5
+        assert [window['priced_days'] for window in jita['windows']] == [3] * 5
         assert (jita['percentile'], jita['percentile_gradient']) == (None, None)
-        assert [window['median'] for window in amarr['windows']] == [None] * 4
+        assert [window['median'] for window in amarr['windows']] == [None] * 5
 
     def test_the_percentile_needs_thirty_priced_days(self):
         thin, dense = FULLERITE_RAW['C28'], FULLERITE_RAW['C32']
@@ -834,12 +834,13 @@ class TestPriceTable:
 
     def test_each_hub_block_draws_one_point_per_week_of_its_own_window(self):
         c28 = FULLERITE_RAW['C28']
-        self.add_history_days(c28, [10.0] * 200)
+        self.add_history_days(c28, [10.0] * 400)
         self.add_history_days(c28, [1.0] * 7 + [2.0] * 7, region_id=AMARR_REGION)
 
         jita, amarr = self.row_of(c28)['hubs']
 
-        assert jita['chart']['weeks'] == 26  # 180 days, seven days to the point
+        # 365 days, seven to the point: 52 full weeks and one day in a 53rd.
+        assert jita['chart']['weeks'] == 53
         assert amarr['chart']['values'] == '1.00,2.00'
         assert (amarr['chart']['low'], amarr['chart']['high']) == (1.0, 2.0)
 
@@ -873,8 +874,8 @@ class TestPriceTable:
         body = auth_client.get(reverse('market_gas_index')).content.decode()
 
         assert '>Gas prices<' in body
-        assert '<th colspan="8">Jita</th>' in body
-        assert '<th colspan="8">Amarr</th>' in body
+        assert '<th colspan="9">Jita</th>' in body
+        assert '<th colspan="9">Amarr</th>' in body
         assert body.count('class="chart-values"') == 1
         assert '"min":10.0,"max":10.0' in body
         assert 'class="gradient_50"' in body

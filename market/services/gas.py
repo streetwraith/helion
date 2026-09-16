@@ -186,8 +186,9 @@ def _cloud_row(cloud, quotes, setup):
 
 # The hubs of the price table, in column order.
 PRICE_REGION_IDS = (REGION_ID_FORGE, REGION_ID_DOMAIN)
-# The medians the table shows. The percentile ranks inside the longest one.
-PRICE_WINDOWS = (7, 30, 90, 180)
+# The medians the table shows. The percentile ranks inside the longest one and
+# the chart draws it: a year, so one seasonal cycle of the gas market is in view.
+PRICE_WINDOWS = (7, 30, 90, 180, 365)
 # The daily price every history cell reads: the day's top trade, as on the ice
 # page, because a seller compares it against an ask.
 PRICE_COLUMN = 'highest'

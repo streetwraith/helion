@@ -186,9 +186,9 @@ priced day in that window, or too few priced days for a percentile.
             {% for hub in price_hubs %}
             <th>ask</th>
             <th>bid</th>
-            <th title="weekly mean of the daily high over the newest 180 history days">chart</th>
+            <th title="weekly mean of the daily high over the newest 365 history days">chart</th>
             {% for days in prices.windows %}<th title="median of the daily high over the newest {{ days }} history days">{{ days }}d</th>{% endfor %}
-            <th title="where the newest daily high ranks inside its own 180 history days: 0 is the low, 100 the high">pct</th>
+            <th title="where the newest daily high ranks inside its own 365 history days: 0 is the low, 100 the high">pct</th>
             {% endfor %}
         </tr>
     </thead>
