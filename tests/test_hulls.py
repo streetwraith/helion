@@ -90,10 +90,12 @@ def sde_ships(db):
 
 
 def add_ship(type_id, name, group_id=FRIGATE_GROUP, meta_group_id=TECH_I, faction_id=MINMATAR,
-             published=True, mass=1067000.0, capacity=140.0, attributes=None):
+             published=True, mass=1067000.0, capacity=140.0, volume=27289.0,
+             packaged_volume=2500.0, attributes=None):
     Type.objects.create(type_id=type_id, name=name, group_id=group_id,
                         meta_group_id=meta_group_id, faction_id=faction_id, published=published,
-                        mass=mass, capacity=capacity, portion_size=1)
+                        mass=mass, capacity=capacity, volume=volume,
+                        packaged_volume=packaged_volume, portion_size=1)
     for ordinal, (attribute, value) in enumerate(sorted((attributes or {}).items())):
         TypeDogmaAttribute.objects.create(type_id=type_id, ordinal=ordinal,
                                           attribute_id=attribute_id(attribute), value=value)
@@ -324,6 +326,9 @@ def test_derived_figures_and_their_toggle_keys(sde_ships):
     assert stats["cap-recharge"] == ("Cap recharge", "125.0", "s")
     assert stats["lock-range"] == ("Lock range", "22.5", "km")
     assert stats["mass"] == ("Mass", "1,067,000", "kg")
+    # The assembled volume is the hull undocked, the packaged one a hull in a stack.
+    assert stats["vol-packaged"] == ("Vol (packaged)", "2,500", "m3")
+    assert stats["vol-assembled"] == ("Vol (assembled)", "27,289", "m3")
     # The sensor type is the label, so a long unit never widens the value.
     assert stats["sensor"] == ("Ladar", "8", "")
     # Hit points moved to the resist rows and are no longer figures here.
@@ -358,12 +363,15 @@ def test_every_figure_has_a_toggle(sde_ships):
 
 
 def test_attribute_a_hull_does_not_carry_reads_as_a_dash(sde_ships):
-    add_ship(RIFTER, "Rifter", mass=None, attributes={"hiSlots": 3.0})
+    add_ship(RIFTER, "Rifter", mass=None, volume=None, packaged_volume=None,
+             attributes={"hiSlots": 3.0})
 
     stats = {stat["key"]: stat["text"] for stat in find_hull(hulls.get_hull_page(), "Rifter")["stats"]}
 
     assert stats["align"] == "-"
     assert stats["mass"] == "-"
+    assert stats["vol-packaged"] == "-"
+    assert stats["vol-assembled"] == "-"
     assert stats["capacitor"] == "-"
 
 

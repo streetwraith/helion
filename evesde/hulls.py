@@ -402,6 +402,8 @@ STAT_TOGGLES = (
     *[(key, label) for key, label, *_ in STAT_ROWS],
     ("cargo", "Cargo"),
     ("mass", "Mass"),
+    ("vol-packaged", "Vol (packaged)"),
+    ("vol-assembled", "Vol (assembled)"),
     ("sensor", "Sensor"),
     ("jump-range", "Jump range"),
     ("holds", "Special holds"),
@@ -683,6 +685,10 @@ def _stats(hull, attributes):
              for key, label, name, unit, decimals, divisor in STAT_ROWS]
     rows.append(_stat("cargo", "Cargo", _figure(hull["capacity"]), "m3"))
     rows.append(_stat("mass", "Mass", _figure(hull["mass"]), "kg"))
+    # Two volumes, because a hauler reads the packaged one and a hangar the
+    # assembled one: a Rifter is 2,500 m3 in a stack and 27,289 m3 undocked.
+    rows.append(_stat("vol-packaged", "Vol (packaged)", _figure(hull["packaged_volume"]), "m3"))
+    rows.append(_stat("vol-assembled", "Vol (assembled)", _figure(hull["volume"]), "m3"))
     strength, sensor = max((attributes.get(name) or 0, label) for label, name in SENSORS)
     if strength:
         # The sensor type is the label, so the value stays short.
@@ -913,7 +919,8 @@ def get_hull_page(price_lookup=None, hull_filter=None):
                    .values_list("group_id", "name")
                    if name not in EXCLUDED_GROUPS}
     hulls = list(Type.objects.filter(group_id__in=group_names, published=True)
-                 .values("type_id", "name", "faction_id", "mass", "capacity"))
+                 .values("type_id", "name", "faction_id", "mass", "capacity",
+                         "volume", "packaged_volume"))
     units = dict(DogmaUnit.objects.values_list("unit_id", "display_name"))
     hull_ids = [hull["type_id"] for hull in hulls]
     subsystems = hull_bonuses.subsystems_by_hull(hull_ids)
