@@ -817,7 +817,7 @@ class TestPriceTable:
 
         assert [window['median'] for window in jita['windows']] == [20.0] * 5
         assert [window['priced_days'] for window in jita['windows']] == [3] * 5
-        assert (jita['percentile'], jita['percentile_gradient']) == (None, None)
+        assert [(p['value'], p['gradient']) for p in jita['percentiles']] == [(None, None)] * 2
         assert [window['median'] for window in amarr['windows']] == [None] * 5
 
     def test_the_percentile_needs_thirty_priced_days(self):
@@ -825,12 +825,27 @@ class TestPriceTable:
         self.add_history_days(thin, [float(day) for day in range(1, 30)])
         self.add_history_days(dense, [float(day) for day in range(1, 31)])
 
-        assert self.row_of(thin)['hubs'][0]['percentile'] is None
+        assert [p['value'] for p in self.row_of(thin)['hubs'][0]['percentiles']] == [None, None]
         jita = self.row_of(dense)['hubs'][0]
-        assert jita['percentile'] == pytest.approx(50.0 * (29 + 30) / 30)
-        assert jita['percentile_gradient'] == 0  # 98.3 rounds to the greenest step
-        assert jita['priced_days'] == 30
+        quarter, year = jita['percentiles']
+        assert (quarter['days'], year['days']) == (90, 365)
+        assert quarter['value'] == pytest.approx(50.0 * (29 + 30) / 30)
+        assert quarter['gradient'] == 0  # 98.3 rounds to the greenest step
+        assert quarter['priced_days'] == 30
+        assert year['value'] == quarter['value']
         assert jita['newest_date'] == PRICE_LATEST
+
+    def test_the_quarter_and_the_year_rank_the_same_day_differently(self):
+        # A high year and a low quarter: the newest day sits at the top of the
+        # quarter and near the bottom of the year.
+        c28 = FULLERITE_RAW['C28']
+        self.add_history_days(c28, [100.0] * 200 + [10.0] * 89 + [20.0])
+
+        quarter, year = self.row_of(c28)['hubs'][0]['percentiles']
+
+        assert quarter['value'] == pytest.approx(50.0 * (89 + 90) / 90)
+        assert year['value'] == pytest.approx(50.0 * (89 + 90) / 290)
+        assert (quarter['gradient'], year['gradient']) == (0, 70)
 
     def test_each_hub_block_draws_one_point_per_week_of_its_own_window(self):
         c28 = FULLERITE_RAW['C28']
@@ -860,7 +875,7 @@ class TestPriceTable:
         c28 = FULLERITE_RAW['C28']
         self.add_history_days(c28, highs)
 
-        assert self.row_of(c28)['hubs'][0]['percentile_gradient'] == step
+        assert [p['gradient'] for p in self.row_of(c28)['hubs'][0]['percentiles']] == [step, step]
 
     def test_the_page_prints_both_hubs_and_every_gas(self, auth_client, fleet_sde):
         c28 = FULLERITE_RAW['C28']
@@ -874,8 +889,10 @@ class TestPriceTable:
         body = auth_client.get(reverse('market_gas_index')).content.decode()
 
         assert '>Gas prices<' in body
-        assert '<th colspan="9">Jita</th>' in body
-        assert '<th colspan="9">Amarr</th>' in body
+        # The header rows repeat per family, so each hub heads two blocks.
+        assert body.count('<th colspan="10">Jita</th>') == 2
+        assert body.count('<th colspan="10">Amarr</th>') == 2
+        assert body.count('>pct90d<') == 4 and body.count('>pct365d<') == 4  # per hub, per family
         assert body.count('class="chart-values"') == 1
         assert '"min":10.0,"max":10.0' in body
         assert 'class="gradient_50"' in body

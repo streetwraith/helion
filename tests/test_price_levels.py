@@ -1,6 +1,6 @@
 """The shared price levels: window medians and means over the daily average,
-the percentile of the newest priced day inside the longest window, and the
-weekly sparkline series."""
+the percentile of the newest priced day inside each window, and the weekly
+sparkline series."""
 from datetime import date, timedelta
 
 import pytest
@@ -40,7 +40,8 @@ class TestWindows:
 
         levels = levels_of(TRITANIUM)
 
-        assert levels.windows[7] == history.WindowLevel(median=20.0, mean=20.0, priced_days=7)
+        assert levels.windows[7] == history.WindowLevel(median=20.0, mean=20.0, priced_days=7,
+                                                        percentile=50.0)
         assert levels.windows[30].median == pytest.approx(10.0)
         assert levels.windows[30].priced_days == 30
         assert levels.windows[180].priced_days == 37
@@ -51,7 +52,8 @@ class TestWindows:
 
         levels = levels_of(TRITANIUM)
 
-        assert levels.windows[7] == history.WindowLevel(median=None, mean=None, priced_days=0)
+        assert levels.windows[7] == history.WindowLevel(median=None, mean=None, priced_days=0,
+                                                        percentile=None)
         assert levels.windows[180].median == pytest.approx(10.0)
         assert levels.newest_date == LATEST - timedelta(days=10)
 
@@ -93,25 +95,36 @@ class TestWindows:
 
 
 class TestPercentile:
-    def test_the_newest_day_ranks_inside_the_longest_window(self):
+    def test_the_newest_day_ranks_inside_the_window(self):
         # Rising to a new high: 39 of the 40 days sit strictly below the newest,
         # and the newest ties itself, so the midpoint rank is (39 + 40) / 80.
         add_history_days(TRITANIUM, [float(day) for day in range(1, 41)])
 
         levels = levels_of(TRITANIUM)
 
-        assert levels.percentile == pytest.approx(98.75)
+        assert levels.windows[180].percentile == pytest.approx(98.75)
         assert levels.newest_date == LATEST
 
     def test_a_price_that_never_moved_ranks_in_the_middle(self):
         add_history_days(TRITANIUM, [10.0] * 40)
-        assert levels_of(TRITANIUM).percentile == pytest.approx(50.0)
+        assert levels_of(TRITANIUM).windows[180].percentile == pytest.approx(50.0)
+
+    def test_each_window_ranks_the_same_day_among_its_own_days(self):
+        # 30 days at 10, then 7 at 20. Inside the week every day ties the
+        # newest; inside the month 23 days sit below it and 30 at or below.
+        add_history_days(TRITANIUM, [10.0] * 30 + [20.0] * 7)
+
+        windows = levels_of(TRITANIUM).windows
+
+        assert windows[7].percentile == pytest.approx(50.0)
+        assert windows[30].percentile == pytest.approx(50.0 * (23 + 30) / 30)
+        assert windows[180].percentile == pytest.approx(50.0 * (30 + 37) / 37)
 
     def test_the_window_bounds_the_rank(self):
         # A year at 100 sits outside the 180 day window, so the newest 10 ranks
         # against 180 days of 10 and reads as unmoved, not as a crash.
         add_history_days(TRITANIUM, [100.0] * 365 + [10.0] * 180)
-        assert levels_of(TRITANIUM).percentile == pytest.approx(50.0)
+        assert levels_of(TRITANIUM).windows[180].percentile == pytest.approx(50.0)
 
 
 class TestFlag:

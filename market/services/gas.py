@@ -186,9 +186,11 @@ def _cloud_row(cloud, quotes, setup):
 
 # The hubs of the price table, in column order.
 PRICE_REGION_IDS = (REGION_ID_FORGE, REGION_ID_DOMAIN)
-# The medians the table shows. The percentile ranks inside the longest one and
-# the chart draws it: a year, so one seasonal cycle of the gas market is in view.
+# The medians the table shows. The chart draws the longest one: a year, so one
+# seasonal cycle of the gas market is in view.
 PRICE_WINDOWS = (7, 30, 90, 180, 365)
+# The windows the newest day ranks inside: the quarter and the year.
+PERCENTILE_WINDOWS = (90, 365)
 # The daily price every history cell reads: the day's top trade, as on the ice
 # page, because a seller compares it against an ask.
 PRICE_COLUMN = 'highest'
@@ -199,9 +201,9 @@ def price_table():
 
     Every price is per unit. One raw unit compresses to one compressed unit,
     so the two rows of one gas compare directly. A window median shows from one
-    priced day upward, with the day count beside it; the percentile stays None
-    under MEDIAN_MIN_DAYS priced days, because a rank over a handful of days
-    reads as fact and is noise.
+    priced day upward, with the day count beside it; a percentile stays None
+    under MEDIAN_MIN_DAYS priced days in its window, because a rank over a
+    handful of days reads as fact and is noise.
 
     The stock is every asset row of the type, in any location and of any
     tracked owner: gas waits in a ship hold or a container as often as in a
@@ -233,21 +235,24 @@ def price_table():
                     'stock': stock.get(type_id),
                     'hubs': cells,
                 })
-    # The width of a family row: type and stock, then ask, bid, the chart, the
-    # windows and the percentile per hub.
-    columns = 2 + len(PRICE_REGION_IDS) * (len(PRICE_WINDOWS) + 4)
-    return {'windows': PRICE_WINDOWS, 'columns': columns, 'rows': rows}
+    # The header geometry: ask, bid, the chart, the windows and the percentiles
+    # per hub; type and stock before the hubs.
+    hub_columns = 3 + len(PRICE_WINDOWS) + len(PERCENTILE_WINDOWS)
+    return {'windows': PRICE_WINDOWS, 'percentile_windows': PERCENTILE_WINDOWS,
+            'hub_columns': hub_columns,
+            'columns': 2 + len(PRICE_REGION_IDS) * hub_columns, 'rows': rows}
 
 
 def _price_cell(quote, levels, chart_values):
     """One hub block of one row: the live book, the history levels and the
-    weekly sparkline over the same window the percentile ranks."""
+    weekly sparkline over the longest window."""
     windows = [{'days': days, 'median': None, 'priced_days': 0, 'under_ask': False}
                for days in PRICE_WINDOWS]
+    percentiles = [{'days': days, 'value': None, 'gradient': None, 'priced_days': 0}
+                   for days in PERCENTILE_WINDOWS]
     cell = {'bid': quote['bid'], 'ask': quote['ask'], 'windows': windows,
-            'chart': history.sparkline(chart_values),
-            'percentile': None, 'percentile_gradient': None,
-            'priced_days': 0, 'newest_date': None}
+            'chart': history.sparkline(chart_values), 'percentiles': percentiles,
+            'newest_date': None}
     if levels is None:
         return cell
     for window in windows:
@@ -257,13 +262,15 @@ def _price_cell(quote, levels, chart_values):
         window.update(median=level.median, priced_days=level.priced_days,
                       under_ask=(level.median is not None and quote['ask'] is not None
                                  and level.median < quote['ask']))
-    priced_days = levels.windows[PRICE_WINDOWS[-1]].priced_days
-    cell.update(priced_days=priced_days, newest_date=levels.newest_date)
-    if priced_days >= MEDIAN_MIN_DAYS:
-        # The trade hub's map: the value itself picks the step, 0 is greenest
-        # and 100 reddest, so a percentile of 100 reads greenest.
-        cell.update(percentile=levels.percentile,
-                    percentile_gradient=100 - round(levels.percentile / 5) * 5)
+    cell['newest_date'] = levels.newest_date
+    for percentile in percentiles:
+        level = levels.windows[percentile['days']]
+        percentile['priced_days'] = level.priced_days
+        if level.priced_days >= MEDIAN_MIN_DAYS:
+            # The trade hub's map: the value itself picks the step, 0 is
+            # greenest and 100 reddest, so a percentile of 100 reads greenest.
+            percentile.update(value=level.percentile,
+                              gradient=100 - round(level.percentile / 5) * 5)
     return cell
 
 

@@ -347,23 +347,25 @@ def percentile_flag(percentile):
 
 @dataclass(frozen=True)
 class WindowLevel:
-    """One history window of one type, over the days that carry a price."""
+    """One history window of one type, over the days that carry a price.
+
+    `percentile` ranks the newest priced day of the longest window inside this
+    window. It is None when the window holds no priced day, which includes a
+    newest day that is older than the window. The callers apply their own
+    floor: a percentile over a handful of days is noise, and `priced_days` says
+    how many days stand behind it.
+    """
     median: float | None
     mean: float | None
     priced_days: int
+    percentile: float | None
 
 
 @dataclass(frozen=True)
 class PriceLevels:
-    """Where one type's daily average stands.
-
-    `windows` maps a window length in days to its level. `percentile` ranks the
-    newest priced day inside the longest window; `newest_date` is that day. The
-    callers apply their own floor: a percentile over a handful of days is noise,
-    and `windows[longest].priced_days` says how many days stand behind it.
-    """
+    """Where one type's daily price stands: `windows` maps a window length in
+    days to its level, and `newest_date` is the day every percentile ranks."""
     windows: dict[int, WindowLevel]
-    percentile: float
     newest_date: date
 
 
@@ -372,9 +374,9 @@ class PriceLevels:
 PRICE_COLUMNS = ('average', 'highest')
 
 # Every window is a FILTER over one pass of the longest window, so no daily row
-# leaves the database. The newest daily price is what the percentile ranks, so
-# the pass carries it twice: once as the set, once as the value ranked against
-# the set.
+# leaves the database. The newest daily price is what every percentile ranks,
+# so the pass carries it twice: once as the set, once as the value ranked
+# against the set.
 _PRICE_LEVELS_QUERY = """
 WITH priced AS (
     SELECT h.type_id, h.date, h.{column} AS average
@@ -388,23 +390,25 @@ WITH priced AS (
     FROM priced ORDER BY type_id, date DESC
 )
 SELECT p.type_id,
-       n.date,
-       -- The midpoint of the days below and the days at or below, so a tie
-       -- splits instead of counting whole. A price that never moved then ranks
-       -- 50 rather than 100, which is what "no move" means; the strict count
-       -- alone would rank it 0 and the inclusive count 100.
-       50.0 * (count(*) FILTER (WHERE p.average < n.average)
-               + count(*) FILTER (WHERE p.average <= n.average)) / count(*)
-           AS percentile{window_columns}
+       n.date{window_columns}
 FROM priced p JOIN newest n USING (type_id)
 GROUP BY p.type_id, n.date, n.average
 """
 
+# The percentile is the midpoint of the days below and the days at or below, so
+# a tie splits instead of counting whole. A price that never moved then ranks
+# 50 rather than 100, which is what "no move" means; the strict count alone
+# would rank it 0 and the inclusive count 100. A window with no priced day
+# divides by NULL and ranks nothing.
 _WINDOW_COLUMNS = """,
        percentile_cont(0.5) WITHIN GROUP (ORDER BY p.average)
            FILTER (WHERE p.date > %s),
        avg(p.average) FILTER (WHERE p.date > %s),
-       count(*) FILTER (WHERE p.date > %s)"""
+       count(*) FILTER (WHERE p.date > %s),
+       50.0 * (count(*) FILTER (WHERE p.average < n.average AND p.date > %s)
+               + count(*) FILTER (WHERE p.average <= n.average AND p.date > %s))
+           / NULLIF(count(*) FILTER (WHERE p.date > %s), 0)"""
+_WINDOW_PARAMS = 6
 
 
 def get_price_levels(region_id, type_ids, latest, windows, column='average'):
@@ -430,23 +434,22 @@ def get_price_levels(region_id, type_ids, latest, windows, column='average'):
         window_columns=_WINDOW_COLUMNS * len(windows))
     params = [region_id, *type_ids, latest - timedelta(days=windows[-1])]
     for days in windows:
-        params += [latest - timedelta(days=days)] * 3
+        params += [latest - timedelta(days=days)] * _WINDOW_PARAMS
     with connection.cursor() as cursor:
         cursor.execute(query, params)
         rows = cursor.fetchall()
 
     levels = {}
-    for type_id, newest_date, percentile, *window_values in rows:
+    for type_id, newest_date, *window_values in rows:
         window_levels = {}
-        for days, (median, mean, priced_days) in zip(
-                windows, zip(*[iter(window_values)] * 3)):
+        for days, (median, mean, priced_days, percentile) in zip(
+                windows, zip(*[iter(window_values)] * 4)):
             window_levels[days] = WindowLevel(
                 median=None if median is None else float(median),
                 mean=None if mean is None else float(mean),
-                priced_days=priced_days)
-        levels[type_id] = PriceLevels(windows=window_levels,
-                                      percentile=float(percentile),
-                                      newest_date=newest_date)
+                priced_days=priced_days,
+                percentile=None if percentile is None else float(percentile))
+        levels[type_id] = PriceLevels(windows=window_levels, newest_date=newest_date)
     return levels
 
 

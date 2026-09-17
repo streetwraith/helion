@@ -175,10 +175,17 @@ A blank cell is an unknown value, never a zero: no order on that side, no
 priced day in that window, or too few priced days for a percentile.
 {% endcomment %}
 <table style="width: auto;">
-    <thead>
+    <tbody>
+        {% for row in prices.rows %}
+        {% comment %}
+        Every family repeats the header rows: the second family sits under 18
+        rows of the first, further than a header at the top of the table reads.
+        {% endcomment %}
+        {% ifchanged row.family %}
+        <tr><th colspan="{{ prices.columns }}">{{ row.family }}</th></tr>
         <tr>
             <th colspan="2"></th>
-            {% for hub in price_hubs %}<th colspan="{{ prices.windows|length|add:4 }}">{{ hub.name }}</th>{% endfor %}
+            {% for hub in price_hubs %}<th colspan="{{ prices.hub_columns }}">{{ hub.name }}</th>{% endfor %}
         </tr>
         <tr>
             <th>type</th>
@@ -188,14 +195,9 @@ priced day in that window, or too few priced days for a percentile.
             <th>bid</th>
             <th title="weekly mean of the daily high over the newest 365 history days">chart</th>
             {% for days in prices.windows %}<th title="median of the daily high over the newest {{ days }} history days">{{ days }}d</th>{% endfor %}
-            <th title="where the newest daily high ranks inside its own 365 history days: 0 is the low, 100 the high">pct</th>
+            {% for days in prices.percentile_windows %}<th title="where the newest daily high ranks inside its own {{ days }} history days: 0 is the low, 100 the high">pct{{ days }}d</th>{% endfor %}
             {% endfor %}
         </tr>
-    </thead>
-    <tbody>
-        {% for row in prices.rows %}
-        {% ifchanged row.family %}
-        <tr><th colspan="{{ prices.columns }}">{{ row.family }}</th></tr>
         {% endifchanged %}
         <tr>
             <td class="item-name">{% item_name row.type_id row.name %}</td>
@@ -215,7 +217,9 @@ priced day in that window, or too few priced days for a percentile.
             {% for window in hub.windows %}
             <td{% if window.under_ask %} class="green"{% endif %}{% if window.median != None %} title="{{ window.priced_days }} priced day{{ window.priced_days|pluralize }}"{% endif %}>{{ window.median|isk_value_blank }}</td>
             {% endfor %}
-            <td{% if hub.percentile_gradient != None %} class="gradient_{{ hub.percentile_gradient }}"{% endif %}{% if hub.percentile != None %} title="newest priced day {{ hub.newest_date|date:'Y-m-d' }}, {{ hub.priced_days }} priced days"{% endif %}>{{ hub.percentile|floatformat:0 }}</td>
+            {% for percentile in hub.percentiles %}
+            <td{% if percentile.gradient != None %} class="gradient_{{ percentile.gradient }}"{% endif %}{% if percentile.value != None %} title="newest priced day {{ hub.newest_date|date:'Y-m-d' }}, {{ percentile.priced_days }} priced days of {{ percentile.days }}"{% endif %}>{{ percentile.value|floatformat:0 }}</td>
+            {% endfor %}
             {% endfor %}
         </tr>
         {% endfor %}

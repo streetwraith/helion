@@ -171,7 +171,7 @@ def _history_levels(region_id, type_ids, latest):
                                       windows=(SHORT_WINDOW_DAYS, HISTORY_DAYS))
     return {type_id: {'median': level.windows[HISTORY_DAYS].median,
                       'short': level.windows[SHORT_WINDOW_DAYS].mean,
-                      'percentile': level.percentile}
+                      'percentile': level.windows[HISTORY_DAYS].percentile}
             for type_id, level in levels.items()
             if level.windows[HISTORY_DAYS].priced_days >= MEDIAN_MIN_DAYS}
 

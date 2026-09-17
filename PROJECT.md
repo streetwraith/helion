@@ -1670,7 +1670,9 @@ Under the calculator, a second table answers a different question: is now a good
 gas you hold. It lists every fullerite and every mykoserocin, raw and compressed, for Jita and
 Amarr. Cytoserocin stays out: its eight colours move independently of each other, so no reading
 about one of them says anything about the next. Per hub it shows the best ask, the best bid, the
-median of the daily high over the newest 7, 30, 90, 180 and 365 history days, and a percentile.
+median of the daily high over the newest 7, 30, 90, 180 and 365 history days, and two percentiles.
+Each family repeats the header rows: the mykoserocin block sits under 18 fullerite rows, further
+than a header at the top of the table reads.
 
 Every price is per unit. One raw unit compresses to one compressed unit, so the two rows of one gas
 compare directly, and the table needs no m3 column. The type list is data in `gas_constants.py`,
@@ -1686,23 +1688,28 @@ the daily `average`, which is what its ratios were measured against. Both pass t
 shared functions in `history`, which accept only the names they list. Every window ends on the
 newest history row of that region, never on today: EVE Ref publishes a day one to two days late.
 
-The **percentile** ranks the newest daily high inside its own 365 day window, as the container
-appraisal does with the daily average over 180 days. A year puts one seasonal cycle of the gas
-market in view; the cost, measured in the index study, is that a drifting market sits far from a
-long window, so the ranks spread wider than they would over 180 days. A fixed ratio against a median
-would paint a volatile gas red and green by turns and a calm one never; the rank compares one
-measure with itself over time and carries no such bias. The cell takes the trade hub's gradient
+The **percentiles** rank the newest daily high inside its own 90 day window and its own 365 day
+window, as the container appraisal does with the daily average over 180 days. The two answer
+different questions and disagree on the sign a fifth of the time, as the index study measured: the
+quarter says whether the price is dear against the recent market, the year puts one seasonal cycle
+in view, at the cost that a drifting market sits far from a long window. A fixed ratio against a
+median would paint a volatile gas red and green by turns and a calm one never; the rank compares one
+measure with itself over time and carries no such bias. The cells take the trade hub's gradient
 rather than the appraisal's two-colour flag: the value itself picks one of the 21 steps, 100
 greenest and 0 reddest, so 47 and 93 read as different shades where a threshold would show the same
-plain cell for 21 and 79. Both pages call one function, `history.get_price_levels`, which computes
-every window as a `FILTER` over one pass of the longest window. The floor differs on purpose: the
-appraisal drops an item under 30 priced days, because its ratios build on the median; this table
-keeps every median that has one priced day and prints the day count on hover, and blanks only the
-percentile, because a rank over a handful of days reads as fact. Amarr needs this: compressed
-mykoserocin trades there on a small fraction of the days.
+plain cell for 21 and 79.
 
-The percentile has no gate on the live book, unlike the appraisal's ask gate. The ask and the bid
-sit beside it in the same block, so an empty book shows itself. A blank cell is always an unknown
+Both pages call one function, `history.get_price_levels`, which computes every window as a `FILTER`
+over one pass of the longest window and ranks the same newest day inside each of them, so the second
+percentile costs no second query. The floor differs on purpose: the appraisal drops an item under 30
+priced days, because its ratios build on the median; this table keeps every median that has one
+priced day and prints the day count on hover, and blanks only a percentile whose window holds under
+30 priced days, because a rank over a handful of days reads as fact. Amarr needs this: compressed
+mykoserocin trades there on a small fraction of the days, so the quarter column is often blank there
+while the year column still ranks.
+
+The percentiles have no gate on the live book, unlike the appraisal's ask gate. The ask and the bid
+sit beside them in the same block, so an empty book shows itself. A blank cell is always an unknown
 value, never a zero.
 
 The **stock** column sums every asset row of the type: any location type, any tracked owner. Gas
@@ -1710,13 +1717,12 @@ waits in a ship hold or a container as often as in a hangar, so the station-only
 page would miss most of it.
 
 The **chart** per hub is the appraisal's sparkline, not the ice page's: weekly means of the daily
-high over the same 365 days the percentile ranks, with a fixed stroke and no live point. The line
-then shows the window the number beside it describes, and the direction already sits in the colour
-of the percentile cell. Postgres buckets the weeks (`history.weekly_averages`), so the page carries
-53 points per chart and the query count stays one per hub whatever the row count.
-Both pages pass the low and the high of the series as peity's `min` and `max`: the line chart
-scales from zero otherwise, and a price band of 12,500 to 13,400 then draws as a flat line at the
-top of the cell.
+high over the same 365 days the year percentile ranks, with a fixed stroke and no live point. The
+line then shows the window the number beside it describes, and the direction already sits in the
+colour of the percentile cells. Postgres buckets the weeks (`history.weekly_averages`), so the page
+carries 53 points per chart and the query count stays one per hub whatever the row count. Both pages
+pass the low and the high of the series as peity's `min` and `max`: the line chart scales from zero
+otherwise, and a price band of 12,500 to 13,400 then draws as a flat line at the top of the cell.
 
 Two more colours follow the ice page. Per side, the hub that pays more reads green: the higher bid
 and the higher ask alike, because a seller wants both, a tie paints both hubs, and a side only one
@@ -1813,6 +1819,11 @@ writes of `localStorage` are wrapped, because a private window throws instead of
 Two figure rows are shaped for width rather than for symmetry: the sensor row takes the sensor type
 as its **label** (`Ladar 8`, not `Sensors 8 ladar`), and drone capacity and bandwidth are two rows.
 Both were long enough to overflow their box and collide with the next column.
+
+The card carries **two volumes**, because two readers ask two questions: a hauler reads the packaged
+volume, which is what a hull occupies in a stack (`sde.types.packaged_volume`, a Rifter at 2,500
+m3), and a hangar or a citadel reads the assembled volume (`sde.types.volume`, the same Rifter at
+27,289 m3). One row labelled "volume" would answer neither reader without a footnote.
 
 ### The bonus filter reads dogma, not the trait text
 
