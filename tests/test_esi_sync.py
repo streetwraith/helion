@@ -309,6 +309,36 @@ class TestRefreshCharacterAssets:
         assert CharacterAsset.objects.count() == 2
         assert CharacterAsset.objects.get(item_id=2).name is None
 
+    def test_an_item_that_moved_from_another_character_is_re_owned(self, monkeypatch):
+        # EVE keeps the item_id through a transfer, and item_id is the key of a
+        # table every owner shares. The feed deletes only its own rows, so a
+        # plain insert collided with the row the previous owner still held.
+        CharacterAsset.objects.create(
+            item_id=self.STACK["item_id"], character_id=900003, type_id=34,
+            quantity=1, location_id=60003760, location_type="station",
+            location_flag="Hangar", is_singleton=False)
+        self.fake_assets_esi(monkeypatch, [self.STACK])
+
+        esi_sync.refresh_character_assets(CHARACTER_ID)
+
+        row = CharacterAsset.objects.get(item_id=self.STACK["item_id"])
+        assert (row.character_id, row.corporation_id) == (CHARACTER_ID, None)
+        assert row.quantity == self.STACK["quantity"]
+        assert CharacterAsset.objects.count() == 1
+
+    def test_an_item_that_left_the_corporation_hangar_is_re_owned(self, monkeypatch):
+        CharacterAsset.objects.create(
+            item_id=self.STACK["item_id"], corporation_id=98000001, type_id=34,
+            quantity=1, location_id=60003760, location_type="station",
+            location_flag="CorpSAG1", is_singleton=False)
+        self.fake_assets_esi(monkeypatch, [self.STACK])
+
+        esi_sync.refresh_character_assets(CHARACTER_ID)
+
+        row = CharacterAsset.objects.get(item_id=self.STACK["item_id"])
+        assert (row.character_id, row.corporation_id) == (CHARACTER_ID, None)
+        assert row.location_flag == self.STACK["location_flag"]
+
     def test_a_stack_is_never_asked_about(self, monkeypatch):
         # Only a singleton can carry a name, so a hangar of stacks costs no request.
         asked = []
@@ -414,11 +444,11 @@ class TestRefreshCharacterWallet:
     def test_returns_latest_expires_of_both_routes(self, monkeypatch):
         calls = []
 
-        def fake_transactions(character_id):
+        def fake_transactions(character_id, force_refresh):
             calls.append("transactions")
             return EXPIRES
 
-        def fake_journal(character_id):
+        def fake_journal(character_id, force_refresh):
             calls.append("journal")
             return EXPIRES + timedelta(minutes=1)
 

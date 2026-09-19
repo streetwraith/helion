@@ -4,6 +4,12 @@ Every fetch function takes a character_id and returns the response's Expires
 header as an aware datetime (or None), so the scheduler can pace the next
 fetch off the server cache instead of a fixed interval. A 304 counts as a
 successful fetch that changes nothing.
+
+Every fetch function also takes force_refresh, which drops the cached ETag and
+refetches the payload. The client stores an ETag when the response arrives.
+This module writes the rows after that. A failure between the two steps leaves
+the ETag ahead of the database, and every later fetch then answers 304. The
+scheduler sets the flag after a failed attempt, which repairs the mismatch.
 """
 import logging
 from email.utils import parsedate_to_datetime
@@ -40,11 +46,12 @@ def _expires(headers):
     return parsed if parsed.tzinfo is not None else None
 
 
-def update_market_transactions(character_id):
+def update_market_transactions(character_id, force_refresh=False):
     token = Token.get_token(character_id, 'esi-wallet.read_character_wallet.v1')
     try:
         api_market_transactions, response = esi.client.Wallet.GetCharactersCharacterIdWalletTransactions(
-            character_id=character_id, token=token).results(return_response=True)
+            character_id=character_id, token=token).results(
+                return_response=True, force_refresh=force_refresh)
     except HTTPNotModified as not_modified:
         logger.info("wallet transactions unchanged for character %s, skipping", character_id)
         return _expires(not_modified.headers)
@@ -83,11 +90,12 @@ def _journal_row(value, owner):
         **owner)
 
 
-def get_wallet_journal(character_id):
+def get_wallet_journal(character_id, force_refresh=False):
     token = Token.get_token(character_id, 'esi-wallet.read_character_wallet.v1')
     try:
         journal_data, response = esi.client.Wallet.GetCharactersCharacterIdWalletJournal(
-            character_id=character_id, token=token).results(return_response=True)
+            character_id=character_id, token=token).results(
+                return_response=True, force_refresh=force_refresh)
     except HTTPNotModified as not_modified:
         logger.info("wallet journal unchanged for character %s, skipping", character_id)
         return _expires(not_modified.headers)
@@ -128,11 +136,12 @@ def store_character_balance(character_id):
     balances.store_character(character_id, balance)
 
 
-def refresh_character_wallet(character_id):
+def refresh_character_wallet(character_id, force_refresh=False):
     """Both wallet routes together: they serve one consumer (the profit
     statistics) and share one rate bucket. The later Expires wins so the
     pair repolls as one."""
-    expirations = [update_market_transactions(character_id), get_wallet_journal(character_id)]
+    expirations = [update_market_transactions(character_id, force_refresh),
+                   get_wallet_journal(character_id, force_refresh)]
     store_character_balance(character_id)
     expirations = [value for value in expirations if value is not None]
     return max(expirations) if expirations else None
@@ -149,7 +158,7 @@ def _drop_unowned_orders():
     CharacterOrder.objects.filter(character_id=None, corporation_id=None).delete()
 
 
-def refresh_character_orders(character_id):
+def refresh_character_orders(character_id, force_refresh=False):
     """Rewrite one character's CharacterOrder rows from ESI.
 
     The rewrite is per character, so a 304 (order list unchanged) is a
@@ -163,7 +172,7 @@ def refresh_character_orders(character_id):
         orders, response = esi.client.Market.GetCharactersCharacterIdOrders(
             character_id=character_id,
             token=Token.get_token(character_id, 'esi-markets.read_character_orders.v1')
-        ).results(return_response=True)
+        ).results(return_response=True, force_refresh=force_refresh)
     except HTTPNotModified as not_modified:
         logger.info("orders unchanged for character %s, skipping", character_id)
         return _expires(not_modified.headers)
@@ -222,12 +231,12 @@ def _refresh_contracts(fetch, character_id, subject):
     return _expires(response.headers)
 
 
-def refresh_character_contracts(character_id):
+def refresh_character_contracts(character_id, force_refresh=False):
     return _refresh_contracts(
         lambda: esi.client.Contracts.GetCharactersCharacterIdContracts(
             character_id=character_id,
             token=Token.get_token(character_id, 'esi-contracts.read_character_contracts.v1')
-        ).results(return_response=True),
+        ).results(return_response=True, force_refresh=force_refresh),
         character_id, f"character {character_id}")
 
 
@@ -242,26 +251,35 @@ def _asset_row(asset, owner, name=None):
         is_blueprint_copy=asset.is_blueprint_copy, name=name, **owner)
 
 
+# Every column but the key, so an upsert re-owns a moved item completely.
+ASSET_UPDATE_FIELDS = sorted(
+    {field.name for field in CharacterAsset._meta.fields} - {'item_id'})
+
+
 def _replace_assets(rows, owner):
     """Swap one owner's rows for the set ESI just reported, in one transaction.
 
-    A plain delete is safe here, unlike the orders feed: an item sits in a
-    character hangar or in a corporation hangar, never in both, so the two feeds
-    share no row.
+    The delete drops what this owner no longer holds. The upsert then claims an
+    item that moved here from another owner. item_id is the key of a table every
+    owner shares, and EVE keeps that id through a transfer, so a plain insert
+    collides with the row the previous owner still holds. The upsert writes both
+    owner columns, so the previous owner loses the row.
     """
     with transaction.atomic():
         CharacterAsset.objects.filter(**owner).delete()
-        CharacterAsset.objects.bulk_create(rows)
+        CharacterAsset.objects.bulk_create(
+            rows, update_conflicts=True, unique_fields=['item_id'],
+            update_fields=ASSET_UPDATE_FIELDS)
 
 
-def refresh_character_assets(character_id):
+def refresh_character_assets(character_id, force_refresh=False):
     """Rewrite one character's CharacterAsset rows from ESI, storing the
     payload as it comes (station filtering happens at read time)."""
     try:
         assets, response = esi.client.Assets.GetCharactersCharacterIdAssets(
             character_id=character_id,
             token=Token.get_token(character_id, 'esi-assets.read_assets.v1')
-        ).results(return_response=True)
+        ).results(return_response=True, force_refresh=force_refresh)
     except HTTPNotModified as not_modified:
         logger.info("assets unchanged for character %s, skipping", character_id)
         return _expires(not_modified.headers)
@@ -312,11 +330,11 @@ CORP_JOURNAL_UPDATE_FIELDS = [
 ]
 
 
-def _corporation_transactions(corporation_id, division, token):
+def _corporation_transactions(corporation_id, division, token, force_refresh=False):
     try:
         rows, response = esi.client.Wallet.GetCorporationsCorporationIdWalletsDivisionTransactions(
             corporation_id=corporation_id, division=division, token=token
-        ).results(return_response=True)
+        ).results(return_response=True, force_refresh=force_refresh)
     except HTTPNotModified as not_modified:
         return _expires(not_modified.headers)
 
@@ -336,11 +354,11 @@ def _corporation_transactions(corporation_id, division, token):
     return _expires(response.headers)
 
 
-def _corporation_journal(corporation_id, division, token):
+def _corporation_journal(corporation_id, division, token, force_refresh=False):
     try:
         rows, response = esi.client.Wallet.GetCorporationsCorporationIdWalletsDivisionJournal(
             corporation_id=corporation_id, division=division, token=token
-        ).results(return_response=True)
+        ).results(return_response=True, force_refresh=force_refresh)
     except HTTPNotModified as not_modified:
         return _expires(not_modified.headers)
 
@@ -370,7 +388,7 @@ def store_corporation_balance(corporation_id, token):
     balances.store_corporation(corporation_id, sum(row.balance for row in wallets))
 
 
-def refresh_corporation_wallet(character_id):
+def refresh_corporation_wallet(character_id, force_refresh=False):
     """Journal and transactions for all seven wallets of the character's
     corporation. The later Expires wins, so the set repolls as one."""
     corporation_id = _corporation_id(character_id)
@@ -378,22 +396,24 @@ def refresh_corporation_wallet(character_id):
     store_corporation_balance(corporation_id, token)
     expirations = []
     for division in WALLET_DIVISIONS:
-        expirations.append(_corporation_transactions(corporation_id, division, token))
-        expirations.append(_corporation_journal(corporation_id, division, token))
+        expirations.append(
+            _corporation_transactions(corporation_id, division, token, force_refresh))
+        expirations.append(
+            _corporation_journal(corporation_id, division, token, force_refresh))
     logger.info("corporation %s wallet refreshed over %s divisions",
                 corporation_id, len(WALLET_DIVISIONS))
     expirations = [value for value in expirations if value is not None]
     return max(expirations) if expirations else None
 
 
-def refresh_corporation_orders(character_id):
+def refresh_corporation_orders(character_id, force_refresh=False):
     """Rewrite the corporation's rows in CharacterOrder."""
     corporation_id = _corporation_id(character_id)
     try:
         orders, response = esi.client.Market.GetCorporationsCorporationIdOrders(
             corporation_id=corporation_id,
             token=Token.get_token(character_id, 'esi-markets.read_corporation_orders.v1')
-        ).results(return_response=True)
+        ).results(return_response=True, force_refresh=force_refresh)
     except HTTPNotModified as not_modified:
         logger.info("orders unchanged for corporation %s, skipping", corporation_id)
         return _expires(not_modified.headers)
@@ -411,14 +431,14 @@ def refresh_corporation_orders(character_id):
     return _expires(response.headers)
 
 
-def refresh_corporation_assets(character_id):
+def refresh_corporation_assets(character_id, force_refresh=False):
     """Rewrite the corporation's CharacterAsset rows."""
     corporation_id = _corporation_id(character_id)
     try:
         assets, response = esi.client.Assets.GetCorporationsCorporationIdAssets(
             corporation_id=corporation_id,
             token=Token.get_token(character_id, 'esi-assets.read_corporation_assets.v1')
-        ).results(return_response=True)
+        ).results(return_response=True, force_refresh=force_refresh)
     except HTTPNotModified as not_modified:
         logger.info("assets unchanged for corporation %s, skipping", corporation_id)
         return _expires(not_modified.headers)
@@ -437,11 +457,11 @@ def refresh_corporation_assets(character_id):
     return _expires(response.headers)
 
 
-def refresh_corporation_contracts(character_id):
+def refresh_corporation_contracts(character_id, force_refresh=False):
     corporation_id = _corporation_id(character_id)
     return _refresh_contracts(
         lambda: esi.client.Contracts.GetCorporationsCorporationIdContracts(
             corporation_id=corporation_id,
             token=Token.get_token(character_id, 'esi-contracts.read_corporation_contracts.v1')
-        ).results(return_response=True),
+        ).results(return_response=True, force_refresh=force_refresh),
         character_id, f"corporation {corporation_id}")

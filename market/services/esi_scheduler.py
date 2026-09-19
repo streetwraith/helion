@@ -192,8 +192,12 @@ def run_feed(feed, character_name):
     if state is None or state.disabled_at is not None:
         return
     fetch, fallback_ttl = FEEDS[feed]
+    # After a failed attempt the cached ETag can sit ahead of the database: the
+    # client stores the ETag before the feed writes a row. Refetch the payload
+    # instead of trusting a 304, which would keep the stale rows for ever.
     try:
-        expires = fetch(_character_id(character_name))
+        expires = fetch(_character_id(character_name),
+                        force_refresh=state.consecutive_errors > 0)
     except (ESIErrorLimitException, ESIBucketLimitException) as exc:
         # Not this row's fault: pause globally, keep its error state clean.
         pause_all_fetching(exc.reset)

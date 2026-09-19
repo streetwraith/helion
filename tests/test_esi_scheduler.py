@@ -99,7 +99,11 @@ class TestWatchdog:
 
 class TestRunFeed:
     def run_with_fetch(self, monkeypatch, fetch):
-        monkeypatch.setitem(esi_scheduler.FEEDS, "orders", (fetch, 1200))
+        # The doubles below take the character id alone. run_feed also passes
+        # force_refresh, and this wrapper fails if it ever stops.
+        monkeypatch.setitem(
+            esi_scheduler.FEEDS, "orders",
+            (lambda character_id, force_refresh: fetch(character_id), 1200))
         esi_scheduler.run_feed("orders", TRADER)
 
     def test_success_paces_off_expires(self, scheduler_cache, fake_token, monkeypatch):
@@ -305,13 +309,36 @@ class TestRunFeed:
         # feed for that character the moment a person logged in again.
         Token.objects.create(character_id=CHARACTER_ID, character_name=TRADER)
         state = orders_state()
-        monkeypatch.setitem(esi_scheduler.FEEDS, "orders", (lambda cid: None, 1200))
+        monkeypatch.setitem(esi_scheduler.FEEDS, "orders",
+                            (lambda cid, force_refresh: None, 1200))
 
         esi_scheduler.run_feed("orders", TRADER)
 
         state.refresh_from_db()
         assert state.consecutive_errors == 0
         assert state.last_success is not None
+
+    def force_refresh_flags(self, monkeypatch):
+        seen = []
+        monkeypatch.setitem(
+            esi_scheduler.FEEDS, "orders",
+            (lambda character_id, force_refresh: seen.append(force_refresh), 1200))
+        esi_scheduler.run_feed("orders", TRADER)
+        return seen
+
+    def test_a_clean_row_trusts_the_etag(self, scheduler_cache, fake_token, monkeypatch):
+        orders_state()
+
+        assert self.force_refresh_flags(monkeypatch) == [False]
+
+    def test_a_failed_attempt_refetches_the_payload(
+            self, scheduler_cache, fake_token, monkeypatch):
+        # The client stores the ETag before the feed writes a row. A failure
+        # between the two leaves the ETag ahead of the database, and every later
+        # fetch answers 304 with the stale rows still in place.
+        orders_state(consecutive_errors=1, last_error="boom")
+
+        assert self.force_refresh_flags(monkeypatch) == [True]
 
 
 class TestFeedScopes:

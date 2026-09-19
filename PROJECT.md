@@ -138,7 +138,11 @@ time:
   happens at read time). Pages read this table instead of calling ESI during render; the route is
   server-cached for an hour anyway, so the table is exactly as fresh as the "live" call was. The
   feed adds one request for `name`, the owner's own name for a ship or container: asset names have
-  no cache of their own, because the rewrite drops the rows they belong to.
+  no cache of their own, because the rewrite drops the rows they belong to. The key is `item_id`,
+  and every owner shares the table. EVE keeps that id when an item moves to another character, so
+  the feed deletes its own rows and then upserts the payload. A plain insert collides with the row
+  the previous owner still holds, and the collision fails the whole write. The upsert writes both
+  owner columns, so it takes the item over completely.
 - **`CharacterContract`** — the contracts route payload, keyed on `contract_id` and never
   deleted. See "The contracts page" for why this one accumulates where the others rewrite.
 - **`EveName`** — names for the ids a contract carries, so no page resolves an id over the wire
@@ -164,6 +168,16 @@ the corporation wallet. Two rules make the pair safe:
 Per-character rewrites make an HTTP 304 a correct no-op: unchanged upstream data means the rows
 are already right. This assumes the ETag cache and the database move together — restoring one
 without the other leaves stale 304s until the upstream data changes.
+
+The client also breaks that assumption on its own. It stores the ETag when the response arrives,
+and the feed writes the rows after that. A failure between the two steps leaves the ETag ahead of
+the database, and every later fetch then answers 304 over stale rows. The scheduler therefore
+passes `force_refresh` when `consecutive_errors` is above zero. That drops the ETag and refetches
+the payload.
+
+Two failures still escape that guard. An error-limit response and an unreachable ESI both pause
+all fetching, and both leave the row's counters clean on purpose. An ETag poisoned by one of them
+needs a manual refetch: set `consecutive_errors` to one and clear `next_due`.
 
 One inherent window: a just-placed own order reaches the order snapshots before the next
 `CharacterOrder` refresh sees it, so it can look like a competitor for up to the route's cache
