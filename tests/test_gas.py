@@ -38,6 +38,7 @@ from market.gas_constants import (
     SYNDICATE_GAS_CLOUD_SCOOP,
 )
 from market.models import CharacterAsset
+from market import gas_constants
 from market.services import gas, gas_fleet
 from marketdata.models import History, Order
 
@@ -130,6 +131,23 @@ def test_residue_reduces_yield_and_time(residue_chance, efficiency):
     assert rows[0]['m3'] == pytest.approx(18000 * efficiency)
     assert rows[0]['isk_per_hour'] == pytest.approx(
         83790000 / (11.32075472 / 60))
+
+
+def test_a_nebula_counts_its_equal_clouds_once_each():
+    """A Helix Nebula prints one row, and the site still holds all three clouds."""
+    lime = MYKOSEROCIN_RAW['Lime']
+    helix = next(site for site in MYKOSEROCIN.sites if site.name == 'Helix Nebula')
+    rows = gas.site_rows(gas_constants.GasFamily('Lime', (helix,), {}),
+                         {lime: {'volume': 10, 'isk_per_m3': 500}}, SHEET_SETUP)
+    site, = rows
+    cloud, = site['clouds']
+    assert cloud['count'] == 3
+    # The cloud figures stay per cloud, the site figures cover all three.
+    assert cloud['m3'] == pytest.approx(20000)
+    assert cloud['minutes'] == pytest.approx(20000 / 26.5 / 60)
+    assert site['m3'] == pytest.approx(60000)
+    assert site['value'] == pytest.approx(60000 * 500)
+    assert site['minutes'] == pytest.approx(3 * cloud['minutes'])
 
 
 def test_a_cloud_carries_its_own_time_trips_and_rate():
@@ -683,6 +701,12 @@ class TestPage:
         assert len(MYKOSEROCIN.sites) == 16
         for site in MYKOSEROCIN.sites:
             assert site.name in mykoserocin
+        # One row per nebula: the count stands before the gas.
+        assert mykoserocin.count('<td class="item-name">') == len(MYKOSEROCIN.sites)
+        assert mykoserocin.count('<td class="item-name">3x ') == 8
+        assert mykoserocin.count('<td class="item-name">2x ') == 8
+        assert 'rowspan="1"' in mykoserocin
+        assert '<td class="item-name">1x ' not in body
         # A large nebula cloud holds 2,000 units; residue puts that in brackets.
         assert '(2,000)' in mykoserocin
         # Only the fullerite table carries the site group, the rats and the radius.

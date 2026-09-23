@@ -132,10 +132,11 @@ def _grade(items, key):
 
 def _site_row(site, quotes, setup):
     clouds = [_cloud_row(cloud, quotes, setup) for cloud in site.clouds]
-    total_m3 = sum(cloud['m3'] for cloud in clouds)
+    total_m3 = sum(cloud['count'] * cloud['m3'] for cloud in clouds)
     assert total_m3 > 0, f'{site.name} holds no gas'
     minutes = total_m3 / setup['harvest_rate'] / 60
-    values = [cloud['value'] for cloud in clouds]
+    values = [None if cloud['value'] is None else cloud['count'] * cloud['value']
+              for cloud in clouds]
     # One unpriced cloud leaves the whole site value unknown. Counting it as
     # zero would read as a real site that happens to be cheap.
     value = None if None in values else sum(values)
@@ -166,6 +167,8 @@ def _cloud_row(cloud, quotes, setup):
         'type_id': cloud.type_id,
         'label': cloud.label,
         'extra': cloud.extra,
+        # Every figure below is for one of the `count` equal clouds.
+        'count': cloud.count,
         # Banked and content figures both ship, because residue destroys gas
         # above what the ship keeps. Every other number here uses the banked
         # one, and banked units times volume equals the banked m3.

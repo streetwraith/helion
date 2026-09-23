@@ -1662,9 +1662,11 @@ a bad price.
 ### The table must not carry `class="market"`
 
 `market.js` runs `tablesorter()` on every table with that class. A site table spends one row on
-each gas cloud of a site — two for a fullerite site, two or three for a nebula — joined by
-`rowspan`, so a sort would split the rows and pair each site's first cloud with another site's
-second. The paired layout is deliberate, it mirrors the spreadsheet,
+each gas cloud of a site — two for a fullerite site — joined by `rowspan`, so a sort would split
+the rows and pair each site's first cloud with another site's second. A nebula holds two or three
+equal clouds, so its table prints one row per site, as `3x Malachite`: `GasCloud.count` carries the
+number, and the `one cloud` columns stay per cloud. That table has no `rowspan` and could sort, but
+it stays unsorted to match the fullerite table. The paired layout is deliberate, it mirrors the spreadsheet,
 and it costs the free sorter. A test asserts the class is absent.
 
 ### The form validates because the fleet divides

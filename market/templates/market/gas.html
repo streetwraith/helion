@@ -145,7 +145,7 @@ split the cloud rows that make up one site.
             <td rowspan="{{ site.clouds|length }}">{{ site.minutes|floatformat:0 }}</td>
             <td rowspan="{{ site.clouds|length }}">{{ site.trips|floatformat:1 }}</td>
             {% endif %}
-            <td class="item-name">{% item_name cloud.type_id cloud.label region_id=region_id %}</td>
+            <td class="item-name">{% if cloud.count > 1 %}{{ cloud.count }}x {% endif %}{% item_name cloud.type_id cloud.label region_id=region_id %}</td>
             <td{% if cloud.isk_per_m3_gradient != None %} class="gradient_{{ cloud.isk_per_m3_gradient }}"{% endif %}>{% if cloud.isk_per_m3 %}{{ cloud.isk_per_m3|isk_value }}{% else %}-{% endif %}</td>
             <td{% if cloud.isk_per_hour_gradient != None %} class="gradient_{{ cloud.isk_per_hour_gradient }}"{% endif %}>{% if cloud.isk_per_hour %}{{ cloud.isk_per_hour|isk_value_mil }}{% else %}-{% endif %}</td>
             <td>{{ cloud.minutes|floatformat:0 }}</td>

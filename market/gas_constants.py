@@ -13,15 +13,16 @@ from dataclasses import dataclass, field
 
 @dataclass(frozen=True, slots=True)
 class GasCloud:
-    """One gas cloud inside a site.
+    """One gas cloud inside a site, or `count` equal clouds of it.
 
     `label` is the short name the table prints. `extra` holds the family's own
-    display fields, which the calculator never reads.
+    display fields, which the calculator never reads. `units` is per cloud.
     """
     type_id: int
     units: int
     label: str
     extra: dict = field(default_factory=dict)
+    count: int = 1
 
 
 @dataclass(frozen=True, slots=True)
@@ -139,10 +140,9 @@ FULLERITE = GasFamily(
 
 
 def _mykoserocin_site(name, gas, clouds, units):
-    """A known-space nebula: one colour, in clouds of equal size. No NPC
-    guards one, so it carries no danger and no rats."""
-    return GasSite(name, tuple(GasCloud(MYKOSEROCIN_RAW[gas], units, gas)
-                               for _ in range(clouds)))
+    """A known-space nebula: one colour, in clouds of equal size, so one row
+    says it all. No NPC guards one, so it carries no danger and no rats."""
+    return GasSite(name, (GasCloud(MYKOSEROCIN_RAW[gas], units, gas, count=clouds),))
 
 
 # Per colour, the small nebula before the large one, as UniWiki lists them. The
