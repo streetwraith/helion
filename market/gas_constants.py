@@ -1,11 +1,12 @@
-"""Wormhole gas site contents, the compressed twin of every fullerite, and the
-fleet that huffs them.
+"""Gas site contents, the compressed twin of every gas, and the fleet that
+huffs them.
 
 A cloud holds a unit count, not a volume. The m3 follows from `sde.types.volume`
 at read time, so a repackaging by CCP needs no edit here.
 
 The site contents are not in the SDE, which exports no cosmic signature. They
-come from the UniWiki site pages, read 4 August 2026.
+come from the UniWiki site pages: the fullerite sites read 4 August 2026, the
+mykoserocin sites read 23 September 2026.
 """
 from dataclasses import dataclass, field
 
@@ -31,7 +32,6 @@ class GasSite:
     warning the table shows on hover. Empty for a site with no such trap.
     """
     name: str
-    group: str
     clouds: tuple
     extra: dict = field(default_factory=dict)
     danger: str = ''
@@ -68,8 +68,7 @@ FULLERITE_COMPRESSED = {
 }
 
 
-# The eight mykoserocin colours, raw and compressed, from the SDE. The price
-# table lists them; no site data exists for them here, so nothing huffs them.
+# The eight mykoserocin colours, raw and compressed, from the SDE.
 MYKOSEROCIN_RAW = {
     'Amber': 28694, 'Azure': 28695, 'Celadon': 28696, 'Golden': 28697,
     'Lime': 28698, 'Malachite': 28699, 'Vermillion': 28700, 'Viridian': 28701,
@@ -91,38 +90,38 @@ def _cloud(gas, units, radius):
     return GasCloud(FULLERITE_RAW[gas], units, gas, {'radius': radius})
 
 
-# Rats and rat speed describe the whole site, so they sit on the site rather
-# than on a cloud. F, C and B abbreviate frigate, cruiser and battleship.
+# The group, rats and rat speed describe the whole site, so they sit on the site
+# rather than on a cloud. F, C and B abbreviate frigate, cruiser and battleship.
 FULLERITE_SITES = (
-    GasSite('Barren Perimeter Reservoir', 'PERIMETER',
+    GasSite('Barren Perimeter Reservoir',
             (_cloud('C50', 12000, '120km'), _cloud('C60', 6000, '60km')),
-            {'classes': '1-4', 'rats': '5F', 'rat_speed': 1925}),
-    GasSite('Token Perimeter Reservoir', 'PERIMETER',
+            {'group': 'PERIMETER', 'classes': '1-4', 'rats': '5F', 'rat_speed': 1925}),
+    GasSite('Token Perimeter Reservoir',
             (_cloud('C60', 12000, '120km'), _cloud('C70', 6000, '60km')),
-            {'classes': '1-4', 'rats': '2F 1C', 'rat_speed': 2100}),
-    GasSite('Minor Perimeter Reservoir', 'PERIMETER',
+            {'group': 'PERIMETER', 'classes': '1-4', 'rats': '2F 1C', 'rat_speed': 2100}),
+    GasSite('Minor Perimeter Reservoir',
             (_cloud('C70', 12000, '120km'), _cloud('C72', 6000, '60km')),
-            {'classes': '1-4', 'rats': '2C', 'rat_speed': 1190}),
-    GasSite('Ordinary Perimeter Reservoir', 'PERIMETER',
+            {'group': 'PERIMETER', 'classes': '1-4', 'rats': '2C', 'rat_speed': 1190}),
+    GasSite('Ordinary Perimeter Reservoir',
             (_cloud('C72', 12000, '120km'), _cloud('C84', 6000, '60km')),
-            {'classes': '1-4', 'rats': '6F', 'rat_speed': 1925},
+            {'group': 'PERIMETER', 'classes': '1-4', 'rats': '6F', 'rat_speed': 1925},
             danger='turrets ~110km range. requires perching (position far from '
                    'rats, on the edge of cloud)'),
-    GasSite('Sizeable Perimeter Reservoir', 'PERIMETER',
+    GasSite('Sizeable Perimeter Reservoir',
             (_cloud('C84', 12000, '120km'), _cloud('C50', 6000, '60km')),
-            {'classes': '1-4', 'rats': '6F', 'rat_speed': 1925}),
-    GasSite('Bountiful Frontier Reservoir', 'FRONTIER',
+            {'group': 'PERIMETER', 'classes': '1-4', 'rats': '6F', 'rat_speed': 1925}),
+    GasSite('Bountiful Frontier Reservoir',
             (_cloud('C28', 20000, '200km'), _cloud('C32', 4000, '40km')),
-            {'classes': '3-6', 'rats': '6F 4C', 'rat_speed': 2160}),
-    GasSite('Vast Frontier Reservoir', 'FRONTIER',
+            {'group': 'FRONTIER', 'classes': '3-6', 'rats': '6F 4C', 'rat_speed': 2160}),
+    GasSite('Vast Frontier Reservoir',
             (_cloud('C32', 20000, '200km'), _cloud('C28', 4000, '40km')),
-            {'classes': '3-6', 'rats': '8C', 'rat_speed': 1728}),
-    GasSite('Instrumental Core Reservoir', 'CORE',
+            {'group': 'FRONTIER', 'classes': '3-6', 'rats': '8C', 'rat_speed': 1728}),
+    GasSite('Instrumental Core Reservoir',
             (_cloud('C320', 24000, '240km'), _cloud('C540', 2000, '20km')),
-            {'classes': '5-6', 'rats': '4B', 'rat_speed': 1125}),
-    GasSite('Vital Core Reservoir', 'CORE',
+            {'group': 'CORE', 'classes': '5-6', 'rats': '4B', 'rat_speed': 1125}),
+    GasSite('Vital Core Reservoir',
             (_cloud('C540', 24000, '240km'), _cloud('C320', 2000, '20km')),
-            {'classes': '5-6', 'rats': '4F 4B', 'rat_speed': 2880},
+            {'group': 'CORE', 'classes': '5-6', 'rats': '4F 4B', 'rat_speed': 2880},
             danger='not spinnable, fast and long range BSes, doable with drones '
                    'trick or perching 260km+ from rats'),
 )
@@ -132,11 +131,48 @@ FULLERITE = GasFamily(
     sites=FULLERITE_SITES,
     compressed_by_raw={FULLERITE_RAW[gas]: FULLERITE_COMPRESSED[gas]
                        for gas in FULLERITE_RAW},
-    # Not 'class': the table already prints the site group under that header.
-    leading_columns=(('wh class', 'classes'),),
+    # Not 'class' for the classes: the site group already takes that header.
+    leading_columns=(('class', 'group'), ('wh class', 'classes')),
     cloud_columns=(('radius', 'radius'),),
     trailing_columns=(('rats', 'rats'), ('rat speed', 'rat_speed')),
 )
+
+
+def _mykoserocin_site(name, gas, clouds, units):
+    """A known-space nebula: one colour, in clouds of equal size. No NPC
+    guards one, so it carries no danger and no rats."""
+    return GasSite(name, tuple(GasCloud(MYKOSEROCIN_RAW[gas], units, gas)
+                               for _ in range(clouds)))
+
+
+# Per colour, the small nebula before the large one, as UniWiki lists them. The
+# SDE carries no cloud radius and UniWiki gives none, so the table has no
+# radius column.
+MYKOSEROCIN_SITES = tuple(
+    site
+    for small, large, gas in (
+        ('Sister Nebula', 'Helix Nebula', 'Lime'),
+        ('Wild Nebula', 'Blackeye Nebula', 'Malachite'),
+        ('Sunspark Nebula', 'Diablo Nebula', 'Amber'),
+        ('Smoking Nebula', 'Ring Nebula', 'Golden'),
+        ('Calabash Nebula', 'Glass Nebula', 'Celadon'),
+        ('Bright Nebula', 'Sparking Nebula', 'Viridian'),
+        ('Ghost Nebula', 'Eagle Nebula', 'Azure'),
+        ('Flame Nebula', 'Pipe Nebula', 'Vermillion'),
+    )
+    for site in (_mykoserocin_site(small, gas, 2, 1000),
+                 _mykoserocin_site(large, gas, 3, 2000))
+)
+
+MYKOSEROCIN = GasFamily(
+    name='Mykoserocin',
+    sites=MYKOSEROCIN_SITES,
+    compressed_by_raw={MYKOSEROCIN_RAW[gas]: MYKOSEROCIN_COMPRESSED[gas]
+                       for gas in MYKOSEROCIN_RAW},
+)
+
+# The site tables of the calculator, in the order the page prints them.
+SITE_FAMILIES = (FULLERITE, MYKOSEROCIN)
 
 
 # The fleet the calculator models, as sde type ids. Every number behind an id -
@@ -152,6 +188,9 @@ MINING_FOREMAN_BURST_II = 43551
 MINING_LASER_OPTIMIZATION_CHARGE = 42830
 MINING_FOREMAN_MINDLINK = 22559
 MINING_DIRECTOR = 22552
+
+# The Outrider's turret hardpoints. A huffer can leave some empty.
+MAX_OUTRIDER_SCOOPS = 3
 
 SCOOP_CHOICES = (
     (GAS_CLOUD_SCOOP_II, 'Gas Cloud Scoop II'),

@@ -29,6 +29,8 @@ from market.gas_constants import (
     MINING_FOREMAN_MINDLINK,
     MINING_LASER_OPTIMIZATION_CHARGE,
     MINING_SURVEY_CHIPSET_II,
+    MYKOSEROCIN,
+    MYKOSEROCIN_COMPRESSED,
     MYKOSEROCIN_RAW,
     OUTRIDER,
     PRICE_TABLE_FAMILIES,
@@ -378,9 +380,9 @@ def fleet_sde(db):
                 attribute_id=FLEET_ATTRIBUTE_IDS[attribute])
 
 
-def fit(count, scoop=GAS_CLOUD_SCOOP_II, chipset=True, implant=GH_801):
+def fit(count, scoop=GAS_CLOUD_SCOOP_II, chipset=True, implant=GH_801, scoops=None):
     return gas_fleet.HullFit(count=count, scoop_type_id=scoop, chipset=chipset,
-                             implant_type_id=implant)
+                             implant_type_id=implant, scoops=scoops)
 
 
 @pytest.mark.django_db
@@ -416,6 +418,27 @@ class TestFleet:
         assert (prospect['rate_each'] / prospect['scoops']
                 == pytest.approx(outrider['rate_each'] / outrider['scoops']
                                  * 2 / 0.75))
+
+    @pytest.mark.parametrize('scoops', [0, 1, 2, 3])
+    def test_the_outrider_harvests_per_fitted_scoop(self, fleet_sde, scoops):
+        full = gas_fleet.fleet_figures(fit(1), fit(2), mindlink=True)
+        partial = gas_fleet.fleet_figures(fit(1, scoops=scoops), fit(2), mindlink=True)
+        assert partial['hulls'][0]['scoops'] == scoops
+        assert partial['outrider_rate'] == pytest.approx(full['outrider_rate'] * scoops / 3)
+        # The burst and the hold do not depend on the scoops.
+        assert partial['boost_percent'] == full['boost_percent']
+        assert partial['hold'] == full['hold']
+
+    def test_a_scoopless_outrider_takes_the_whole_surplus(self, fleet_sde):
+        """It harvests nothing, so the Prospects fill its hold alone."""
+        figures = gas_fleet.fleet_figures(fit(1, scoops=0), fit(2), mindlink=True)
+        outrider, _ = figures['hulls']
+        assert figures['outrider_rate'] == 0
+        assert 2 * figures['transfer']['per_prospect_m3'] == pytest.approx(outrider['hold_each'])
+
+    def test_more_scoops_than_hardpoints_is_a_programming_error(self, fleet_sde):
+        with pytest.raises(AssertionError):
+            gas_fleet.fleet_figures(fit(1, scoops=4), fit(2), mindlink=True)
 
     def test_the_syndicate_scoop_wastes_nothing(self, fleet_sde):
         figures = gas_fleet.fleet_figures(
@@ -522,7 +545,8 @@ class TestForm:
         form = bound()
         assert form.is_valid(), form.errors
         assert form.cleaned_data == {
-            'outrider': False, 'outrider_scoop': GAS_CLOUD_SCOOP_II,
+            'outrider': False, 'outrider_scoops': 3,
+            'outrider_scoop': GAS_CLOUD_SCOOP_II,
             'outrider_chipset': True, 'outrider_implant': GH_801,
             'mindlink': True, 'prospects': 2,
             'prospect_scoop': GAS_CLOUD_SCOOP_II, 'prospect_chipset': True,
@@ -579,6 +603,8 @@ class TestForm:
         'prospect_scoop=999999',   # no gas scoop this page offers
         'prospect_implant=999999',
         'outrider_scoop=',
+        'outrider_scoops=4',       # above the hardpoints
+        'outrider_scoops=-1',
         'basis=last',
         'region_id=10000002000',
     ])
@@ -593,6 +619,17 @@ class TestForm:
 
     def test_an_outrider_alone_is_a_fleet(self):
         assert bound('prospects=0&outrider=on').is_valid()
+
+    def test_a_scoopless_outrider_alone_is_rejected(self):
+        """It boosts, but nothing in the fleet harvests."""
+        form = bound('prospects=0&outrider=on&outrider_scoops=0')
+        assert not form.is_valid()
+        assert form.non_field_errors()
+
+    def test_a_scoopless_outrider_boosts_the_prospects(self):
+        form = bound('outrider=on&outrider_scoops=0')
+        assert form.is_valid(), form.errors
+        assert form.cleaned_data['outrider_scoops'] == 0
 
     def test_a_bad_count_reports_itself_alone(self):
         """The fleet rule waits for a valid count, or one typo reads as two
@@ -616,6 +653,12 @@ class TestPage:
         for gas_label, type_id in FULLERITE_COMPRESSED.items():
             add_type(type_id, f'Compressed Fullerite-{gas_label}',
                      volume=VOLUMES[gas_label] / 10)
+        # Mykoserocin is 10 m3 a unit, and bids 500 ISK per m3.
+        for gas_label, type_id in MYKOSEROCIN_RAW.items():
+            add_type(type_id, f'{gas_label} Mykoserocin', volume=10)
+            add_order(type_id, type_id, price=5000, is_buy=True)
+        for gas_label, type_id in MYKOSEROCIN_COMPRESSED.items():
+            add_type(type_id, f'Compressed {gas_label} Mykoserocin', volume=1)
 
     def test_the_page_renders_every_site(self, auth_client, trade_hubs):
         # A Syndicate scoop wastes nothing, so the figure below is the whole
@@ -629,6 +672,23 @@ class TestPage:
             assert site.name in body
         # Every gas bids 1000 ISK/m3, so a Barren site pays 18,000 m3 worth.
         assert '18.0m' in body
+
+    def test_the_page_prints_one_table_per_family(self, auth_client, trade_hubs):
+        body = auth_client.get(reverse('market_gas_index'), {'basis': 'bid'}).content.decode()
+        assert '<h1>Gas</h1>' in body
+        assert '<h2>Fullerite sites</h2>' in body
+        assert '<h2>Mykoserocin sites</h2>' in body
+        assert body.count('>whole site<') == 2
+        mykoserocin = body.split('<h2>Mykoserocin sites</h2>')[1].split('<h2>Gas prices</h2>')[0]
+        assert len(MYKOSEROCIN.sites) == 16
+        for site in MYKOSEROCIN.sites:
+            assert site.name in mykoserocin
+        # A large nebula cloud holds 2,000 units; residue puts that in brackets.
+        assert '(2,000)' in mykoserocin
+        # Only the fullerite table carries the site group, the rats and the radius.
+        for header in ('class', 'wh class', 'rats', 'rat speed', 'radius'):
+            assert f'<th>{header}</th>' not in mykoserocin
+        assert '<th>class</th>' in body.split('<h2>Mykoserocin sites</h2>')[0]
 
     def test_no_template_comment_reaches_the_page(self, auth_client, trade_hubs):
         """Django's {# #} comment cannot span lines. A multi-line one is not a
@@ -676,7 +736,8 @@ class TestPage:
         body = auth_client.get(reverse('market_gas_index')).content.decode()
         assert '>whole site<' in body
         assert '>one cloud<' in body
-        assert body.count('<th>ISK/hr</th>') == 2
+        # Twice per table, and the page prints one table per family.
+        assert body.count('<th>ISK/hr</th>') == 2 * 2
 
     def test_the_form_prints_three_rows(self, auth_client, trade_hubs):
         body = auth_client.get(reverse('market_gas_index')).content.decode()

@@ -6,6 +6,7 @@ from market.gas_constants import (
     GAS_CLOUD_SCOOP_II,
     GH_801,
     IMPLANT_CHOICES,
+    MAX_OUTRIDER_SCOOPS,
     SCOOP_CHOICES,
 )
 from market.models import PriceAlert
@@ -31,6 +32,7 @@ class GasFleetForm(forms.Form):
 
     DEFAULTS = {
         'outrider': False,
+        'outrider_scoops': MAX_OUTRIDER_SCOOPS,
         'outrider_scoop': GAS_CLOUD_SCOOP_II,
         'outrider_chipset': True,
         'outrider_implant': GH_801,
@@ -53,13 +55,17 @@ class GasFleetForm(forms.Form):
     # The controls read as three statements: the Outrider, the Prospects, and
     # what the table quotes them against. The page renders one row per group.
     FIELD_GROUPS = (
-        ('outrider', 'outrider_scoop', 'outrider_chipset', 'outrider_implant',
+        ('outrider', 'outrider_scoops', 'outrider_scoop', 'outrider_chipset', 'outrider_implant',
          'mindlink'),
         ('prospects', 'prospect_scoop', 'prospect_chipset', 'prospect_implant'),
         ('basis', 'region_id'),
     )
 
     outrider = forms.BooleanField(required=False, label='Outrider')
+    # A select, not a number box: the range is four values.
+    outrider_scoops = forms.TypedChoiceField(
+        coerce=int, choices=[(n, str(n)) for n in range(MAX_OUTRIDER_SCOOPS + 1)],
+        label='Outrider scoop count')
     outrider_scoop = forms.TypedChoiceField(coerce=int, choices=SCOOP_CHOICES,
                                             label='Outrider scoops')
     outrider_chipset = forms.BooleanField(required=False,
@@ -104,10 +110,13 @@ class GasFleetForm(forms.Form):
 
     def clean(self):
         cleaned = super().clean()
-        # The empty fleet divides by zero in every figure the page shows. The
-        # rule waits for a valid count, so a bad one reports itself alone.
-        if 'prospects' in cleaned and not (cleaned['prospects'] or cleaned['outrider']):
-            raise ValidationError('The fleet must hold at least one ship.')
+        # A fleet that harvests nothing divides by zero in every figure the page
+        # shows. The rule waits for valid counts, so a bad one reports itself
+        # alone. An Outrider without scoops still boosts, but harvests nothing.
+        if 'prospects' in cleaned and 'outrider_scoops' in cleaned and not (
+                cleaned['prospects']
+                or (cleaned['outrider'] and cleaned['outrider_scoops'])):
+            raise ValidationError('The fleet must hold at least one ship with a scoop.')
         return cleaned
 
 

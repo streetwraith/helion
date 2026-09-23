@@ -5,7 +5,7 @@
 {% block title %}gas | Helion{% endblock %}
 
 {% block content %}
-<h1>{{ family.name }} Calculator</h1>
+<h1>Gas</h1>
 
 <form action="{% url 'market_gas_index' %}" method="GET">
     <div id="gas_fleet">
@@ -87,9 +87,12 @@
     fleet fills after {{ setup.trip_minutes|floatformat:0 }} minutes.</p>
 {% endif %}
 
+{% for table in site_tables %}
+{% with family=table.family sites=table.sites %}
+<h2>{{ family.name }} sites</h2>
 {% comment %}
 No class="market": market.js runs tablesorter on that class, and a sort would
-split the two cloud rows that make up one site.
+split the cloud rows that make up one site.
 {% endcomment %}
 <table style="width: auto;">
     <thead>
@@ -98,7 +101,9 @@ split the two cloud rows that make up one site.
         for a single cloud. This row says which is which; the labels alone cannot.
         {% endcomment %}
         <tr>
-            <th colspan="{{ family.leading_columns|length|add:1 }}"></th>
+            {% if family.leading_columns %}
+            <th colspan="{{ family.leading_columns|length }}"></th>
+            {% endif %}
             <th colspan="5">whole site</th>
             <th colspan="{{ family.cloud_columns|length|add:7 }}">one cloud</th>
             {% if family.trailing_columns %}
@@ -106,7 +111,6 @@ split the two cloud rows that make up one site.
             {% endif %}
         </tr>
         <tr>
-            <th>class</th>
             {% for header, key in family.leading_columns %}<th>{{ header }}</th>{% endfor %}
             <th>site</th>
             <th>ISK/site</th>
@@ -129,7 +133,6 @@ split the two cloud rows that make up one site.
         {% for cloud in site.clouds %}
         <tr>
             {% if forloop.first %}
-            <td rowspan="{{ site.clouds|length }}">{{ site.group }}</td>
             {% for header, key in family.leading_columns %}
             <td rowspan="{{ site.clouds|length }}">{{ site.extra|get_by_key:key }}</td>
             {% endfor %}
@@ -166,6 +169,8 @@ split the two cloud rows that make up one site.
         {% endfor %}
     </tbody>
 </table>
+{% endwith %}
+{% endfor %}
 {% endif %}
 
 <h2>Gas prices</h2>

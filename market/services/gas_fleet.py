@@ -62,13 +62,14 @@ ATTRIBUTE_NAMES = (
 class HullFit:
     """One hull class of the fleet: how many fly, and what each one fits.
 
-    The scoop count is absent on purpose. It is the hull's turret hardpoint
-    count, which the sde carries, and a huffer fills every hardpoint.
+    `scoops` None fills every turret hardpoint, a count the sde carries. A
+    number fits fewer, and must not exceed the hardpoints.
     """
     count: int
     scoop_type_id: int
     chipset: bool
     implant_type_id: int | None
+    scoops: int | None = None
 
 
 def fleet_figures(outrider, prospect, mindlink):
@@ -109,8 +110,10 @@ def fleet_figures(outrider, prospect, mindlink):
 def _hull_row(hull_type_id, fit, values, names, boost_percent):
     """One hull class: what each ship harvests and holds, and what it wastes."""
     yield_factor, duration_factor = HULL_GAS_BONUSES[hull_type_id]
-    scoops = int(_value(values, hull_type_id, 'turretSlotsLeft'))
-    assert scoops > 0, f'type {hull_type_id} mounts no scoop'
+    hardpoints = int(_value(values, hull_type_id, 'turretSlotsLeft'))
+    assert hardpoints > 0, f'type {hull_type_id} mounts no scoop'
+    scoops = hardpoints if fit.scoops is None else fit.scoops
+    assert 0 <= scoops <= hardpoints, f'type {hull_type_id} mounts {hardpoints} scoops at most'
     cycle_seconds = (_value(values, fit.scoop_type_id, 'duration') / 1000
                      * duration_factor
                      * _implant_factor(values, fit)

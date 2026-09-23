@@ -1508,8 +1508,9 @@ packaged volume into every number and cannot express the compressed comparison b
 reproduce every one of its m3 figures and survive a repackaging by CCP.
 
 The site contents are the one thing here with no authoritative source in the stack: the SDE exports
-no cosmic signature, so they come from the UniWiki site pages, read 4 August 2026. Nothing can
-verify them from the database.
+no cosmic signature, so they come from the UniWiki site pages. The fullerite sites were read on 4
+August 2026, the mykoserocin nebulae on 23 September 2026. Nothing can verify them from the
+database. Both agree with the spreadsheet's `fullerites v3` and `mykocerosin` tabs.
 
 The spreadsheet also swaps the type ids of Fullerite-C50 and Fullerite-C60 in its price lookup.
 This app resolves the ids itself, so it does not carry that bug. The two prices sit within 0.1% of
@@ -1564,9 +1565,11 @@ collections, so that the charge's -15% reaches a gas scoop is an assumption. A s
 level, so every skill sits at V. And the burst reaches every Prospect, which needs the fleet inside
 15 km.
 
-The scoop count is not a control. It is the hull's turret hardpoint count, which the sde carries:
-two on a Prospect and three on an Outrider. A huffer fills every hardpoint, and both fits stay
-inside the hull's CPU and powergrid.
+The Prospect's scoop count is not a control. It is the hull's turret hardpoint count, which the sde
+carries: two on a Prospect. The Outrider's count is a control from 0 to 3, because some fits leave
+hardpoints empty. The service asserts that the count stays inside the sde hardpoints. An Outrider
+with no scoop still boosts and still adds its hold, so the form rejects it only when no Prospect
+flies, since that fleet harvests nothing.
 
 The fleet residue is weighted by harvest rate: `sum(rate x probability x volume multiplier)` over
 `sum(rate)`. That is the gas destroyed per second over the gas banked per second, so every clear
@@ -1596,8 +1599,11 @@ role bonuses give it +75% tractor beam range and +30% tractor beam velocity.
 `GasFamily` carries its sites, its raw-to-compressed type id map, and three ordered lists of extra
 columns. The calculator reads only `(type_id, units)`, so it is blind to the family. Everything
 family-specific — the wormhole class range, the cloud radius, the rats and their speed — rides in an
-opaque `extra` dict that the template prints and no code reads. A second gas family is therefore a
-data addition. Only fullerite exists today.
+opaque `extra` dict that the template prints and no code reads. The fullerite site group
+(PERIMETER, FRONTIER, CORE) rides there too, because a mykoserocin nebula has none. A second gas
+family was therefore a data addition: `SITE_FAMILIES` lists fullerite and mykoserocin, and the page
+prints one site table per family. Each table grades its own ISK columns. The mykoserocin table has
+no extra column: no NPC guards a nebula, and no source gives a cloud radius.
 
 Two fields stay first-class because every gas family has them: a cloud's short `label`, and a site's
 `danger`. `danger` holds the warning text for a site the rats make hard to huff, which the table
@@ -1655,9 +1661,10 @@ a bad price.
 
 ### The table must not carry `class="market"`
 
-`market.js` runs `tablesorter()` on every table with that class. This table spends two rows on each
-site — one per gas cloud, joined by `rowspan` — so a sort would split the pairs and pair each site's
-first cloud with another site's second. The paired layout is deliberate, it mirrors the spreadsheet,
+`market.js` runs `tablesorter()` on every table with that class. A site table spends one row on
+each gas cloud of a site — two for a fullerite site, two or three for a nebula — joined by
+`rowspan`, so a sort would split the rows and pair each site's first cloud with another site's
+second. The paired layout is deliberate, it mirrors the spreadsheet,
 and it costs the free sorter. A test asserts the class is absent.
 
 ### The form validates because the fleet divides

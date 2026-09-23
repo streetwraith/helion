@@ -2,7 +2,7 @@ from django.shortcuts import render
 
 from market.constants import REGION_ID_FORGE
 from market.forms import GasFleetForm
-from market.gas_constants import FULLERITE
+from market.gas_constants import SITE_FAMILIES
 from market.models import TradeHub
 from market.services import gas, gas_fleet
 
@@ -15,7 +15,7 @@ HUB_ORDER = ['Jita', 'Amarr', 'Dodixie', 'Hek', 'Rens']
 def market_gas_index(request):
     hubs = _hubs()
     form = GasFleetForm.from_query(request.GET, hubs, REGION_ID_FORGE)
-    context = {'form': form, 'family': FULLERITE,
+    context = {'form': form,
                'prices': gas.price_table(),
                # The price table's hub columns, in the order its cells hold.
                'price_hubs': [hub for region_id in gas.PRICE_REGION_IDS
@@ -27,12 +27,17 @@ def market_gas_index(request):
                                 frigate_rate=fleet['prospect_rate'],
                                 hold=fleet['hold'],
                                 residue_chance=fleet['residue_chance'])
+        # One query for every family: the gas ids do not overlap.
         quotes = gas.gas_quotes(params['region_id'], params['basis'],
-                                FULLERITE.compressed_by_raw)
+                                {raw_id: compressed_id for family in SITE_FAMILIES
+                                 for raw_id, compressed_id in family.compressed_by_raw.items()})
         context['fleet'] = fleet
         context['setup'] = setup
         context['region_id'] = params['region_id']
-        context['sites'] = gas.site_rows(FULLERITE, quotes, setup)
+        # Each family grades its own table, so each table's best site reads green.
+        context['site_tables'] = [{'family': family,
+                                   'sites': gas.site_rows(family, quotes, setup)}
+                                  for family in SITE_FAMILIES]
     return render(request, 'market/gas.html', context)
 
 
@@ -40,6 +45,7 @@ def _fleet_figures(params):
     """The form's fleet, as the two hull fits the calculator takes."""
     return gas_fleet.fleet_figures(
         outrider=gas_fleet.HullFit(count=1 if params['outrider'] else 0,
+                                   scoops=params['outrider_scoops'],
                                    scoop_type_id=params['outrider_scoop'],
                                    chipset=params['outrider_chipset'],
                                    implant_type_id=params['outrider_implant']),

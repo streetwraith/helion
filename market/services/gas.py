@@ -141,7 +141,6 @@ def _site_row(site, quotes, setup):
     value = None if None in values else sum(values)
     return {
         'name': site.name,
-        'group': site.group,
         'extra': site.extra,
         'danger': site.danger,
         'clouds': clouds,
