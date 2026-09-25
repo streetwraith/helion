@@ -1072,6 +1072,11 @@ optional. The owner resolves through the shared `owner_labels`, so a corporation
 own name and an id with no name anywhere reads as itself. The list sorts on the whole label, so
 the name still leads and the copies of one container stay adjacent.
 
+A **ship hangar** per hub heads the list (`?container=ships-<station_id>`). It is a virtual
+container: the packaged ships the characters keep in that hub hangar, all owners together. An
+assembled ship stays out, because it must be repackaged before it can be listed, and so does a
+corporation ship, like a corporation container. A hub with no packaged ship offers no hangar.
+
 A corporation container cannot reach this list yet. ESI hangs a corporation's assets off an
 `OfficeFolder` row, so its containers carry `CorpSAG1`..`CorpSAG7` and a parent item id, not the
 station — the `location_type='station'` filter excludes them by construction. The owner in the

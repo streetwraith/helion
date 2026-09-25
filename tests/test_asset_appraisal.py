@@ -5,7 +5,7 @@ from datetime import date, timedelta
 import pytest
 from django.utils import timezone
 
-from evesde.models import Type
+from evesde.models import Group, Type
 from market.models import CharacterAsset, EveName, MarketTransaction
 from market.services import appraisal
 from marketdata.models import History, Order
@@ -159,8 +159,60 @@ class TestContainerOptions:
         add_asset(1, CONTAINER, name="loot")
         options = appraisal.hub_containers()
 
-        assert appraisal.find_container(options, 1).name == "loot"
-        assert appraisal.find_container(options, 999) is None
+        assert appraisal.find_container(options, "1").name == "loot"
+        assert appraisal.find_container(options, "999") is None
+
+
+class TestShipHangar:
+    @pytest.fixture
+    def ships(self, types, trade_hubs):
+        Group.objects.create(group_id=420, name="Destroyer", category_id=6)
+        Group.objects.create(group_id=448, name="Audit Log Secure Container",
+                             category_id=2)
+
+    def add_packaged(self, item_id, type_id=SHIP, quantity=1, **fields):
+        asset = add_asset(item_id, type_id, quantity=quantity, **fields)
+        CharacterAsset.objects.filter(item_id=item_id).update(is_singleton=False)
+        return asset
+
+    def test_packaged_ships_open_a_hangar_per_hub_ahead_of_the_containers(self, ships):
+        add_asset(1, CONTAINER, name="aaa")
+        self.add_packaged(2)
+        self.add_packaged(3, location_id=JITA_STATION)
+
+        options = appraisal.hub_containers()
+
+        assert [option.label for option in options] == [
+            "ship hangar - Amarr", "ship hangar - Jita", "aaa - Amarr (Ummae)"]
+
+    @pytest.mark.parametrize("fields", [
+        {"location_id": NON_HUB_STATION},
+        {"character_id": None, "corporation_id": CORPORATION},
+    ])
+    def test_a_ship_outside_a_hub_or_owned_by_a_corporation_opens_no_hangar(
+            self, ships, fields):
+        self.add_packaged(1, **fields)
+
+        assert appraisal.hub_containers() == []
+
+    def test_an_assembled_ship_opens_no_hangar(self, ships):
+        add_asset(1, SHIP)
+
+        assert appraisal.hub_containers() == []
+
+    def test_the_hangar_sums_the_packaged_ships_of_every_character(self, ships):
+        self.add_packaged(1, quantity=3)
+        self.add_packaged(2, quantity=2, character_id=902222)
+        add_asset(3, SHIP)  # assembled
+        self.add_packaged(4, CONTAINER)  # not a ship
+        self.add_packaged(5, location_id=JITA_STATION)
+        hangar = appraisal.find_container(appraisal.hub_containers(),
+                                          f"ships-{AMARR_STATION}")
+
+        result = appraise(hangar)
+
+        assert [(row['item'], row['quantity']) for row in result['rows']] == [
+            ("Sunesis", 5)]
 
 
 class TestContents:

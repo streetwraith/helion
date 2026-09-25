@@ -25,7 +25,7 @@ and they filter the rendered rows in the browser.
   <select id="container" name="container">
     <option value="">all assets</option>
     {% for option in containers %}
-    <option value="{{ option.item_id }}"{% if option.item_id == container.item_id %} selected{% endif %}>{{ option.label }}</option>
+    <option value="{{ option.key }}"{% if option.key == container.key %} selected{% endif %}>{{ option.label }}</option>
     {% endfor %}
   </select>
   {% if not container %}

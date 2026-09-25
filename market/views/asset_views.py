@@ -19,7 +19,7 @@ from market.services import assets as asset_service
 def market_assets(request):
     containers = appraisal.hub_containers()
     requested = request.GET.get('container')
-    container = _selected_container(containers, requested)
+    container = appraisal.find_container(containers, requested)
     if container:
         return render(request, 'market/assets/assets.html', {
             'containers': containers, 'container': container,
@@ -36,9 +36,3 @@ def market_assets(request):
         'owner_options': asset_service.asset_owner_options(assets),
         'category_options': asset_service.get_category_options(assets),
     })
-
-
-def _selected_container(containers, requested):
-    if not requested or not requested.isdigit():
-        return None
-    return appraisal.find_container(containers, int(requested))

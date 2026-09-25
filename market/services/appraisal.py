@@ -13,7 +13,8 @@ from datetime import timedelta
 
 from django.db.models import Max, Min, Sum
 
-from evesde.models import Type
+from evesde.hulls import SHIP_CATEGORY_ID
+from evesde.models import Group, Type
 from market.constants import REGION_ID_DOMAIN, REGION_ID_FORGE
 from market.models import CharacterAsset, MarketTransaction, TradeHub
 from market.services import history
@@ -46,15 +47,49 @@ class Container:
         # reads as a qualifier, which is what the parentheses say elsewhere.
         return f'{self.name} - {self.hub.name} ({self.owner})'
 
+    @property
+    def key(self):
+        return str(self.item_id)
+
+    def quantities(self):
+        return _quantities(self.item_id)
+
+
+@dataclass(frozen=True)
+class ShipHangar:
+    """The packaged ships in the hangar of a trade hub, priced like a container.
+
+    An assembled ship stays out: it must be repackaged before it can be listed.
+    A corporation ship stays out too, like a corporation container.
+    """
+    hub: TradeHub
+
+    @property
+    def label(self):
+        return f'ship hangar - {self.hub.name}'
+
+    @property
+    def key(self):
+        return f'ships-{self.hub.station_id}'
+
+    def quantities(self):
+        rows = (_packaged_ships([self.hub.station_id])
+                .values('type_id').annotate(quantity=Sum('quantity')))
+        return {row['type_id']: row['quantity'] for row in rows}
+
 
 def hub_containers():
-    """Every named container in a trade hub hangar, for the dropdown.
+    """Every ship hangar and named container in a trade hub, for the dropdown.
 
     A container inside a ship or inside another container does not count: it is
     not a place you store goods for sale. An unnamed one does not either, since
-    two of them read the same in the list.
+    two of them read the same in the list. A hub with no packaged ship offers no
+    ship hangar.
     """
     hubs = {hub.station_id: hub for hub in TradeHub.objects.all()}
+    ship_hubs = set(_packaged_ships(hubs).values_list('location_id', flat=True))
+    hangars = sorted((ShipHangar(hub=hubs[station_id]) for station_id in ship_hubs),
+                     key=lambda hangar: hangar.hub.name)
     rows = (CharacterAsset.objects
             .filter(location_type='station', location_id__in=hubs,
                     location_flag='Hangar')
@@ -70,14 +105,14 @@ def hub_containers():
                   owner=owners.get(row.corporation_id or row.character_id, ''))
         for row in rows if row.type_id in container_types]
     # The name leads, so the same container in two hubs still reads as a pair.
-    return sorted(containers, key=lambda container: container.label.lower())
+    return hangars + sorted(containers, key=lambda container: container.label.lower())
 
 
-def find_container(containers, item_id):
+def find_container(containers, key):
     """The container the request names, or None. The page validates against the
     list it just built, so a stale bookmark cannot reach the queries below."""
     return next((container for container in containers
-                 if container.item_id == item_id), None)
+                 if container.key == key), None)
 
 
 def get_container_appraisal(container):
@@ -90,7 +125,7 @@ def get_container_appraisal(container):
     """
     hub = container.hub
     reference_hub = _reference_hub(hub)
-    quantities = _quantities(container.item_id)
+    quantities = container.quantities()
     type_ids = sorted(quantities)
     if not type_ids:
         return {'hub': hub, 'reference_hub': reference_hub, 'rows': [],
@@ -135,6 +170,16 @@ def _quantities(container_item_id):
             .filter(location_id=container_item_id, location_type='item')
             .values('type_id').annotate(quantity=Sum('quantity')))
     return {row['type_id']: row['quantity'] for row in rows}
+
+
+def _packaged_ships(station_ids):
+    """The packaged ships a character keeps in the hangar of these stations."""
+    ship_types = Type.objects.filter(
+        group_id__in=Group.objects.filter(category_id=SHIP_CATEGORY_ID).values('group_id'))
+    return CharacterAsset.objects.filter(
+        location_type='station', location_id__in=station_ids, location_flag='Hangar',
+        is_singleton=False, corporation_id=None,
+        type_id__in=ship_types.values('type_id'))
 
 
 def _best_prices(type_ids, region_ids):
