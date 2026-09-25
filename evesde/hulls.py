@@ -584,9 +584,6 @@ def _form(hull_filter, matched_tags):
         "weapon": _options(WEAPON_CHOICES, hull_filter.weapon),
         "turret": _options(TURRET_CHOICES, hull_filter.turret),
         "tank": _options(TANK_CHOICES, hull_filter.tank),
-        # The turret type only means something under a turret filter. It opens
-        # once that filter is applied, so the page needs no script.
-        "turret_enabled": hull_filter.weapon == "turret",
         "unbonused": hull_filter.unbonused,
         "empire_only": hull_filter.empire_only,
         "factions": [{"key": key, "label": label, "count": counts[key],

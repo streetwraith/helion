@@ -1855,7 +1855,8 @@ A form above the figures filters the page by what a hull bonuses: `weapon bonuse
 (energy / hybrid / projectile / precursor / vorton), `tank bonuses`
 (any / none / shield / armor), a box that widens a weapon group to the hulls that bonus no weapon,
 a box that keeps the empire hulls alone, and a checkbox per faction with a count beside it. The filter runs on the server and lives in the
-query string, so a filtered page is a link. Only the name box and the figure toggles stay in the
+query string, so a filtered page is a link. The `turret type` dropdown is always open, but it
+counts only when `weapon bonuses` reads turret. Only the name box and the figure toggles stay in the
 browser, because both of those only hide what the page already carries.
 
 `evesde/hull_bonuses.py` derives the tags. The trait text a card shows is prose, so the tags come

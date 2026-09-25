@@ -723,12 +723,15 @@ def test_the_page_reports_how_many_hulls_the_filter_keeps(sde_ships):
     assert (page["total"], page["shown"]) == (7, 3)
 
 
-def test_the_turret_type_opens_only_under_a_turret_filter(sde_ships):
+@pytest.mark.parametrize("query, expected", [
+    ("turret=energy", ["Astero", "Damavik", "Gnosis", "Kestrel", "Punisher", "Rifter",
+                       "Venture"]),
+    ("weapon=missile&turret=energy", ["Kestrel"]),
+])
+def test_the_turret_type_counts_only_under_a_turret_filter(sde_ships, query, expected):
     add_filter_ships()
 
-    assert hulls.get_hull_page()["form"]["turret_enabled"] is False
-    page = hulls.get_hull_page(hull_filter=hulls.read_filter(QueryDict("weapon=turret")))
-    assert page["form"]["turret_enabled"] is True
+    assert shown(query) == expected
 
 
 @pytest.mark.parametrize("query, expected", [
