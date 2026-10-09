@@ -93,6 +93,20 @@ header nav {
     vertical-align: middle;
 }
 
+/* The label opens the market window, but it reads as a label, not as navigation. */
+#price-ticker .item-name-link {
+    color: inherit;
+    text-decoration: none;
+}
+
+#price-ticker .item-name-link:hover {
+    text-decoration: underline;
+}
+
+.ticker-change {
+    font-size: 0.8em;
+}
+
 /* Against the newest daily average: up is green, down is red. Both colours
    already carry the page ink contrast in this theme; the dark block below
    holds the pair that clears the dark background. */

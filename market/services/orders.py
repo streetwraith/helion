@@ -240,7 +240,7 @@ JITA_ASK_DEPTH = 5
 PRICE_TICKER_CACHE_SECONDS = 600  # caps the ticker queries per page render
 # The key names the shape, not the feature: a deploy that changes the entry
 # would otherwise read the old shape back until the entry expires.
-PRICE_TICKER_CACHE_KEY = 'price_ticker_items'
+PRICE_TICKER_CACHE_KEY = 'price_ticker_items_v2'
 # Days behind each ticker price. Enough to show a direction, few enough to draw
 # in the few pixels the header gives the sparkline.
 TICKER_HISTORY_DAYS = 7
@@ -253,12 +253,19 @@ def _ticker_item(label, price, region_id, type_id):
     # paints too. Without a price or without history nothing can be compared,
     # and the cell stays uncoloured.
     trend = None
+    change_pct = None
     if price is not None and averages:
         trend = 'down' if float(price) < averages[-1] else 'up'
+        change_pct = (float(price) - averages[-1]) / averages[-1] * 100
     return {
         'label': label,
+        'type_id': type_id,
         'price': price,
         'history': averages,
+        'last_average': averages[-1] if averages else None,
+        'change_pct': change_pct,
+        'week_change_pct': ((averages[-1] - averages[0]) / averages[0] * 100
+                            if averages else None),
         # The tooltip names the window, so the number must come from here rather
         # than from the template, where it would drift from the slice above.
         'days': TICKER_HISTORY_DAYS,

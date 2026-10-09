@@ -6,6 +6,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="csrf-token" content="{{ csrf_token }}">
     <title>{% block title %}Helion{% endblock %}</title>
     <link rel="icon" href="/favicon.ico" sizes="32x32">
     <link rel="icon" href="{% static 'icon.svg' %}" type="image/svg+xml">
@@ -19,6 +20,8 @@
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jquery.tablesorter/2.31.3/js/jquery.tablesorter.min.js"></script>
     <script src="{% static 'js/dialog.js' %}"></script>
     <script src="{% static 'js/jquery.peity.min.js' %}"></script>
+    <script src="{% static 'js/csrf.js' %}"></script>
+    <script src="{% static 'js/market_window.js' %}"></script>
     <script src="{% static 'js/ticker.js' %}"></script>
     <script src="{% static 'js/alert_bar.js' %}"></script>
     {% block js %}
@@ -48,10 +51,10 @@
             {% endif %}
             <span id="price-ticker">
                 {% for item in price_ticker %}
-                <span class="ticker-item">{{ item.label }}:
-                    <span class="{{ item.trend|default_if_none:'' }}">{{ item.price|isk_value_mil|default:"-" }}</span>
-                    {# The tooltip sits on the wrapper: peity hides the element it draws from and puts its svg next to it, so a title on that element would never show. #}
-                    {% if item.history %}<span class="ticker-chart-tip" title="low {{ item.min|isk_value_mil }}, high {{ item.max|isk_value_mil }} ({{ item.days }} days)"><span class="ticker-chart" data-peity='{"height":14,"width":42,"fill":false,"min":{{ item.min }},"max":{{ item.max }},"stroke":"{{ item.stroke }}"}'>{{ item.history|join:"," }}</span></span>{% endif %}
+                <span class="ticker-item"><a class="item-name-link" data-type-id="{{ item.type_id }}" href="#" title="Open the market window in game">{{ item.label }}</a>:
+                    <span class="{{ item.trend|default_if_none:'' }}">{{ item.price|isk_value_mil|default:"-" }}{% if item.change_pct is not None %} <span class="ticker-change">{{ item.change_pct|pct_value:1 }}</span>{% endif %}</span>
+                    {# The tooltip sits on the wrapper: peity hides the element it draws from and puts its svg next to it, so a title on that element would never show. Two decimals, because a week of these prices moves by less than the 0.1m the header rounds to. #}
+                    {% if item.history %}<span class="ticker-chart-tip" title="{% if item.change_pct is not None %}now {{ item.price|isk_value_mil:2 }}, {{ item.change_pct|pct_value:1 }} on the last daily average&#10;{% endif %}last daily average {{ item.last_average|isk_value_mil:2 }}&#10;daily averages, {{ item.days }} days: {{ item.history.0|isk_value_mil:2 }} to {{ item.last_average|isk_value_mil:2 }}, {{ item.week_change_pct|pct_value:1 }}&#10;lowest {{ item.min|isk_value_mil:2 }}, highest {{ item.max|isk_value_mil:2 }}"><span class="ticker-chart" data-peity='{"height":14,"width":42,"fill":false,"min":{{ item.min }},"max":{{ item.max }},"stroke":"{{ item.stroke }}"}'>{{ item.history|join:"," }}</span></span>{% endif %}
                 </span>
                 {% endfor %}
             </span>

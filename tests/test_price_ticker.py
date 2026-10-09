@@ -158,6 +158,25 @@ class TestTickerTrend:
         assert entry["min"] == 735_000_000.0
         assert entry["max"] == 747_000_000.0
 
+    def test_change_against_the_newest_daily_average(self, db):
+        add_order(1, LSI, 742_500_000)
+        add_history(LSI, [700_000_000, 750_000_000])
+
+        entry = item(market_service.get_price_ticker(), "LSI")
+
+        assert entry["last_average"] == 750_000_000.0
+        assert entry["change_pct"] == -1.0
+        assert entry["week_change_pct"] == (750 - 700) / 700 * 100
+
+    def test_no_history_means_no_change(self, db):
+        add_order(1, LSI, 745_000_000)
+
+        entry = item(market_service.get_price_ticker(), "LSI")
+
+        assert entry["change_pct"] is None
+        assert entry["week_change_pct"] is None
+        assert entry["last_average"] is None
+
     def test_a_gap_day_drops_out_rather_than_shifting_the_window(self, db):
         # EVE Ref publishes late, so the newest row is not today. The window
         # must anchor on the data, not on the calendar.
@@ -179,8 +198,11 @@ class TestHeaderRendering:
 
         content = auth_client.get("/").content.decode()
 
-        assert "PLEX:" in content and ">4.8m<" in content
-        assert "LSI:" in content and ">745.0m<" in content
+        assert ">4.8m<" in content
+        assert '>745.0m <span class="ticker-change">+4.9%</span><' in content
+        # The label opens the market window in game.
+        assert f'<a class="item-name-link" data-type-id="{PLEX}"' in content
+        assert f'<a class="item-name-link" data-type-id="{LSI}"' in content
         # The sparkline values, its bounds and the up colour reach the markup.
         assert "700000000.0,710000000.0" in content
         assert '"min":700000000.0,"max":710000000.0' in content
@@ -188,6 +210,10 @@ class TestHeaderRendering:
         # The range the chart draws, as a tooltip: the header shows it nowhere
         # else. It has to sit on the wrapper, because peity hides the element it
         # draws from and inserts its svg next to it.
-        assert ('<span class="ticker-chart-tip" title="low 700.0m, high 710.0m (7 days)">'
+        # Two decimals: a week of prices moves by less than the header's 0.1m.
+        assert ('<span class="ticker-chart-tip" title="now 745.00m, +4.9% on the last daily average&#10;'
+                'last daily average 710.00m&#10;'
+                'daily averages, 7 days: 700.00m to 710.00m, +1.4%&#10;'
+                'lowest 700.00m, highest 710.00m">'
                 '<span class="ticker-chart" data-peity=') in content
         assert '<span class="up">' in content

@@ -81,12 +81,12 @@ def isk_value_blank(value):
     return isk_value(value)
 
 @register.filter(name='pct_value')
-def pct_value(value):
+def pct_value(value, decimals=0):
     """A distance from a reference, in percent, signed. An unknown value stays
     empty: "no median to compare against" is not "level with the median"."""
     if value is None:
         return ''
-    return "{:+,.0f}%".format(value)
+    return "{:+,.{}f}%".format(value, decimals)
 
 @register.filter(name='isk_value_k')
 def isk_value_k(value):
@@ -95,10 +95,10 @@ def isk_value_k(value):
     return "{:,.1f}k".format(value/1000)
 
 @register.filter(name='isk_value_mil')
-def isk_value_mil(value):
+def isk_value_mil(value, decimals=1):
     if(value == 0 or value == None or isinstance(value, dict) or value == ''):
         return 0
-    return "{:,.1f}m".format(value/1000000)
+    return "{:,.{}f}m".format(value/1000000, decimals)
 
 @register.filter(name='sp_value')
 def sp_value(value):

@@ -371,17 +371,28 @@ orders straight from `market.orders` — the raw table, not the hub view: the re
 hub and its orders sit in stations across the whole universe, so a hub-range filter would be
 wrong.
 
-Each cell carries the last seven daily averages as a peity sparkline, with the range it draws
-as a `title` tooltip: peity scales the line to the data, so without the low and the high the
-shape says nothing about the size of the move. The window in that text comes from the same
-constant as the slice. **The tooltip sits on a wrapper, never on the element peity draws from**:
+Each cell carries the last seven daily averages as a peity sparkline. Peity scales the line to
+the data, so the shape alone says nothing about the size of the move. Two numbers give that size:
+
+- Beside the price, the change of the live ask against the newest daily average, in percent.
+- In a `title` tooltip: the live ask, the newest daily average, the first and last average of the
+  window with the change between them, and the lowest and highest average. These figures carry
+  two decimals: a week of PLEX moves by less than the 0.1m the header rounds to, and one decimal
+  showed the same low and high under a rising line.
+
+The window in that text comes from the same constant as the slice. **The tooltip sits on a wrapper, never on the element peity draws from**:
 peity hides that element and inserts its svg beside it, so a title there is on a
 `display: none` box and never shows. The price takes the colour of its direction: green above the newest daily average, red below it, which is the
 direction the ice page paints. That window anchors on the newest history row rather than on
 today, because EVE Ref publishes a day's history a day or two late.
 
+The label is an `item-name-link`, so a click opens the in-game market window. The header is on
+every page, so `base.html` loads that click handler and the CSRF setup for every page, not
+`market.js`. The CSRF token comes from a `meta` tag in `base.html`, not from the cookie: Django
+sets the cookie only after some page renders a token, and most pages render none.
+
 One cache entry holds the three prices and their history together for 10 minutes. Its key names
-the shape (`price_ticker_items`), so a deploy that changes the entry cannot read the old shape
+the shape (`price_ticker_items_v2`), so a deploy that changes the entry cannot read the old shape
 back out of Redis until it expires.
 
 ## The header wallet balance
@@ -566,7 +577,7 @@ hidden row.
 **The banner names the items as links; the OS card cannot.** A card body is plain text with one
 click target for the whole card, so only the banner can carry a link per item. Each name is the same
 `item-name-link` the table rows carry, which opens the in-game market window through the handler in
-`market.js`. Both surfaces take one set of text segments, where a segment is a string or an item:
+`market_window.js`. Both surfaces take one set of text segments, where a segment is a string or an item:
 the banner turns an item into a link, and the card joins the names as text. The single-order banner
 links the name in its title, which is the common case.
 
