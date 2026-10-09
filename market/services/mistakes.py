@@ -16,6 +16,7 @@ from django.db.models import ExpressionWrapper, F, FloatField, Max, Min, Q
 
 from evesde import services as sde_service
 from market.constants import REGION_ID_FORGE
+from market.services.fees import get_brokers_fee, get_sales_tax
 from market.services.orders import best_orders_by_type
 from marketdata.models import Order, OrdersHub, RegionStatus
 
@@ -99,6 +100,10 @@ def compute_mistakes(region_id):
     jita_sells = best_orders_by_type(jita_reference, is_buy=False)
     jita_buys = best_orders_by_type(jita_reference, is_buy=True)
 
+    # The flip relists at the next sell price, so the exit pays the broker fee
+    # and the sales tax. The instant buy of the mistake itself pays neither.
+    net_sell_proceeds = 1 - get_sales_tax() - get_brokers_fee()
+
     matching_results = []
     for item in matches:
         type_id = item['type_id']
@@ -125,8 +130,8 @@ def compute_mistakes(region_id):
             'lowest_sell_price': lowest_price,
             'lowest_sell_price_volume': lowest_sell_price_volume,
             'second_best_sell_price': second_best_sell_price,
-            'percent_diff': (second_best_sell_price - lowest_price)/lowest_price*100 if second_best_sell_price else None,
-            'profit': (second_best_sell_price - lowest_price)*lowest_sell_price_volume if second_best_sell_price else 0,
+            'percent_diff': (second_best_sell_price*net_sell_proceeds - lowest_price)/lowest_price*100 if second_best_sell_price else None,
+            'profit': (second_best_sell_price*net_sell_proceeds - lowest_price)*lowest_sell_price_volume if second_best_sell_price else 0,
             'jita_sell_price': float(jita_sell_price.price) if jita_sell_price else None,
             'jita_buy_price': float(jita_buy_price.price) if jita_buy_price else None,
             'min_increase': item['min_increase'],

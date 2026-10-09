@@ -13,6 +13,7 @@ from django.utils import timezone
 
 from market.models import MarketOrderUndercut
 from market.services import mistakes as mistakes_service
+from market.services.fees import get_brokers_fee, get_sales_tax
 from marketdata.models import RegionStatus
 
 from .conftest import CHARACTER_ID
@@ -72,7 +73,8 @@ class TestMistakesSince:
         assert 'data-item-name="Tritanium"' in body["html"]
         # The order id names the mistake, and the profit decides the threshold.
         assert 'data-order-id="342"' in body["html"]
-        assert 'data-profit="400000.000000"' in body["html"]
+        net_profit = (120.0 * (1 - get_sales_tax() - get_brokers_fee()) - 100.0) * 20000
+        assert 'data-profit="{:f}"'.format(net_profit) in body["html"]
 
     def test_the_swapped_html_holds_nothing_but_rows(self, auth_client, trade_hubs):
         # The poller assigns this straight to tbody.innerHTML, so anything

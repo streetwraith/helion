@@ -517,6 +517,11 @@ cleanup and no beat task. The page render reads the same cache, which also cut a
 3.4 s to 0.05 s. The first caller after each refresh still pays the aggregate, and that caller is a
 background poll rather than a person.
 
+**The profit and the percentage are net of the exit costs.** The flip buys the mistake instantly,
+which costs nothing, and relists it at the next sell price, which pays the broker fee and the sales
+tax (`fees.py`). A gap smaller than the two together gives a negative profit. Such a match stays in
+the table, because it still fits the definition of a mistake, but it sorts last and never notifies.
+
 **A mistake is identified by an order id, not by an item.** A mispriced order can sit unbought for
 hours, which at a 15 s poll would notify dozens of times. The identity is the cheapest qualifying
 sell order; when several sellers share the lowest price it is the smallest of their ids, so the

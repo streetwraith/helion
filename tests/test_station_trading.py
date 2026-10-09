@@ -15,6 +15,7 @@ from evesde.models import MarketGroup
 from market.models import MarketOrderUndercut, TradeItem
 from marketdata.models import History
 from market.services import market_service, station_trading
+from market.services.fees import get_brokers_fee, get_sales_tax
 
 from .conftest import CHARACTER_ID
 from .test_market_service_db import (
@@ -433,7 +434,20 @@ class TestMistakes:
         assert top["name"] == "Tritanium"
         assert top["lowest_sell_price_volume"] == 20000
         assert top["second_best_sell_price"] == 120.0
-        assert top["percent_diff"] == pytest.approx(20.0)
-        assert top["profit"] == pytest.approx((120.0 - 100.0) * 20000)
+        net_exit = 120.0 * (1 - get_sales_tax() - get_brokers_fee())
+        assert top["percent_diff"] == pytest.approx((net_exit - 100.0) / 100.0 * 100)
+        assert top["profit"] == pytest.approx((net_exit - 100.0) * 20000)
         assert top["jita_sell_price"] == 100.0
         assert top["jita_buy_price"] == 100.0
+
+    def test_a_flip_the_fees_eat_stays_listed_at_a_loss(self, auth_client, trade_hubs):
+        add_type(34, "Tritanium")
+        # A 2% gap is less than the sales tax and the broker fee together.
+        add_order(1, 34, 100.0, is_buy=True, volume_remain=50)
+        add_order(2, 34, 100.0, volume_remain=20000)
+        add_order(3, 34, 102.0, volume_remain=5000)
+
+        response = auth_client.get(self.URL)
+        [row] = response.context["matching_type_ids"]
+        assert row["profit"] < 0
+        assert row["percent_diff"] < 0
