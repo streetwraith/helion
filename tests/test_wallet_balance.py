@@ -119,8 +119,10 @@ class TestWhichWalletsCount:
         Token.objects.create(character_id=CHARACTER, character_name="A", token_type="Character")
         Token.objects.create(character_id=OTHER_CHARACTER, character_name="B",
                              token_type="Character")
-        TrackedCharacter.objects.create(character_name="A", tracks="orders, wallet")
-        TrackedCharacter.objects.create(character_name="B", tracks="orders, assets")
+        TrackedCharacter.objects.create(
+            character_id=CHARACTER, character_name="A", tracks="orders, wallet")
+        TrackedCharacter.objects.create(
+            character_id=OTHER_CHARACTER, character_name="B", tracks="orders, assets")
 
         character_ids, _ = tracking.wallet_balance_owner_ids()
 
@@ -130,18 +132,22 @@ class TestWhichWalletsCount:
         # `tracks__contains='wallet'` would match 'corp_wallet' too. The character
         # has no personal wallet feed, so it has no personal balance.
         Token.objects.create(character_id=CHARACTER, character_name="A", token_type="Character")
-        TrackedCharacter.objects.create(character_name="A", tracks="corp_wallet")
+        TrackedCharacter.objects.create(
+            character_id=CHARACTER, character_name="A", tracks="corp_wallet")
 
         character_ids, _ = tracking.wallet_balance_owner_ids()
 
         assert character_ids == set()
 
-    def test_a_tracked_character_without_a_token_resolves_to_nothing(self):
-        TrackedCharacter.objects.create(character_name="A", tracks="wallet")
+    def test_a_tracked_character_without_a_token_still_resolves(self):
+        # The id comes off the row. With no token no feed writes a balance, so
+        # the wallet simply has nothing cached.
+        TrackedCharacter.objects.create(
+            character_id=CHARACTER, character_name="A", tracks="wallet")
 
         character_ids, _ = tracking.wallet_balance_owner_ids()
 
-        assert character_ids == set()
+        assert character_ids == {CHARACTER}
 
 
 class TestTheHeader:
@@ -165,7 +171,7 @@ class TestTheHeader:
         assert 'id="wallet-balance"' not in response.content.decode()
 
     def test_the_owner_lookup_runs_once_per_cache_window(self, auth_client, monkeypatch):
-        # Six queries decide which wallets to sum, so the header must not repeat
+        # Five queries decide which wallets to sum, so the header must not repeat
         # them on every page.
         calls = []
 

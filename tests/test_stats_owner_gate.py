@@ -53,31 +53,36 @@ def row(response, label):
 
 
 class TestTraderCharacterIds:
-    def test_a_trader_resolves_through_its_token(self):
+    def test_a_trader_counts_by_its_id(self):
         add_token(TRADER_ID, "Main")
-        TrackedCharacter.objects.create(character_name="Main", tracks="wallet")
+        TrackedCharacter.objects.create(
+            character_id=TRADER_ID, character_name="Main", tracks="wallet")
 
         assert tracking.trader_character_ids() == {TRADER_ID}
 
     def test_a_character_marked_not_a_trader_is_left_out(self):
         add_token(TRADER_ID, "Main")
         add_token(ALT_ID, "Alt")
-        TrackedCharacter.objects.create(character_name="Main", tracks="wallet")
         TrackedCharacter.objects.create(
-            character_name="Alt", tracks="wallet", is_trader=False)
+            character_id=TRADER_ID, character_name="Main", tracks="wallet")
+        TrackedCharacter.objects.create(
+            character_id=ALT_ID, character_name="Alt", tracks="wallet", is_trader=False)
 
         assert tracking.trader_character_ids() == {TRADER_ID}
 
-    def test_a_trader_with_no_token_resolves_to_nothing(self):
-        TrackedCharacter.objects.create(character_name="Ghost", tracks="wallet")
+    def test_a_trader_whose_tokens_are_gone_still_counts(self):
+        # A deleted character loses its tokens, and its history must stay in
+        # the statistics.
+        TrackedCharacter.objects.create(
+            character_id=TRADER_ID, character_name="Ghost", tracks="")
 
-        assert tracking.trader_character_ids() == set()
+        assert tracking.trader_character_ids() == {TRADER_ID}
 
     def test_an_untracked_character_is_no_trader(self):
         add_token(TRADER_ID, "Main")
 
         assert tracking.trader_character_ids() == set()
-        assert tracking.is_trader("Main") is False
+        assert tracking.is_trader(TRADER_ID) is False
 
 
 class TestTheIndexPageGate:
@@ -85,9 +90,10 @@ class TestTheIndexPageGate:
     def traders(self, auth_client, trade_hubs):
         add_token(TRADER_ID, "Main")
         add_token(ALT_ID, "Alt")
-        TrackedCharacter.objects.create(character_name="Main", tracks="wallet")
         TrackedCharacter.objects.create(
-            character_name="Alt", tracks="wallet", is_trader=False)
+            character_id=TRADER_ID, character_name="Main", tracks="wallet")
+        TrackedCharacter.objects.create(
+            character_id=ALT_ID, character_name="Alt", tracks="wallet", is_trader=False)
         return auth_client
 
     def test_only_a_traders_rows_are_counted(self, traders):
@@ -109,6 +115,16 @@ class TestTheIndexPageGate:
         add_purchase(2, 900.0, corporation_id=CORPORATION_ID, is_personal=False)
         # The character route reports a corporation trade it executed itself.
         add_purchase(3, 800.0, character_id=TRADER_ID, is_personal=False)
+
+        response = traders.get("/market/")
+
+        assert row(response, "sell") == 1000.0
+        assert row(response, "buy") == 100.0
+
+    def test_a_deleted_traders_history_still_counts(self, traders):
+        add_sale(1, 1000.0, character_id=TRADER_ID)
+        add_purchase(1, 100.0, character_id=TRADER_ID)
+        Token.objects.filter(character_id=TRADER_ID).delete()
 
         response = traders.get("/market/")
 

@@ -237,7 +237,7 @@ not stored in the sheet: the sheet is minutes old and that answer changes on a s
 All recurring character fetches (own orders, wallet transactions + journal, assets) run on one
 self-pacing scheduler instead of fixed-interval tasks:
 
-- **Config is runtime data**: `TrackedCharacter(character_name, tracks, is_trader)`, with
+- **Config is runtime data**: `TrackedCharacter(character_id, character_name, tracks, is_trader)`, with
   comma-separated feed tags (`orders`, `wallet`, `assets`, `contracts`). Edit it in the tracking
   block of the characters page, or in the admin. Edits take effect on the next tick. `is_trader`
   belongs to the profit statistics, not to the scheduler, which ignores it.
@@ -319,9 +319,14 @@ to do with the sheet. `market/services/tracking.py` holds the read model and the
 - `FEED_SCOPES` beside `FEEDS` names the scope per feed. The scope also sits in the fetch function,
   so a test calls each fetch with a stub token and asserts the pair, or the page could grey out a
   feed that works.
-- **The row is keyed by `character_name`, as `EsiFetchState` is.** An EVE rename orphans both rows
-  and fetching stops with no error anywhere. The page cannot fix that, and moving both tables to
-  `character_id` is a job of its own.
+- **The row is keyed by `character_id`, and the statistics read the id off the row.** The tokens
+  used to carry the name-to-id mapping, so a deleted character lost its tokens and its stored
+  history dropped out of the profit statistics. The id survives that, and an EVE rename too.
+- **`EsiFetchState` stays keyed by name**, and the tracking row carries the name of its last save.
+  A save after a rename writes the new name, and the next tick moves the fetch state across. That
+  resets the error counters of the moved rows, which a rename is rare enough to afford. Moving
+  `EsiFetchState` to the id as well would change the task arguments, and buys nothing the save
+  does not already give.
 
 ### The corporation feeds
 
@@ -415,9 +420,9 @@ operations helion names, because the full spec costs ~90 MB of pydantic models.
   are empty.
 - **The TTL is three feed cycles**, so one missed hourly run cannot blank the header, while a feed
   that stays dead eventually drops out — and that case already shows in the fetch warning bar.
-- **The total is cached for a minute on top.** Deciding *which* wallets to sum costs six queries
-  (TrackedCharacter, its tokens, and one distinct per table that names a corporation), which is far
-  too much for a figure rendered on every page.
+- **The total is cached for a minute on top.** Deciding *which* wallets to sum costs five queries
+  (TrackedCharacter and one distinct per table that names a corporation), which is far too much for
+  a figure rendered on every page.
 
 ## Undercut detection
 

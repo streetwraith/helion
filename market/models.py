@@ -88,10 +88,16 @@ class MarketOrderUndercut(models.Model):
         ]
 
 class TrackedCharacter(models.Model):
+    # The identity of the row. The wallet tables are keyed by id, and the id
+    # survives an EVE rename and the loss of every token: the statistics must
+    # still count a character whose tokens are gone.
+    character_id = models.BigIntegerField(unique=True)
+    # The name at the last save. EsiFetchState is keyed by name, so the
+    # scheduler still reads this one.
+    character_name = models.CharField(max_length=128, unique=True)
     # What to fetch for this character, as comma-separated tags. Valid tags
     # are the esi_scheduler FEEDS keys: orders, wallet, assets, contracts.
     # Unknown tags are silently ignored.
-    character_name = models.CharField(max_length=128, unique=True)
     tracks = models.CharField(max_length=128, default='orders')
     # Whether the profit statistics count this character's wallet. A character
     # can be worth fetching without being a trader - an alt that only hauls or

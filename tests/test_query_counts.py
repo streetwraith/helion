@@ -176,7 +176,7 @@ def test_index_wallet_table_query_ceiling(auth_client, trade_hubs):
         character_owner_hash="h", token_type="Character",
         access_token="a", refresh_token="r")
     TrackedCharacter.objects.create(
-        character_name="Main", tracks="wallet", is_trader=True)
+        character_id=CHARACTER_ID, character_name="Main", tracks="wallet", is_trader=True)
 
     auth_client.get("/market/")  # warm the ticker cache
     # Five queries per window through the memoized WalletStatistics methods:

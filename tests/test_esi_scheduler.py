@@ -44,7 +44,8 @@ def orders_state(**overrides):
 
 class TestWatchdog:
     def test_new_rows_get_initial_delay_and_no_immediate_fetch(self, scheduler_cache):
-        TrackedCharacter.objects.create(character_name=TRADER, tracks="orders, wallet")
+        TrackedCharacter.objects.create(
+            character_id=CHARACTER_ID, character_name=TRADER, tracks="orders, wallet")
         enqueued = []
 
         esi_scheduler.schedule_due_fetches(lambda feed, name: enqueued.append((feed, name)))
@@ -58,7 +59,7 @@ class TestWatchdog:
                 esi_scheduler.INITIAL_DELAY_SECONDS + esi_scheduler.INITIAL_JITTER_SECONDS)
 
     def test_due_row_is_enqueued_once_with_lease(self, scheduler_cache):
-        TrackedCharacter.objects.create(character_name=TRADER)
+        TrackedCharacter.objects.create(character_id=CHARACTER_ID, character_name=TRADER)
         state = orders_state()
         enqueued = []
 
@@ -70,7 +71,7 @@ class TestWatchdog:
         assert state.next_due > timezone.now()
 
     def test_disabled_row_is_skipped(self, scheduler_cache):
-        TrackedCharacter.objects.create(character_name=TRADER)
+        TrackedCharacter.objects.create(character_id=CHARACTER_ID, character_name=TRADER)
         orders_state(disabled_at=timezone.now())
         enqueued = []
 
@@ -86,7 +87,7 @@ class TestWatchdog:
         assert EsiFetchState.objects.count() == 0
 
     def test_global_pause_stops_everything(self, scheduler_cache):
-        TrackedCharacter.objects.create(character_name=TRADER)
+        TrackedCharacter.objects.create(character_id=CHARACTER_ID, character_name=TRADER)
         orders_state()
         scheduler_cache.set(esi_scheduler.PAUSE_CACHE_KEY,
                             timezone.now() + timedelta(seconds=60))

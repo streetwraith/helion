@@ -10,7 +10,10 @@ from django.utils import timezone
 from esi.errors import TokenInvalidError
 from esi.models import Scope, Token
 from market.models import EsiFetchState, TrackedCharacter
+from market.services import esi_scheduler
 from market.services.esi_scheduler import FEED_SCOPES
+
+from .conftest import FakeCache
 
 pytestmark = pytest.mark.django_db
 
@@ -163,7 +166,8 @@ class TestTracking:
     def test_saving_nothing_empties_the_tracks_but_keeps_the_row(self, tracked):
         # The row also carries is_trader, so deleting it would drop the
         # character from the profit statistics without saying so.
-        TrackedCharacter.objects.create(character_name="Main", tracks="orders, wallet")
+        TrackedCharacter.objects.create(
+            character_id=900001, character_name="Main", tracks="orders, wallet")
 
         self.post(tracked, _tracks="True", is_trader="True")
 
@@ -182,7 +186,7 @@ class TestTracking:
 
     def test_the_block_offers_the_trader_checkbox(self, tracked):
         TrackedCharacter.objects.create(
-            character_name="Main", tracks="orders", is_trader=True)
+            character_id=900001, character_name="Main", tracks="orders", is_trader=True)
 
         content = tracked.get("/characters/", {"character": 900001}).content.decode()
 
@@ -218,7 +222,7 @@ class TestTracking:
         assert not TrackedCharacter.objects.exists()
 
     def test_the_block_offers_every_feed_and_its_scope(self, tracked):
-        TrackedCharacter.objects.create(character_name="Main", tracks="orders")
+        TrackedCharacter.objects.create(character_id=900001, character_name="Main", tracks="orders")
 
         content = tracked.get("/characters/", {"character": 900001}).content.decode()
 
@@ -254,6 +258,8 @@ class TestTracking:
         assert "Tracking" in content
 
     def test_a_disabled_feed_offers_re_enable_and_clearing_it_works(self, tracked):
+        TrackedCharacter.objects.create(
+            character_id=900001, character_name="Main", tracks="assets")
         state = EsiFetchState.objects.create(
             character_name="Main", feed="assets", consecutive_errors=3,
             last_error="boom", last_error_at=timezone.now(),
@@ -272,6 +278,37 @@ class TestTracking:
         state.refresh_from_db()
         assert (state.disabled_at, state.disabled_reason) == (None, None)
         assert (state.consecutive_errors, state.last_error, state.next_due) == (0, None, None)
+
+    def test_a_rename_keeps_the_row_and_moves_the_fetch_state(self, tracked, monkeypatch):
+        # Saved before the rename. The newest token carries the new name, "Main".
+        TrackedCharacter.objects.create(
+            character_id=900001, character_name="Old Name", tracks="orders")
+        EsiFetchState.objects.create(
+            character_name="Old Name", feed="orders", disabled_at=timezone.now())
+
+        content = tracked.get("/characters/", {"character": 900001}).content.decode()
+        # Found by id, with the fetch state still under the old name.
+        assert 'name="_reenable" value="orders"' in content
+
+        self.post(tracked, _tracks="True", feed=["orders"], is_trader="True")
+        monkeypatch.setattr(esi_scheduler, "cache", FakeCache())
+        esi_scheduler.schedule_due_fetches(lambda feed, name: None)
+
+        tracked_row = TrackedCharacter.objects.get()
+        assert (tracked_row.character_id, tracked_row.character_name) == (900001, "Main")
+        assert list(EsiFetchState.objects.values_list("character_name", "feed")) == [
+            ("Main", "orders")]
+
+    def test_re_enable_finds_the_state_under_the_stored_name(self, tracked):
+        TrackedCharacter.objects.create(
+            character_id=900001, character_name="Old Name", tracks="assets")
+        state = EsiFetchState.objects.create(
+            character_name="Old Name", feed="assets", disabled_at=timezone.now())
+
+        self.post(tracked, _reenable="assets")
+
+        state.refresh_from_db()
+        assert state.disabled_at is None
 
     def test_re_enabling_an_unknown_feed_changes_nothing(self, tracked):
         state = EsiFetchState.objects.create(

@@ -5,8 +5,9 @@ The scheduler reconciles EsiFetchState against it on every watchdog tick, so a
 save here writes one row and nothing else: the tick creates or deletes the fetch
 state, and the initial delay spreads the first round.
 
-A row is keyed by character_name, as EsiFetchState is. An EVE rename therefore
-orphans both, and fetching stops with no error anywhere.
+A row is keyed by character_id. EsiFetchState is keyed by name, so a save also
+stores the current name, and after an EVE rename the next tick moves the fetch
+state to the new name.
 """
 from django.utils import timezone
 
@@ -50,13 +51,10 @@ def corporation_ids():
 def trader_character_ids():
     """The character ids whose wallet the profit statistics count.
 
-    TrackedCharacter is keyed by name and the wallet tables by id, so the tokens
-    carry the mapping. A trader with no token resolves to nothing, which is
-    right: without a token no feed fills that wallet either.
+    Read off the rows, not through the tokens: a deleted character loses its
+    tokens, and its stored history must still count.
     """
-    names = TrackedCharacter.objects.filter(is_trader=True).values_list(
-        'character_name', flat=True)
-    return set(Token.objects.filter(character_name__in=names)
+    return set(TrackedCharacter.objects.filter(is_trader=True)
                .values_list('character_id', flat=True))
 
 
@@ -71,21 +69,19 @@ def wallet_balance_owner_ids():
     that route costs an ESI call and this answer feeds every page. A corporation
     with no wallet feed therefore appears here and simply has nothing cached.
     """
-    names = [tracked.character_name for tracked
-             in TrackedCharacter.objects.only('character_name', 'tracks')
-             if 'wallet' in tracked.track_list()]
-    character_ids = set(Token.objects.filter(character_name__in=names)
-                        .values_list('character_id', flat=True))
+    character_ids = {tracked.character_id for tracked
+                     in TrackedCharacter.objects.only('character_id', 'tracks')
+                     if 'wallet' in tracked.track_list()}
     return character_ids, corporation_ids()
 
 
-def is_trader(character_name):
+def is_trader(character_id):
     """Whether the statistics count this character. An untracked one is not.
 
     False rather than the field default: `trader_character_ids` reads rows, so a
     character with no row counts for nothing and the checkbox must say so.
     """
-    tracked = TrackedCharacter.objects.filter(character_name=character_name).first()
+    tracked = TrackedCharacter.objects.filter(character_id=character_id).first()
     return tracked.is_trader if tracked else False
 
 
@@ -101,11 +97,14 @@ def _authorised_scopes(character_id):
 
 def get_feed_rows(character_id, character_name):
     """One row per feed for the block: what is ticked, what may be, how it fares."""
-    tracked = TrackedCharacter.objects.filter(character_name=character_name).first()
+    tracked = TrackedCharacter.objects.filter(character_id=character_id).first()
     tracks = set(tracked.track_list()) if tracked else set()
     scopes = _authorised_scopes(character_id)
+    # The stored name, not the token's: after a rename the fetch state keeps
+    # the old name until the next save.
+    state_name = tracked.character_name if tracked else character_name
     states = {state.feed: state for state
-              in EsiFetchState.objects.filter(character_name=character_name)}
+              in EsiFetchState.objects.filter(character_name=state_name)}
 
     now = timezone.now()
     rows = []
@@ -143,19 +142,26 @@ def save_tracks(character_id, character_name, feeds, trader):
     The row survives with no feed ticked, because it also carries `is_trader`.
     Deleting it would drop the character from the profit statistics without
     saying so. A row with no tags asks the scheduler for nothing.
+
+    The name is written on every save, which is how an EVE rename reaches the
+    fetch state: the next tick drops the rows under the old name and creates
+    them under the new one.
     """
     scopes = _authorised_scopes(character_id)
     wanted = [feed for feed in FEEDS
               if feed in feeds and FEED_SCOPES[feed] in scopes]
     tracked, _ = TrackedCharacter.objects.update_or_create(
-        character_name=character_name,
-        defaults={'tracks': ', '.join(wanted), 'is_trader': trader})
+        character_id=character_id,
+        defaults={'character_name': character_name,
+                  'tracks': ', '.join(wanted), 'is_trader': trader})
     return tracked
 
 
-def reenable_feed(character_name, feed):
-    """Clear one feed's failure state. Unknown feed names change nothing."""
-    if feed not in FEEDS:
+def reenable_feed(character_id, feed):
+    """Clear one feed's failure state. Unknown feeds and untracked characters
+    change nothing."""
+    tracked = TrackedCharacter.objects.filter(character_id=character_id).first()
+    if feed not in FEEDS or tracked is None:
         return 0
     return reenable(EsiFetchState.objects.filter(
-        character_name=character_name, feed=feed))
+        character_name=tracked.character_name, feed=feed))

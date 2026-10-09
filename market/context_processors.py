@@ -9,16 +9,16 @@ from market.services import alerts, balances, market_service, tracking
 FETCH_WARNINGS_CACHE_SECONDS = 60
 
 # The balance itself only changes when an hourly wallet feed runs, so a minute of
-# staleness costs nothing and keeps six queries off every page load.
+# staleness costs nothing and keeps five queries off every page load.
 WALLET_BALANCE_CACHE_SECONDS = 60
 
 
 def _wallet_balance():
     """Every tracked wallet summed, for the header.
 
-    Cached because deciding *which* wallets to sum costs six queries -
-    TrackedCharacter, the tokens behind it, and one distinct per table that names
-    a corporation - which is far too much for a figure on every page. Held in a
+    Cached because deciding *which* wallets to sum costs five queries -
+    TrackedCharacter and one distinct per table that names a corporation - which
+    is far too much for a figure on every page. Held in a
     dict, because the sum is legitimately None when no balance is cached at all
     and that must not read as a cache miss.
     """
